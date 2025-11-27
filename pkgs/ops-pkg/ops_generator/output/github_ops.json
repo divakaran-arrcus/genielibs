@@ -611,6 +611,17 @@
         },
         "uid": "interface",
         "url": "https://github.com/CiscoTestAutomation/genielibs/tree/master/src/genie/libs/ops/interface/sonic/interface.py#L9"
+      },
+      "arcos": {
+        "class": "Interface",
+        "doc": "Interface Genie Ops Object for ArcOS (OpenConfig JSON)",
+        "module_name": "interface.arcos.interface",
+        "package": "genie.libs.ops",
+        "tokens": {
+          "os": "arcos"
+        },
+        "uid": "interface",
+        "url": "https://github.com/CiscoTestAutomation/genielibs"
       }
     },
     "module_name": "interface.interface",
@@ -665,6 +676,17 @@
         },
         "uid": "isis",
         "url": "https://github.com/CiscoTestAutomation/genielibs/tree/master/src/genie/libs/ops/isis/nxos/isis.py#L21"
+      },
+      "arcos": {
+        "class": "Isis",
+        "doc": "Isis Genie Ops Object for ArcOS (OpenConfig JSON)",
+        "module_name": "isis.arcos.isis",
+        "package": "genie.libs.ops",
+        "tokens": {
+          "os": "arcos"
+        },
+        "uid": "isis",
+        "url": "https://github.com/CiscoTestAutomation/genielibs"
       }
     },
     "module_name": "isis.isis",
