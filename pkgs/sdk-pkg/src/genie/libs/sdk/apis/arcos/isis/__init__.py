@@ -9,6 +9,12 @@ from .get import (
     get_isis_routes,
     get_isis_global,
 )
+from .verify import (
+    verify_isis_neighbor_present,
+    verify_isis_neighbor_not_present,
+    verify_isis_neighbor_state,
+    verify_isis_route_present,
+)
 
 __all__ = [
     "get_isis_neighbors",
@@ -20,4 +26,8 @@ __all__ = [
     "get_isis_net",
     "get_isis_routes",
     "get_isis_global",
+    "verify_isis_neighbor_present",
+    "verify_isis_neighbor_not_present",
+    "verify_isis_neighbor_state",
+    "verify_isis_route_present",
 ]
