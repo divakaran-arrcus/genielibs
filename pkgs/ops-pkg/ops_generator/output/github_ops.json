@@ -495,6 +495,17 @@
     "class": "Interface",
     "doc": null,
     "folders": {
+      "arcos": {
+        "class": "Interface",
+        "doc": "Interface Genie Ops Object for ArcOS (OpenConfig JSON)",
+        "module_name": "interface.arcos.interface",
+        "package": "genie.libs.ops",
+        "tokens": {
+          "os": "arcos"
+        },
+        "uid": "interface",
+        "url": "https://github.com/CiscoTestAutomation/genielibs"
+      },
       "cheetah": {
         "folders": {
           "ap": {
@@ -622,6 +633,17 @@
     "class": "Isis",
     "doc": null,
     "folders": {
+      "arcos": {
+        "class": "Isis",
+        "doc": "Isis Genie Ops Object for ArcOS (OpenConfig JSON)",
+        "module_name": "isis.arcos.isis",
+        "package": "genie.libs.ops",
+        "tokens": {
+          "os": "arcos"
+        },
+        "uid": "isis",
+        "url": "https://github.com/CiscoTestAutomation/genielibs"
+      },
       "ios": {
         "class": "Isis",
         "doc": "Isis Genie Ops Object",
