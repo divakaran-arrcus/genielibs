@@ -17,16 +17,24 @@ from genie.metaparser.util.exceptions import SchemaEmptyParserError
 log = logging.getLogger(__name__)
 
 
-def _safe_get_isis(data: Dict[str, Any], instance: str = "default") -> Dict[str, Any]:
+def _safe_get_isis(
+    data: Dict[str, Any], ni: str = "default", instance: str = "default"
+) -> Dict[str, Any]:
     """Helper to navigate to ISIS instance data."""
 
-    return data.get("isis", {}).get(instance, {}) or {}
+    ni_root = data.get("network-instance", {}).get(ni, {})
+    isis_root = ni_root.get("isis", {})
+    return isis_root.get(instance, {}) or {}
 
 
-def _safe_get_global(data: Dict[str, Any], instance: str = "default") -> Dict[str, Any]:
+def _safe_get_global(
+    data: Dict[str, Any], ni: str = "default", instance: str = "default"
+) -> Dict[str, Any]:
     """Helper to navigate to global ISIS state data."""
 
-    return data.get("isis_global", {}).get(instance, {}) or {}
+    ni_root = data.get("network-instance", {}).get(ni, {})
+    isis_root = ni_root.get("isis", {}).get(instance, {})
+    return isis_root.get("global", {}) or {}
 
 
 def get_isis_neighbors(
@@ -57,7 +65,7 @@ def get_isis_neighbors(
         log.error("Failed to get ISIS neighbors: %s", exc)
         return {}
 
-    isis = _safe_get_isis(parsed, instance)
+    isis = _safe_get_isis(parsed, ni="default", instance=instance)
     neighbors = isis.get("neighbors", {}) or {}
 
     if interface:
@@ -129,7 +137,7 @@ def get_isis_interface_information(
         )
         return None
 
-    isis = _safe_get_isis(parsed, instance)
+    isis = _safe_get_isis(parsed, ni="default", instance=instance)
     interfaces = isis.get("interfaces", {}) or {}
     return interfaces.get(interface)
 
@@ -145,7 +153,7 @@ def get_isis_system_id(device, instance: str = "default") -> Optional[str]:
         log.error("Failed to get ISIS system-id: %s", exc)
         return None
 
-    global_entry = _safe_get_global(parsed, instance)
+    global_entry = _safe_get_global(parsed, ni="default", instance=instance)
     return global_entry.get("system_id")
 
 
@@ -163,7 +171,7 @@ def get_isis_net(device, instance: str = "default") -> Optional[str]:
         log.error("Failed to get ISIS NET: %s", exc)
         return None
 
-    global_entry = _safe_get_global(parsed, instance)
+    global_entry = _safe_get_global(parsed, ni="default", instance=instance)
     nets = global_entry.get("net") or []
     if isinstance(nets, list) and nets:
         return nets[0]
@@ -202,7 +210,7 @@ def get_isis_routes(
         log.error("Failed to get ISIS routes for %s: %s", address_family, exc)
         return {}
 
-    isis = _safe_get_isis(parsed, instance)
+    isis = _safe_get_isis(parsed, ni="default", instance=instance)
     routes_root = isis.get("routes", {}) or {}
     af_entry = routes_root.get(af_key, {}) or {}
     return af_entry.get("routes", {}) or {}
@@ -222,4 +230,4 @@ def get_isis_global(device, instance: str = "default") -> Dict[str, Any]:
         log.error("Failed to get ISIS global state: %s", exc)
         return {}
 
-    return _safe_get_global(parsed, instance)
+    return _safe_get_global(parsed, ni="default", instance=instance)
