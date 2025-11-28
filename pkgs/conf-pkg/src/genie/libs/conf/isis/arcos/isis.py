@@ -779,6 +779,21 @@ class Isis(ABC):
                         for lvl in levels:
                             with configurations.submode_context(f'level {lvl}'):
                                 configurations.append_line('enabled true')
+                                # Optional flexible-algorithm TE and delay metrics per level
+                                flex_te = attributes.value(
+                                    f'flex_algo_te_metric_level{lvl}'
+                                )
+                                flex_delay = attributes.value(
+                                    f'flex_algo_delay_metric_level{lvl}'
+                                )
+                                if flex_te is not None:
+                                    configurations.append_line(
+                                        f'flexible-algorithm te-metric {flex_te}'
+                                    )
+                                if flex_delay is not None:
+                                    configurations.append_line(
+                                        f'flexible-algorithm delay-metric {flex_delay}'
+                                    )
                             configurations.append_line('!')
 
                 configurations.append_line('!')
