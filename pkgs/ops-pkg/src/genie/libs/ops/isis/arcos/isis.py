@@ -70,7 +70,8 @@ class Isis(SuperIsis):
         # ------------------------------------------------------------------
         try:
             parsed_intf = self.device.parse("show isis interface")
-            isis_root = parsed_intf.get("isis", {})
+            ni_root = parsed_intf.get("network-instance", {}).get("default", {})
+            isis_root = ni_root.get("isis", {})
             inst_root = isis_root.get(instance, {})
             interfaces = inst_root.get("interfaces", {}) or {}
         except Exception:
@@ -205,7 +206,9 @@ class Isis(SuperIsis):
 
         try:
             parsed_lsp = self.device.parse("show isis lsp")
-            lsp_root = parsed_lsp.get("isis", {}).get(instance, {})
+            ni_root = parsed_lsp.get("network-instance", {}).get("default", {})
+            isis_root = ni_root.get("isis", {})
+            lsp_root = isis_root.get(instance, {})
             database = lsp_root.get("database", {}) or {}
         except Exception:
             database = {}
@@ -298,25 +301,31 @@ class Isis(SuperIsis):
     # ==================================================================
 
     @staticmethod
-    def _safe_get_isis(data: Dict[str, Any], instance: str = "default") -> Dict[str, Any]:
+    def _safe_get_isis(
+        data: Dict[str, Any], ni: str = "default", instance: str = "default"
+    ) -> Dict[str, Any]:
         """Helper to navigate to ISIS instance data from parser output."""
 
-        return data.get("isis", {}).get(instance, {}) or {}
+        ni_root = data.get("network-instance", {}).get(ni, {})
+        isis_root = ni_root.get("isis", {})
+        return isis_root.get(instance, {}) or {}
 
     @staticmethod
     def _safe_get_global(
-        data: Dict[str, Any], instance: str = "default"
+        data: Dict[str, Any], ni: str = "default", instance: str = "default"
     ) -> Dict[str, Any]:
         """Helper to navigate to global ISIS state data from parser output."""
 
-        return data.get("isis_global", {}).get(instance, {}) or {}
+        ni_root = data.get("network-instance", {}).get(ni, {})
+        isis_root = ni_root.get("isis", {}).get(instance, {})
+        return isis_root.get("global", {}) or {}
 
     def _get_isis_global(self, instance: str = "default") -> Dict[str, Any]:
         """Get raw ISIS global state for an instance ("show isis global")."""
 
         try:
             parsed = self.device.parse("show isis global")
-            return self._safe_get_global(parsed, instance)
+            return self._safe_get_global(parsed, ni="default", instance=instance)
         except Exception:
             return {}
 
@@ -325,7 +334,7 @@ class Isis(SuperIsis):
 
         try:
             parsed = self.device.parse("show isis adjacency")
-            isis = self._safe_get_isis(parsed, instance)
+            isis = self._safe_get_isis(parsed, ni="default", instance=instance)
             return isis.get("neighbors", {}) or {}
         except Exception:
             return {}
@@ -349,7 +358,7 @@ class Isis(SuperIsis):
 
         try:
             parsed = self.device.parse("show isis route")
-            isis = self._safe_get_isis(parsed, instance=instance)
+            isis = self._safe_get_isis(parsed, ni="default", instance=instance)
             routes_root = isis.get("routes", {}) or {}
             af_entry = routes_root.get(af_key, {}) or {}
             return af_entry.get("routes", {}) or {}
