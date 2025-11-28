@@ -55,6 +55,67 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         self.assertIn("global level-capability LEVEL_1_2", cfg_str)
         self.assertIn("level 1", cfg_str)
         self.assertIn("level 2", cfg_str)
+
+    def test_global_level_authentication(self):
+        """Verify per-global-level LSP authentication and crypto algorithm."""
+
+        isis = GenieIsis(pid="default")
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_1_2
+
+        # Level 1 auth
+        da.level1_lsp_authentication = False
+        da.level1_auth_password = "ENC_L1"
+        da.level1_crypto_algorithm = "MD5"
+
+        # Level 2 auth
+        da.level2_lsp_authentication = False
+        da.level2_auth_password = "ENC_L2"
+        da.level2_crypto_algorithm = "MD5"
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Both level stanzas should be present
+        self.assertIn("level 1", cfg_str)
+        self.assertIn("level 2", cfg_str)
+
+        # Authentication knobs for each level
+        self.assertIn("authentication lsp-authentication false", cfg_str)
+        self.assertIn("authentication key crypto-algorithm MD5", cfg_str)
+        self.assertIn("authentication key auth-password ENC_L1", cfg_str)
+        self.assertIn("authentication key auth-password ENC_L2", cfg_str)
+
+    def test_interface_flexible_algorithm_metrics(self):
+        """Verify per-interface flexible-algorithm TE/delay metrics on level 2."""
+
+        isis = GenieIsis(pid="default")
+
+        # Attach ISIS feature to interface
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.if_type = "point-to-point"
+        ia.interface_id = "swp1"
+        ia.metric_level2 = 200
+        ia.flex_algo_te_metric_level2 = 200
+        ia.flex_algo_delay_metric_level2 = 200
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Interface stanza with level 2 flexible-algorithm metrics
+        self.assertIn("interface swp1", cfg_str)
+        self.assertIn("level 2", cfg_str)
+        self.assertIn("flexible-algorithm te-metric 200", cfg_str)
+        self.assertIn("flexible-algorithm delay-metric 200", cfg_str)
         self.assertIn("enabled true", cfg_str)
 
     def test_global_address_families(self):
@@ -79,6 +140,205 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         self.assertIn("global af IPV4 UNICAST", cfg_str)
         self.assertIn("global af IPV6 UNICAST", cfg_str)
         self.assertIn("multi-topology enabled true", cfg_str)
+
+    def test_ipv6_summary_prefixes(self):
+        """Verify IPv6 AF summary-prefix configuration for ArcOS ISIS."""
+        isis = GenieIsis(pid="default")
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        af_ipv6 = da.address_family_attr[AddressFamily.ipv6_unicast]
+        af_ipv6.enabled = True
+        af_ipv6.ipv6_multi_topology = True
+
+        # Configure a couple of summary prefixes similar to cfg/isis.conf
+        af_ipv6.summary_prefixes = {
+            "2400:2020:0:100::/56": {
+                "level": "LEVEL_2",
+                "algorithm": 0,
+                "adv_unreachable": True,
+            },
+            "2400:2020:0:900::/56": {
+                "level": "LEVEL_1",
+                "tag": 100,
+                "algorithm": 0,
+            },
+        }
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # First summary prefix
+        self.assertIn("summary-prefix 2400:2020:0:100::/56", cfg_str)
+        self.assertIn("level LEVEL_2", cfg_str)
+        self.assertIn("algorithm 0", cfg_str)
+        self.assertIn("adv-unreachable true", cfg_str)
+
+        # Second summary prefix
+        self.assertIn("summary-prefix 2400:2020:0:900::/56", cfg_str)
+        self.assertIn("level LEVEL_1", cfg_str)
+        self.assertIn("tag 100", cfg_str)
+        self.assertIn("algorithm 0", cfg_str)
+
+    def test_ipv6_prefix_unreachable(self):
+        """Verify IPv6 AF prefix-unreachable knobs for ArcOS ISIS."""
+        isis = GenieIsis(pid="default")
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        af_ipv6 = da.address_family_attr[AddressFamily.ipv6_unicast]
+        af_ipv6.enabled = True
+
+        af_ipv6.prefix_unreachable_adv_lifetime = 65535
+        af_ipv6.prefix_unreachable_adv_metric = 4294967294
+        af_ipv6.prefix_unreachable_adv_maximum = 65535
+        af_ipv6.prefix_unreachable_rx_process = True
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        self.assertIn("prefix-unreachable adv-lifetime 65535", cfg_str)
+        self.assertIn("prefix-unreachable adv-metric 4294967294", cfg_str)
+        self.assertIn("prefix-unreachable adv-maximum 65535", cfg_str)
+        self.assertIn("prefix-unreachable rx-process true", cfg_str)
+
+    def test_global_advanced_features(self):
+        """Verify advanced global ISIS knobs (GR, SRv6, timers, LSP bits, etc.)."""
+        isis = GenieIsis(pid="default")
+
+        da = isis.device_attr[self.device]
+        da.net = [
+            "49.0000.0000.0000.0005.00",
+            "49.2000.0000.0000.0005.00",
+        ]
+
+        # IS-type (required to emit level-capability and level stanzas)
+        da.is_type = GenieIsis.IsType.level_1_2
+
+        # Graceful restart
+        da.graceful_restart_enabled = True
+
+        # Max ECMP and LSP MTU
+        da.max_ecmp_paths = 16
+        da.lsp_mtu_size = 8000
+
+        # Segment routing global enable
+        da.segment_routing_enabled = False
+
+        # Inter-level propagation policies
+        da.level1_to_level2_import_policy = [906]
+        da.level2_to_level1_import_policy = ["v6_L2_to_L1"]
+
+        # Traffic-engineering IPv6 router-id
+        da.traffic_engineering_ipv6_router_id = "2400:2020:0:905::1"
+
+        # Micro-loop avoidance and dynamic delay measurement
+        da.micro_loop_avoidance_srv6_enabled = True
+        da.micro_loop_avoidance_rib_update_delay = 60000
+        da.dynamic_delay_measurement_probe_interval = 20
+        da.dynamic_delay_measurement_advertisement_interval = 60
+
+        # LSP bits (attached/overload)
+        da.lsp_bit_attached_ignore = True
+        da.lsp_bit_attached_suppress = True
+        da.lsp_bit_overload_set_on_boot = True
+        da.lsp_bit_overload_advertise_high_metric = True
+        da.lsp_bit_overload_reset_trigger = "WAIT_DELAY"
+        da.lsp_bit_overload_reset_delay = 500
+
+        # SRv6 global enable + locator
+        da.srv6_enabled = True
+        da.srv6_locators = ["base_slice0"]
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Basic global context
+        self.assertIn("network-instance default", cfg_str)
+        self.assertIn("protocol ISIS default", cfg_str)
+
+        # NETs
+        self.assertIn(
+            "global net [ 49.0000.0000.0000.0005.00 49.2000.0000.0000.0005.00 ]",
+            cfg_str,
+        )
+
+        # Level capability and per-level enablement
+        self.assertIn("global level-capability LEVEL_1_2", cfg_str)
+        self.assertIn("level 1", cfg_str)
+        self.assertIn("level 2", cfg_str)
+
+        # Graceful restart
+        self.assertIn("global graceful-restart enabled true", cfg_str)
+
+        # Max ECMP paths and LSP MTU size
+        self.assertIn("global max-ecmp-paths 16", cfg_str)
+        self.assertIn("global transport lsp-mtu-size 8000", cfg_str)
+
+        # Segment-routing enable
+        self.assertIn("global segment-routing enabled false", cfg_str)
+
+        # Inter-level propagation policies
+        self.assertIn(
+            "global inter-level-propagation-policies level1-to-level2 import-policy [ 906 ]",
+            cfg_str,
+        )
+        self.assertIn(
+            "global inter-level-propagation-policies level2-to-level1 import-policy [ v6_L2_to_L1 ]",
+            cfg_str,
+        )
+
+        # Traffic-engineering IPv6 router-id
+        self.assertIn(
+            "global traffic-engineering ipv6-router-id 2400:2020:0:905::1",
+            cfg_str,
+        )
+
+        # Micro-loop avoidance + DDM timers
+        self.assertIn("global micro-loop-avoidance srv6-enabled true", cfg_str)
+        self.assertIn(
+            "global micro-loop-avoidance rib-update-delay 60000",
+            cfg_str,
+        )
+        self.assertIn(
+            "global dynamic-delay-measurement probe-interval 20",
+            cfg_str,
+        )
+        self.assertIn(
+            "global dynamic-delay-measurement advertisement-interval 60",
+            cfg_str,
+        )
+
+        # LSP bit configuration (attached + overload, including reset-trigger block)
+        self.assertIn(
+            "global lsp-bit attached-bit ignore-bit true",
+            cfg_str,
+        )
+        self.assertIn(
+            "global lsp-bit attached-bit suppress-bit true",
+            cfg_str,
+        )
+        self.assertIn(
+            "global lsp-bit overload-bit set-bit-on-boot true",
+            cfg_str,
+        )
+        self.assertIn(
+            "global lsp-bit overload-bit advertise-high-metric true",
+            cfg_str,
+        )
+        self.assertIn(
+            "global lsp-bit overload-bit reset-trigger WAIT_DELAY",
+            cfg_str,
+        )
+        self.assertIn("delay 500", cfg_str)
+
+        # SRv6 global enable + locator
+        self.assertIn("global srv6 enabled true", cfg_str)
+        self.assertIn("global srv6 locator base_slice0", cfg_str)
 
     def test_interface_basic(self):
         """Verify basic per-interface ISIS configuration for ArcOS."""
@@ -116,6 +376,47 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         self.assertIn("timers hello-interval 10", cfg_str)
         self.assertIn("timers hello-multiplier 3", cfg_str)
         self.assertIn("level 2 metric 20", cfg_str)
+
+    def test_interface_auth_and_levels(self):
+        """Verify interface-level ISIS authentication and per-level metrics."""
+        isis = GenieIsis(pid="default")
+
+        # Attach ISIS feature to interface
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_1_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.if_type = "point-to-point"
+        ia.interface_id = "swp1"
+        ia.hello_interval = 15
+        ia.hello_multiplier = 5
+        ia.metric_level1 = 100
+        ia.metric_level2 = 200
+        ia.hello_authentication = True
+        ia.auth_password = "ENC_PW"
+        ia.crypto_algorithm = "MD5"
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Timers and metrics
+        self.assertIn("timers hello-interval 15", cfg_str)
+        self.assertIn("timers hello-multiplier 5", cfg_str)
+        self.assertIn("level 1 metric 100", cfg_str)
+        self.assertIn("level 2 metric 200", cfg_str)
+
+        # Interface authentication
+        self.assertIn("authentication hello-authentication true", cfg_str)
+        self.assertIn("authentication key auth-password ENC_PW", cfg_str)
+        self.assertIn("authentication key crypto-algorithm MD5", cfg_str)
+
+        # Per-interface level stanzas
+        self.assertIn("level 1", cfg_str)
+        self.assertIn("level 2", cfg_str)
 
     def test_unconfig_whole_protocol(self):
         """Verify that build_unconfig removes the ISIS protocol subtree."""
