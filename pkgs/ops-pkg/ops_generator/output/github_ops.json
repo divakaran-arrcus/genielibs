@@ -1651,6 +1651,17 @@
         },
         "uid": "routepolicy",
         "url": "https://github.com/CiscoTestAutomation/genielibs/tree/master/src/genie/libs/ops/route_policy/nxos/route_policy.py#L12"
+      },
+      "arcos": {
+        "class": "RoutePolicy",
+        "doc": "ArcOS RoutePolicy Genie Ops Object",
+        "module_name": "route_policy.arcos.route_policy",
+        "package": "genie.libs.ops",
+        "tokens": {
+          "os": "arcos"
+        },
+        "uid": "routepolicy",
+        "url": "https://github.com/CiscoTestAutomation/genielibs/tree/master/src/genie/libs/ops/route_policy/arcos/route_policy.py#L14"
       }
     },
     "module_name": "route_policy.route_policy",
