@@ -2,6 +2,7 @@
 __all__ = (
         'SegmentRouting',
         'PrefixSidMapEntry',
+        'ReservedLabelBlock',
         )
 
 import ipaddress
@@ -47,6 +48,60 @@ class PrefixSidMapEntry(Base):
 
     def __hash__(self):
         return hash((self.prefix,self.index,self.range,self.attach,self.absolute))
+
+
+class ReservedLabelBlock(Base):
+    """MPLS reserved label block entry (SRGB/SRLB) for SR-MPLS.
+
+    Attributes:
+        local_id: Block identifier (e.g., 'rb1', 'rb2')
+        lower_bound: Starting label value
+        upper_bound: Ending label value
+        usage: Block usage type (ISIS_SRGB, ISIS_SRLB)
+        protocol_identifier: Protocol type (ISIS)
+        protocol_name: Protocol instance name (default)
+    """
+
+    local_id = managedattribute(
+        name='local_id',
+        default=None,
+        type=(None, managedattribute.test_istype(str)))
+
+    lower_bound = managedattribute(
+        name='lower_bound',
+        default=None,
+        type=(None, managedattribute.test_istype(int)))
+
+    upper_bound = managedattribute(
+        name='upper_bound',
+        default=None,
+        type=(None, managedattribute.test_istype(int)))
+
+    usage = managedattribute(
+        name='usage',
+        default=None,
+        type=(None, managedattribute.test_istype(str)),
+        doc='Block usage: ISIS_SRGB, ISIS_SRLB')
+
+    protocol_identifier = managedattribute(
+        name='protocol_identifier',
+        default=None,
+        type=(None, managedattribute.test_istype(str)),
+        doc='Protocol type: ISIS')
+
+    protocol_name = managedattribute(
+        name='protocol_name',
+        default=None,
+        type=(None, managedattribute.test_istype(str)),
+        doc='Protocol instance name')
+
+    def __hash__(self):
+        return hash((self.local_id, self.lower_bound, self.upper_bound,
+                     self.usage, self.protocol_identifier, self.protocol_name))
+
+    def __repr__(self):
+        return f"ReservedLabelBlock(local_id={self.local_id!r}, lower={self.lower_bound}, upper={self.upper_bound})"
+
 
 class SegmentRouting(Routing, DeviceFeature):
 
@@ -95,6 +150,14 @@ class SegmentRouting(Routing, DeviceFeature):
             managedattribute.test_isinstance(PrefixSidMapEntry)),
         gettype=frozenset,
         doc='A `set` of prefix_sid_map entries')
+
+    # SR-MPLS: MPLS reserved label blocks (SRGB/SRLB)
+    # Mapping of block_id -> block attributes dict or ReservedLabelBlock
+    mpls_reserved_label_blocks = managedattribute(
+        name='mpls_reserved_label_blocks',
+        default=None,
+        type=(None, managedattribute.test_istype(dict)),
+        doc='MPLS reserved label blocks for SR-MPLS (SRGB/SRLB)')
 
     class DeviceAttributes(genie.conf.base.attributes.DeviceSubAttributes):
 
