@@ -433,6 +433,147 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         # CliConfigBuilder(unconfig=True) should prefix with 'no '
         self.assertIn("no network-instance default protocol ISIS default", cfg_str)
 
+    def test_interface_ti_lfa_sr_mpls(self):
+        """Verify TI-LFA SR-MPLS fast-reroute configuration on interface."""
+        isis = GenieIsis(pid="default")
+
+        # Attach ISIS feature to interface
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.if_type = "point-to-point"
+        ia.interface_id = "swp1"
+        # Enable TI-LFA SR-MPLS
+        ia.ti_lfa_sr_mpls_enabled = True
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Verify TI-LFA config
+        self.assertIn("interface swp1", cfg_str)
+        self.assertIn("af IPV4 UNICAST", cfg_str)
+        self.assertIn("fast-reroute ti-lfa sr-mpls enabled true", cfg_str)
+
+    def test_interface_adjacency_sid(self):
+        """Verify adjacency-sid configuration on P2P interface."""
+        isis = GenieIsis(pid="default")
+
+        # Attach ISIS feature to interface
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.if_type = "point-to-point"
+        ia.interface_id = "swp1"
+        # Enable TI-LFA and adjacency-sid
+        ia.ti_lfa_sr_mpls_enabled = True
+        ia.sr_adjacency_sid = {
+            'adjacency_type': 'POINT_TO_POINT',
+            'sid_type': 'INDEX',
+            'value': 12,
+        }
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Verify adjacency-sid config
+        self.assertIn("interface swp1", cfg_str)
+        self.assertIn("af IPV4 UNICAST", cfg_str)
+        self.assertIn("fast-reroute ti-lfa sr-mpls enabled true", cfg_str)
+        self.assertIn("adjacency-sid POINT_TO_POINT", cfg_str)
+        self.assertIn("sid-type INDEX", cfg_str)
+        self.assertIn("value    12", cfg_str)
+
+    def test_interface_prefix_sid_loopback(self):
+        """Verify prefix-sid configuration on loopback interface."""
+        isis = GenieIsis(pid="default")
+
+        # Create loopback interface
+        loopback0 = Interface(name="loopback0", device=self.device)
+
+        # Attach ISIS feature to loopback
+        loopback0.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[loopback0]
+        ia.enabled = True
+        ia.interface_id = "loopback0"
+        # Prefix-SID on loopback
+        ia.sr_prefix_sid = {
+            'algorithm': 'SPF',
+            'sid_type': 'INDEX',
+            'value': 111,
+            'label_option': 'EXPLICIT_NULL',
+        }
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Verify prefix-sid config
+        self.assertIn("interface loopback0", cfg_str)
+        self.assertIn("af IPV4 UNICAST", cfg_str)
+        self.assertIn("prefix-sid SPF", cfg_str)
+        self.assertIn("sid-type     INDEX", cfg_str)
+        self.assertIn("value        111", cfg_str)
+        self.assertIn("label-option EXPLICIT_NULL", cfg_str)
+
+    def test_interface_adjacency_sid_and_ti_lfa_combined(self):
+        """Verify combined TI-LFA and adjacency-sid on P2P interface (full config)."""
+        isis = GenieIsis(pid="default")
+
+        # Attach ISIS feature to interface
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.if_type = "point-to-point"
+        ia.interface_id = "swp1"
+        ia.ti_lfa_sr_mpls_enabled = True
+        ia.sr_adjacency_sid = {
+            'adjacency_type': 'POINT_TO_POINT',
+            'sid_type': 'INDEX',
+            'value': 12,
+        }
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Check the config matches expected ArcOS format
+        # network-instance default
+        #  protocol ISIS default
+        #   interface swp1
+        #    af IPV4 UNICAST
+        #     enabled true
+        #     fast-reroute ti-lfa sr-mpls enabled true
+        #     adjacency-sid POINT_TO_POINT
+        #      sid-type INDEX
+        #      value    12
+        self.assertIn("network-instance default", cfg_str)
+        self.assertIn("protocol ISIS default", cfg_str)
+        self.assertIn("interface swp1", cfg_str)
+        self.assertIn("network-type POINT_TO_POINT", cfg_str)
+        self.assertIn("af IPV4 UNICAST", cfg_str)
+        self.assertIn("fast-reroute ti-lfa sr-mpls enabled true", cfg_str)
+        self.assertIn("adjacency-sid POINT_TO_POINT", cfg_str)
+        self.assertIn("sid-type INDEX", cfg_str)
+        self.assertIn("value    12", cfg_str)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
