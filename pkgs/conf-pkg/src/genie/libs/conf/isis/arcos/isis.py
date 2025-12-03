@@ -643,12 +643,46 @@ class Isis(ABC):
         class InterfaceAttributes(ABC):
             """Interface-specific ISIS attributes for ArcOS."""
 
+            # ========================================
+            # IPv4 UNICAST Address Family Attributes
+            # ========================================
+            # Enabled flag for IPv4 AF
+            ipv4_unicast_enabled = managedattribute(
+                name='ipv4_unicast_enabled',
+                default=None,
+                type=(None, managedattribute.test_istype(bool)),
+                doc='Enable IPv4 unicast address family on this interface')
+
             # SR-MPLS: TI-LFA fast-reroute enabled (IPv4)
-            ti_lfa_sr_mpls_enabled = managedattribute(
-                name='ti_lfa_sr_mpls_enabled',
+            ipv4_ti_lfa_sr_mpls_enabled = managedattribute(
+                name='ipv4_ti_lfa_sr_mpls_enabled',
                 default=None,
                 type=(None, managedattribute.test_istype(bool)),
                 doc='Enable TI-LFA SR-MPLS fast-reroute on IPv4 AF')
+
+            # SR-MPLS: Adjacency-SID for IPv4 AF (dict: adjacency_type, sid_type, value)
+            ipv4_adjacency_sid = managedattribute(
+                name='ipv4_adjacency_sid',
+                default=None,
+                type=(None, managedattribute.test_istype(dict)),
+                doc='IPv4 Adjacency-SID: {adjacency_type, sid_type, value}')
+
+            # SR-MPLS: Prefix-SID for IPv4 AF (dict: algorithm, sid_type, value, label_option, clear_n_flag)
+            ipv4_prefix_sid = managedattribute(
+                name='ipv4_prefix_sid',
+                default=None,
+                type=(None, managedattribute.test_istype(dict)),
+                doc='IPv4 Prefix-SID: {algorithm, sid_type, value, label_option, clear_n_flag}')
+
+            # ========================================
+            # IPv6 UNICAST Address Family Attributes
+            # ========================================
+            # Enabled flag for IPv6 AF
+            ipv6_unicast_enabled = managedattribute(
+                name='ipv6_unicast_enabled',
+                default=None,
+                type=(None, managedattribute.test_istype(bool)),
+                doc='Enable IPv6 unicast address family on this interface')
 
             # SR-MPLS: TI-LFA fast-reroute enabled (IPv6)
             ipv6_ti_lfa_sr_mpls_enabled = managedattribute(
@@ -657,19 +691,20 @@ class Isis(ABC):
                 type=(None, managedattribute.test_istype(bool)),
                 doc='Enable TI-LFA SR-MPLS fast-reroute on IPv6 AF')
 
-            # SR-MPLS: Adjacency-SID configuration (dict with adjacency_type, sid_type, value)
-            sr_adjacency_sid = managedattribute(
-                name='sr_adjacency_sid',
+            # SR-MPLS: Adjacency-SID for IPv6 AF (dict: adjacency_type, sid_type, value)
+            ipv6_adjacency_sid = managedattribute(
+                name='ipv6_adjacency_sid',
                 default=None,
                 type=(None, managedattribute.test_istype(dict)),
-                doc='Adjacency-SID config: {adjacency_type, sid_type, value}')
+                doc='IPv6 Adjacency-SID: {adjacency_type, sid_type, value}')
 
-            # SR-MPLS: Prefix-SID configuration (dict with algorithm, sid_type, value, label_option)
-            sr_prefix_sid = managedattribute(
-                name='sr_prefix_sid',
+            # SR-MPLS: Prefix-SID for IPv6 AF (dict: algorithm, sid_type, value, label_option, clear_n_flag)
+            ipv6_prefix_sid = managedattribute(
+                name='ipv6_prefix_sid',
                 default=None,
                 type=(None, managedattribute.test_istype(dict)),
-                doc='Prefix-SID config: {algorithm, sid_type, value, label_option}')
+                doc='IPv6 Prefix-SID: {algorithm, sid_type, value, label_option, clear_n_flag}')
+
 
             def build_config(
                 self,
@@ -720,82 +755,100 @@ class Isis(ABC):
                     # Address families (interface-level) with SR-MPLS support
                     if not unconfig:
                         # IPv6 UNICAST
-                        with configurations.submode_context('af IPV6 UNICAST'):
-                            configurations.append_line('enabled true')
-                            # IPv6 TI-LFA SR-MPLS
-                            ipv6_ti_lfa = attributes.value('ipv6_ti_lfa_sr_mpls_enabled')
-                            if ipv6_ti_lfa is not None:
-                                enabled_str = 'true' if ipv6_ti_lfa else 'false'
-                                configurations.append_line(
-                                    f'fast-reroute ti-lfa sr-mpls enabled {enabled_str}'
-                                )
-                        configurations.append_line('!')
+                        ipv6_enabled = attributes.value('ipv6_unicast_enabled')
+                        if ipv6_enabled is None or ipv6_enabled:
+                            with configurations.submode_context('af IPV6 UNICAST'):
+                                configurations.append_line('enabled true')
+
+                                # IPv6 TI-LFA SR-MPLS
+                                ipv6_ti_lfa = attributes.value('ipv6_ti_lfa_sr_mpls_enabled')
+                                if ipv6_ti_lfa is not None:
+                                    enabled_str = 'true' if ipv6_ti_lfa else 'false'
+                                    configurations.append_line(
+                                        f'fast-reroute ti-lfa sr-mpls enabled {enabled_str}'
+                                    )
+
+                                # IPv6 Adjacency-SID
+                                ipv6_adj_sid = attributes.value('ipv6_adjacency_sid')
+                                if ipv6_adj_sid:
+                                    adj_type = ipv6_adj_sid.get('adjacency_type', 'POINT_TO_POINT') if isinstance(ipv6_adj_sid, dict) else 'POINT_TO_POINT'
+                                    with configurations.submode_context(f'adjacency-sid {adj_type}'):
+                                        sid_type = ipv6_adj_sid.get('sid_type') if isinstance(ipv6_adj_sid, dict) else None
+                                        value = ipv6_adj_sid.get('value') if isinstance(ipv6_adj_sid, dict) else None
+                                        if sid_type:
+                                            configurations.append_line(f'sid-type {sid_type}')
+                                        if value is not None:
+                                            configurations.append_line(f'value    {value}')
+                                    configurations.append_line('!')
+
+                                # IPv6 Prefix-SID
+                                ipv6_pfx_sid = attributes.value('ipv6_prefix_sid')
+                                if ipv6_pfx_sid:
+                                    algorithm = ipv6_pfx_sid.get('algorithm', 'SPF') if isinstance(ipv6_pfx_sid, dict) else 'SPF'
+                                    with configurations.submode_context(f'prefix-sid {algorithm}'):
+                                        sid_type = ipv6_pfx_sid.get('sid_type') if isinstance(ipv6_pfx_sid, dict) else None
+                                        value = ipv6_pfx_sid.get('value') if isinstance(ipv6_pfx_sid, dict) else None
+                                        label_option = ipv6_pfx_sid.get('label_option') if isinstance(ipv6_pfx_sid, dict) else None
+                                        clear_n_flag = ipv6_pfx_sid.get('clear_n_flag') if isinstance(ipv6_pfx_sid, dict) else None
+                                        if sid_type:
+                                            configurations.append_line(f'sid-type     {sid_type}')
+                                        if value is not None:
+                                            configurations.append_line(f'value        {value}')
+                                        if label_option:
+                                            configurations.append_line(f'label-option {label_option}')
+                                        if clear_n_flag is not None:
+                                            flag_str = 'true' if clear_n_flag else 'false'
+                                            configurations.append_line(f'clear-n-flag {flag_str}')
+                                    configurations.append_line('!')
+                            configurations.append_line('!')
 
                         # IPv4 UNICAST with SR-MPLS attributes
-                        with configurations.submode_context('af IPV4 UNICAST'):
-                            configurations.append_line('enabled true')
+                        ipv4_enabled = attributes.value('ipv4_unicast_enabled')
+                        if ipv4_enabled is None or ipv4_enabled:
+                            with configurations.submode_context('af IPV4 UNICAST'):
+                                configurations.append_line('enabled true')
 
-                            # TI-LFA SR-MPLS fast-reroute
-                            ti_lfa_enabled = attributes.value('ti_lfa_sr_mpls_enabled')
-                            if ti_lfa_enabled is not None:
-                                enabled_str = 'true' if ti_lfa_enabled else 'false'
-                                configurations.append_line(
-                                    f'fast-reroute ti-lfa sr-mpls enabled {enabled_str}'
-                                )
+                                # IPv4 TI-LFA SR-MPLS fast-reroute
+                                ipv4_ti_lfa = attributes.value('ipv4_ti_lfa_sr_mpls_enabled')
+                                if ipv4_ti_lfa is not None:
+                                    enabled_str = 'true' if ipv4_ti_lfa else 'false'
+                                    configurations.append_line(
+                                        f'fast-reroute ti-lfa sr-mpls enabled {enabled_str}'
+                                    )
 
-                            # Adjacency-SID (for P2P interfaces like swp1)
-                            adj_sid = attributes.value('sr_adjacency_sid')
-                            if adj_sid:
-                                adj_type = 'POINT_TO_POINT'
-                                if isinstance(adj_sid, dict):
-                                    adj_type = adj_sid.get('adjacency_type', 'POINT_TO_POINT')
-                                elif hasattr(adj_sid, 'adjacency_type'):
-                                    adj_type = getattr(adj_sid, 'adjacency_type', 'POINT_TO_POINT')
+                                # IPv4 Adjacency-SID
+                                ipv4_adj_sid = attributes.value('ipv4_adjacency_sid')
+                                if ipv4_adj_sid:
+                                    adj_type = ipv4_adj_sid.get('adjacency_type', 'POINT_TO_POINT') if isinstance(ipv4_adj_sid, dict) else 'POINT_TO_POINT'
+                                    with configurations.submode_context(f'adjacency-sid {adj_type}'):
+                                        sid_type = ipv4_adj_sid.get('sid_type') if isinstance(ipv4_adj_sid, dict) else None
+                                        value = ipv4_adj_sid.get('value') if isinstance(ipv4_adj_sid, dict) else None
+                                        if sid_type:
+                                            configurations.append_line(f'sid-type {sid_type}')
+                                        if value is not None:
+                                            configurations.append_line(f'value    {value}')
+                                    configurations.append_line('!')
 
-                                with configurations.submode_context(f'adjacency-sid {adj_type}'):
-                                    # Get sid_type and value
-                                    if isinstance(adj_sid, dict):
-                                        sid_type = adj_sid.get('sid_type')
-                                        value = adj_sid.get('value')
-                                    else:
-                                        sid_type = getattr(adj_sid, 'sid_type', None)
-                                        value = getattr(adj_sid, 'value', None)
-
-                                    if sid_type:
-                                        configurations.append_line(f'sid-type {sid_type}')
-                                    if value is not None:
-                                        configurations.append_line(f'value    {value}')
-                                configurations.append_line('!')
-
-                            # Prefix-SID (for loopback interfaces)
-                            prefix_sid = attributes.value('sr_prefix_sid')
-                            if prefix_sid:
-                                algorithm = 'SPF'
-                                if isinstance(prefix_sid, dict):
-                                    algorithm = prefix_sid.get('algorithm', 'SPF')
-                                elif hasattr(prefix_sid, 'algorithm'):
-                                    algorithm = getattr(prefix_sid, 'algorithm', 'SPF')
-
-                                with configurations.submode_context(f'prefix-sid {algorithm}'):
-                                    # Get sid_type, value, label_option
-                                    if isinstance(prefix_sid, dict):
-                                        sid_type = prefix_sid.get('sid_type')
-                                        value = prefix_sid.get('value')
-                                        label_option = prefix_sid.get('label_option')
-                                    else:
-                                        sid_type = getattr(prefix_sid, 'sid_type', None)
-                                        value = getattr(prefix_sid, 'value', None)
-                                        label_option = getattr(prefix_sid, 'label_option', None)
-
-                                    if sid_type:
-                                        configurations.append_line(f'sid-type     {sid_type}')
-                                    if value is not None:
-                                        configurations.append_line(f'value        {value}')
-                                    if label_option:
-                                        configurations.append_line(f'label-option {label_option}')
-                                configurations.append_line('!')
-
-                        configurations.append_line('!')
+                                # IPv4 Prefix-SID
+                                ipv4_pfx_sid = attributes.value('ipv4_prefix_sid')
+                                if ipv4_pfx_sid:
+                                    algorithm = ipv4_pfx_sid.get('algorithm', 'SPF') if isinstance(ipv4_pfx_sid, dict) else 'SPF'
+                                    with configurations.submode_context(f'prefix-sid {algorithm}'):
+                                        sid_type = ipv4_pfx_sid.get('sid_type') if isinstance(ipv4_pfx_sid, dict) else None
+                                        value = ipv4_pfx_sid.get('value') if isinstance(ipv4_pfx_sid, dict) else None
+                                        label_option = ipv4_pfx_sid.get('label_option') if isinstance(ipv4_pfx_sid, dict) else None
+                                        clear_n_flag = ipv4_pfx_sid.get('clear_n_flag') if isinstance(ipv4_pfx_sid, dict) else None
+                                        if sid_type:
+                                            configurations.append_line(f'sid-type     {sid_type}')
+                                        if value is not None:
+                                            configurations.append_line(f'value        {value}')
+                                        if label_option:
+                                            configurations.append_line(f'label-option {label_option}')
+                                        if clear_n_flag is not None:
+                                            flag_str = 'true' if clear_n_flag else 'false'
+                                            configurations.append_line(f'clear-n-flag {flag_str}')
+                                    configurations.append_line('!')
+                            configurations.append_line('!')
 
                     # Timers
                     hello_interval = attributes.value('hello_interval')
