@@ -25,6 +25,51 @@ class Isis(ABC):
     class DeviceAttributes(ABC):
         """Device-level ISIS attributes for ArcOS."""
 
+        # Traffic Engineering Router IDs
+        traffic_engineering_ipv4_router_id = managedattribute(
+            name='traffic_engineering_ipv4_router_id',
+            default=None,
+            type=(None, managedattribute.test_istype(str)),
+            doc='Traffic engineering IPv4 router-id (e.g., "1.1.1.1")')
+
+        traffic_engineering_ipv6_router_id = managedattribute(
+            name='traffic_engineering_ipv6_router_id',
+            default=None,
+            type=(None, managedattribute.test_istype(str)),
+            doc='Traffic engineering IPv6 router-id')
+
+        # Labeled Preference per Level (for SR/LDP coexistence)
+        level1_labeled_preference = managedattribute(
+            name='level1_labeled_preference',
+            default=None,
+            type=(None, managedattribute.test_istype(int)),
+            doc='Level 1 labeled preference for SR/LDP coexistence')
+
+        level2_labeled_preference = managedattribute(
+            name='level2_labeled_preference',
+            default=None,
+            type=(None, managedattribute.test_istype(int)),
+            doc='Level 2 labeled preference for SR/LDP coexistence')
+
+        # SRMS (Segment Routing Mapping Server)
+        srms_receive_enabled = managedattribute(
+            name='srms_receive_enabled',
+            default=None,
+            type=(None, managedattribute.test_istype(bool)),
+            doc='Enable receiving SRMS mappings (default: True on device)')
+
+        srms_advertise_enabled = managedattribute(
+            name='srms_advertise_enabled',
+            default=None,
+            type=(None, managedattribute.test_istype(bool)),
+            doc='Enable advertising SRMS mappings (default: True on device)')
+
+        srms_mapping = managedattribute(
+            name='srms_mapping',
+            default=None,
+            type=(None, managedattribute.test_istype(str)),
+            doc='SRMS mapping name to advertise')
+
         def build_config(self, apply=True, attributes=None, unconfig=False, **kwargs):
             """Build ISIS configuration for an ArcOS device.
 
@@ -264,6 +309,16 @@ class Isis(ABC):
                             )
                             configurations.append_line('!')
 
+                        # Traffic Engineering IPv4 Router ID
+                        te_ipv4_rtrid = attributes.value(
+                            'traffic_engineering_ipv4_router_id'
+                        )
+                        if te_ipv4_rtrid:
+                            configurations.append_line(
+                                'global traffic-engineering '
+                                f'ipv4-router-id {te_ipv4_rtrid}'
+                            )
+
                         # Traffic Engineering IPv6 Router ID
                         te_ipv6_rtrid = attributes.value(
                             'traffic_engineering_ipv6_router_id'
@@ -282,6 +337,27 @@ class Isis(ABC):
                             sr_enabled_str = 'true' if segment_routing_enabled else 'false'
                             configurations.append_line(
                                 f'global segment-routing enabled {sr_enabled_str}'
+                            )
+
+                        # SRMS (Segment Routing Mapping Server)
+                        srms_mapping = attributes.value('srms_mapping')
+                        if srms_mapping:
+                            configurations.append_line(
+                                f'global segment-routing srms mapping {srms_mapping}'
+                            )
+
+                        srms_receive = attributes.value('srms_receive_enabled')
+                        if srms_receive is not None:
+                            srms_recv_str = 'true' if srms_receive else 'false'
+                            configurations.append_line(
+                                f'global segment-routing srms receive-enabled {srms_recv_str}'
+                            )
+
+                        srms_advertise = attributes.value('srms_advertise_enabled')
+                        if srms_advertise is not None:
+                            srms_adv_str = 'true' if srms_advertise else 'false'
+                            configurations.append_line(
+                                f'global segment-routing srms advertise-enabled {srms_adv_str}'
                             )
 
                         # Micro-Loop Avoidance SRv6 Enabled
@@ -422,6 +498,15 @@ class Isis(ABC):
                                         configurations.append_line(
                                             'authentication key crypto-algorithm '
                                             f'{level_crypto_algo}'
+                                        )
+
+                                    # Labeled preference for SR/LDP coexistence
+                                    labeled_pref = attributes.value(
+                                        f'level{lvl}_labeled_preference'
+                                    )
+                                    if labeled_pref is not None:
+                                        configurations.append_line(
+                                            f'labeled-preference {labeled_pref}'
                                         )
                                 except Exception:
                                     pass
