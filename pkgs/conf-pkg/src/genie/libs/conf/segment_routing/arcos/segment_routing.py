@@ -15,6 +15,11 @@ SR-MPLS:
 - mpls_reserved_label_blocks: dict mapping block-id -> dict/attrs with keys:
       lower_bound (int), upper_bound (int), usage (str),
       protocol_identifier (str), protocol_name (str)
+
+SRMS (Segment Routing Mapping Server):
+- srms_mappings: dict mapping mapping-id -> dict/attrs with keys:
+      local_id (str), ipv4_prefixes (list), ipv6_prefixes (list)
+      Each prefix entry has: prefix (str), sid (int), range (int)
 """
 
 from abc import ABC
@@ -167,6 +172,90 @@ class SegmentRouting(ABC):
                                     )
 
                             # Add explicit '!' after each block
+                            configurations.append_line("!")
+
+                    # ========================================
+                    # SRMS (Segment Routing Mapping Server) Mappings
+                    # ========================================
+                    srms_mappings = attributes.value("srms_mappings")
+                    if srms_mappings and hasattr(srms_mappings, "items"):
+                        for mapping_id, mapping_attrs in sorted(srms_mappings.items()):
+                            if not mapping_id or mapping_attrs is None:
+                                continue
+
+                            def _get_mapping(attr_name):
+                                if isinstance(mapping_attrs, dict):
+                                    return mapping_attrs.get(attr_name)
+                                return getattr(mapping_attrs, attr_name, None)
+
+                            with configurations.submode_context(
+                                f"segment-routing srms mapping {mapping_id}"
+                            ):
+                                local_id = _get_mapping("local_id")
+                                if local_id:
+                                    configurations.append_line(f"local-id {local_id}")
+
+                                # IPv4 prefixes
+                                ipv4_prefixes = _get_mapping("ipv4_prefixes")
+                                if ipv4_prefixes:
+                                    for prefix_cfg in ipv4_prefixes:
+                                        prefix = None
+                                        sid = None
+                                        range_val = None
+                                        if isinstance(prefix_cfg, dict):
+                                            prefix = prefix_cfg.get("prefix")
+                                            sid = prefix_cfg.get("sid")
+                                            range_val = prefix_cfg.get("range")
+                                        else:
+                                            prefix = getattr(prefix_cfg, "prefix", None)
+                                            sid = getattr(prefix_cfg, "sid", None)
+                                            range_val = getattr(prefix_cfg, "range", None)
+
+                                        if prefix:
+                                            with configurations.submode_context(
+                                                f"ipv4 prefix {prefix}"
+                                            ):
+                                                if sid is not None:
+                                                    configurations.append_line(
+                                                        f"sid   {sid}"
+                                                    )
+                                                if range_val is not None:
+                                                    configurations.append_line(
+                                                        f"range {range_val}"
+                                                    )
+                                            configurations.append_line("!")
+
+                                # IPv6 prefixes
+                                ipv6_prefixes = _get_mapping("ipv6_prefixes")
+                                if ipv6_prefixes:
+                                    for prefix_cfg in ipv6_prefixes:
+                                        prefix = None
+                                        sid = None
+                                        range_val = None
+                                        if isinstance(prefix_cfg, dict):
+                                            prefix = prefix_cfg.get("prefix")
+                                            sid = prefix_cfg.get("sid")
+                                            range_val = prefix_cfg.get("range")
+                                        else:
+                                            prefix = getattr(prefix_cfg, "prefix", None)
+                                            sid = getattr(prefix_cfg, "sid", None)
+                                            range_val = getattr(prefix_cfg, "range", None)
+
+                                        if prefix:
+                                            with configurations.submode_context(
+                                                f"ipv6 prefix {prefix}"
+                                            ):
+                                                if sid is not None:
+                                                    configurations.append_line(
+                                                        f"sid   {sid}"
+                                                    )
+                                                if range_val is not None:
+                                                    configurations.append_line(
+                                                        f"range {range_val}"
+                                                    )
+                                            configurations.append_line("!")
+
+                            # Add explicit '!' after each mapping
                             configurations.append_line("!")
 
                 # Close network-instance
