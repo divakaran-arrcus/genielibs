@@ -25,6 +25,32 @@ class Isis(ABC):
     class DeviceAttributes(ABC):
         """Device-level ISIS attributes for ArcOS."""
 
+        # Traffic Engineering Router IDs
+        traffic_engineering_ipv4_router_id = managedattribute(
+            name='traffic_engineering_ipv4_router_id',
+            default=None,
+            type=(None, managedattribute.test_istype(str)),
+            doc='Traffic engineering IPv4 router-id (e.g., "1.1.1.1")')
+
+        traffic_engineering_ipv6_router_id = managedattribute(
+            name='traffic_engineering_ipv6_router_id',
+            default=None,
+            type=(None, managedattribute.test_istype(str)),
+            doc='Traffic engineering IPv6 router-id')
+
+        # Labeled Preference per Level (for SR/LDP coexistence)
+        level1_labeled_preference = managedattribute(
+            name='level1_labeled_preference',
+            default=None,
+            type=(None, managedattribute.test_istype(int)),
+            doc='Level 1 labeled preference for SR/LDP coexistence')
+
+        level2_labeled_preference = managedattribute(
+            name='level2_labeled_preference',
+            default=None,
+            type=(None, managedattribute.test_istype(int)),
+            doc='Level 2 labeled preference for SR/LDP coexistence')
+
         def build_config(self, apply=True, attributes=None, unconfig=False, **kwargs):
             """Build ISIS configuration for an ArcOS device.
 
@@ -264,6 +290,16 @@ class Isis(ABC):
                             )
                             configurations.append_line('!')
 
+                        # Traffic Engineering IPv4 Router ID
+                        te_ipv4_rtrid = attributes.value(
+                            'traffic_engineering_ipv4_router_id'
+                        )
+                        if te_ipv4_rtrid:
+                            configurations.append_line(
+                                'global traffic-engineering '
+                                f'ipv4-router-id {te_ipv4_rtrid}'
+                            )
+
                         # Traffic Engineering IPv6 Router ID
                         te_ipv6_rtrid = attributes.value(
                             'traffic_engineering_ipv6_router_id'
@@ -422,6 +458,15 @@ class Isis(ABC):
                                         configurations.append_line(
                                             'authentication key crypto-algorithm '
                                             f'{level_crypto_algo}'
+                                        )
+
+                                    # Labeled preference for SR/LDP coexistence
+                                    labeled_pref = attributes.value(
+                                        f'level{lvl}_labeled_preference'
+                                    )
+                                    if labeled_pref is not None:
+                                        configurations.append_line(
+                                            f'labeled-preference {labeled_pref}'
                                         )
                                 except Exception:
                                     pass
