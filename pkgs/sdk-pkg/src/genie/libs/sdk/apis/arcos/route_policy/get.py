@@ -226,7 +226,7 @@ def get_running_config_routing_policy(
     """Return the combined ``routing_policy`` tree from running-config.
 
     This is a thin wrapper over ``device.parse()`` using the
-    ``ShowRunningConfigRoutingPolicy`` parser. The returned dict has the
+    ``ShowRoutingPolicyConfig`` parser. The returned dict has the
     shape::
 
         {
