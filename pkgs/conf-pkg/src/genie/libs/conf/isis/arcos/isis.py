@@ -51,6 +51,59 @@ class Isis(ABC):
             type=(None, managedattribute.test_istype(int)),
             doc='Level 2 labeled preference for SR/LDP coexistence')
 
+        # Per-level Traffic Engineering enable
+        level1_traffic_engineering_enabled = managedattribute(
+            name='level1_traffic_engineering_enabled',
+            default=None,
+            type=(None, managedattribute.test_istype(bool)))
+
+        level2_traffic_engineering_enabled = managedattribute(
+            name='level2_traffic_engineering_enabled',
+            default=None,
+            type=(None, managedattribute.test_istype(bool)))
+
+        # Per-level CSNP/PSNP authentication
+        level1_csnp_authentication = managedattribute(
+            name='level1_csnp_authentication',
+            default=None,
+            type=(None, managedattribute.test_istype(bool)))
+
+        level2_csnp_authentication = managedattribute(
+            name='level2_csnp_authentication',
+            default=None,
+            type=(None, managedattribute.test_istype(bool)))
+
+        level1_psnp_authentication = managedattribute(
+            name='level1_psnp_authentication',
+            default=None,
+            type=(None, managedattribute.test_istype(bool)))
+
+        level2_psnp_authentication = managedattribute(
+            name='level2_psnp_authentication',
+            default=None,
+            type=(None, managedattribute.test_istype(bool)))
+
+        # Per-level keychain and auth-type
+        level1_auth_type = managedattribute(
+            name='level1_auth_type',
+            default=None,
+            type=(None, managedattribute.test_istype(str)))
+
+        level2_auth_type = managedattribute(
+            name='level2_auth_type',
+            default=None,
+            type=(None, managedattribute.test_istype(str)))
+
+        level1_keychain = managedattribute(
+            name='level1_keychain',
+            default=None,
+            type=(None, managedattribute.test_istype(str)))
+
+        level2_keychain = managedattribute(
+            name='level2_keychain',
+            default=None,
+            type=(None, managedattribute.test_istype(str)))
+
         # SRMS (Segment Routing Mapping Server)
         srms_receive_enabled = managedattribute(
             name='srms_receive_enabled',
@@ -557,6 +610,40 @@ class Isis(ABC):
                                 configurations.append_line('enabled true')
 
                                 try:
+                                    # Per-level Traffic Engineering enable
+                                    te_enabled = attributes.value(
+                                        f'level{lvl}_traffic_engineering_enabled'
+                                    )
+                                    if te_enabled is not None:
+                                        te_enabled_str = (
+                                            'true' if te_enabled else 'false'
+                                        )
+                                        configurations.append_line(
+                                            'traffic-engineering enabled '
+                                            f'{te_enabled_str}'
+                                        )
+
+                                    # CSNP/PSNP authentication
+                                    csnp_auth = attributes.value(
+                                        f'level{lvl}_csnp_authentication'
+                                    )
+                                    if csnp_auth is not None:
+                                        csnp_str = 'true' if csnp_auth else 'false'
+                                        configurations.append_line(
+                                            'authentication csnp-authentication '
+                                            f'{csnp_str}'
+                                        )
+
+                                    psnp_auth = attributes.value(
+                                        f'level{lvl}_psnp_authentication'
+                                    )
+                                    if psnp_auth is not None:
+                                        psnp_str = 'true' if psnp_auth else 'false'
+                                        configurations.append_line(
+                                            'authentication psnp-authentication '
+                                            f'{psnp_str}'
+                                        )
+
                                     lsp_auth = attributes.value(
                                         f'level{lvl}_lsp_authentication'
                                     )
@@ -583,6 +670,24 @@ class Isis(ABC):
                                         configurations.append_line(
                                             'authentication key crypto-algorithm '
                                             f'{level_crypto_algo}'
+                                        )
+
+                                    level_keychain = attributes.value(
+                                        f'level{lvl}_keychain'
+                                    )
+                                    if level_keychain:
+                                        configurations.append_line(
+                                            'authentication keychain '
+                                            f'{level_keychain}'
+                                        )
+
+                                    level_auth_type = attributes.value(
+                                        f'level{lvl}_auth_type'
+                                    )
+                                    if level_auth_type:
+                                        configurations.append_line(
+                                            'authentication auth-type '
+                                            f'{level_auth_type}'
                                         )
 
                                     # Labeled preference for SR/LDP coexistence
@@ -853,6 +958,11 @@ class Isis(ABC):
         class InterfaceAttributes(ABC):
             """Interface-specific ISIS attributes for ArcOS."""
 
+            mpls_igp_ldp_sync_enabled = managedattribute(
+                name='mpls_igp_ldp_sync_enabled',
+                default=None,
+                type=(None, managedattribute.test_istype(bool)))
+
             # ========================================
             # IPv4 UNICAST Address Family Attributes
             # ========================================
@@ -862,6 +972,12 @@ class Isis(ABC):
                 default=None,
                 type=(None, managedattribute.test_istype(bool)),
                 doc='Enable IPv4 unicast address family on this interface')
+
+            # IP Fast Reroute (IP-FRR) for IPv4 AF
+            ipv4_ip_frr_enabled = managedattribute(
+                name='ipv4_ip_frr_enabled',
+                default=None,
+                type=(None, managedattribute.test_istype(bool)))
 
             # SR-MPLS: TI-LFA fast-reroute enabled (IPv4)
             ipv4_ti_lfa_sr_mpls_enabled = managedattribute(
@@ -910,12 +1026,25 @@ class Isis(ABC):
                 type=(None, managedattribute.test_istype(bool)),
                 doc='Enable IPv6 unicast address family on this interface')
 
+            # IP Fast Reroute (IP-FRR) for IPv6 AF
+            ipv6_ip_frr_enabled = managedattribute(
+                name='ipv6_ip_frr_enabled',
+                default=None,
+                type=(None, managedattribute.test_istype(bool)))
+
             # SR-MPLS: TI-LFA fast-reroute enabled (IPv6)
             ipv6_ti_lfa_sr_mpls_enabled = managedattribute(
                 name='ipv6_ti_lfa_sr_mpls_enabled',
                 default=None,
                 type=(None, managedattribute.test_istype(bool)),
                 doc='Enable TI-LFA SR-MPLS fast-reroute on IPv6 AF')
+
+            # SRv6: TI-LFA fast-reroute enabled (IPv6)
+            ipv6_ti_lfa_srv6_enabled = managedattribute(
+                name='ipv6_ti_lfa_srv6_enabled',
+                default=None,
+                type=(None, managedattribute.test_istype(bool)),
+                doc='Enable TI-LFA SRv6 fast-reroute on IPv6 AF')
 
             # SR-MPLS: Adjacency-SID for IPv6 AF (dict: adjacency_type, sid_type, value)
             ipv6_adjacency_sid = managedattribute(
@@ -930,6 +1059,17 @@ class Isis(ABC):
                 default=None,
                 type=(None, managedattribute.test_istype(dict)),
                 doc='IPv6 Prefix-SID: {algorithm, sid_type, value, label_option, clear_n_flag}')
+
+            # Interface-level authentication keychain and auth-type
+            auth_keychain = managedattribute(
+                name='auth_keychain',
+                default=None,
+                type=(None, managedattribute.test_istype(str)))
+
+            auth_type = managedattribute(
+                name='auth_type',
+                default=None,
+                type=(None, managedattribute.test_istype(str)))
 
 
             def build_config(
@@ -978,6 +1118,14 @@ class Isis(ABC):
                             f'network-type {network_type}'
                         )
 
+                    mpls_igp_ldp_sync = attributes.value('mpls_igp_ldp_sync_enabled')
+                    if mpls_igp_ldp_sync is not None:
+                        sync_str = 'true' if mpls_igp_ldp_sync else 'false'
+                        configurations.append_line(
+                            'mpls igp-ldp-sync enabled '
+                            f'{sync_str}'
+                        )
+
                     # Address families (interface-level) with SR-MPLS support
                     if not unconfig:
                         # IPv6 UNICAST
@@ -986,12 +1134,49 @@ class Isis(ABC):
                             with configurations.submode_context('af IPV6 UNICAST'):
                                 configurations.append_line('enabled true')
 
-                                # IPv6 TI-LFA SR-MPLS
-                                ipv6_ti_lfa = attributes.value('ipv6_ti_lfa_sr_mpls_enabled')
-                                if ipv6_ti_lfa is not None:
-                                    enabled_str = 'true' if ipv6_ti_lfa else 'false'
+                                ipv6_ip_frr = attributes.value('ipv6_ip_frr_enabled')
+                                ipv6_ti_lfa_sr_mpls = attributes.value(
+                                    'ipv6_ti_lfa_sr_mpls_enabled'
+                                )
+                                ipv6_ti_lfa_srv6 = attributes.value(
+                                    'ipv6_ti_lfa_srv6_enabled'
+                                )
+
+                                modes = [
+                                    ('ip', ipv6_ip_frr),
+                                    ('ti_lfa_sr_mpls', ipv6_ti_lfa_sr_mpls),
+                                    ('ti_lfa_srv6', ipv6_ti_lfa_srv6),
+                                ]
+                                enabled_modes = [name for name, val in modes if val]
+                                if len(enabled_modes) > 1:
+                                    raise ValueError(
+                                        'At most one IPv6 fast-reroute mode '
+                                        'can be enabled per interface AF; '
+                                        f'got {", ".join(enabled_modes)}'
+                                    )
+
+                                if ipv6_ip_frr is not None:
+                                    ip_str = 'true' if ipv6_ip_frr else 'false'
                                     configurations.append_line(
-                                        f'fast-reroute ti-lfa sr-mpls enabled {enabled_str}'
+                                        f'fast-reroute ip enabled {ip_str}'
+                                    )
+
+                                # IPv6 TI-LFA SR-MPLS
+                                if ipv6_ti_lfa_sr_mpls is not None:
+                                    enabled_str = (
+                                        'true' if ipv6_ti_lfa_sr_mpls else 'false'
+                                    )
+                                    configurations.append_line(
+                                        'fast-reroute ti-lfa sr-mpls enabled '
+                                        f'{enabled_str}'
+                                    )
+
+                                # IPv6 TI-LFA SRv6
+                                if ipv6_ti_lfa_srv6 is not None:
+                                    srv6_str = 'true' if ipv6_ti_lfa_srv6 else 'false'
+                                    configurations.append_line(
+                                        'fast-reroute ti-lfa srv6 enabled '
+                                        f'{srv6_str}'
                                     )
 
                                 # IPv6 Adjacency-SID
@@ -1034,7 +1219,7 @@ class Isis(ABC):
                             with configurations.submode_context('af IPV4 UNICAST'):
                                 configurations.append_line('enabled true')
 
-                                # IPv4 TI-LFA SR-MPLS fast-reroute
+                                ipv4_ip_frr = attributes.value('ipv4_ip_frr_enabled')
                                 ipv4_ti_lfa = attributes.value(
                                     'ipv4_ti_lfa_sr_mpls_enabled'
                                 )
@@ -1042,6 +1227,26 @@ class Isis(ABC):
                                     ipv4_ti_lfa = attributes.value(
                                         'ti_lfa_sr_mpls_enabled'
                                     )
+
+                                modes = [
+                                    ('ip', ipv4_ip_frr),
+                                    ('ti_lfa_sr_mpls', ipv4_ti_lfa),
+                                ]
+                                enabled_modes = [name for name, val in modes if val]
+                                if len(enabled_modes) > 1:
+                                    raise ValueError(
+                                        'At most one IPv4 fast-reroute mode '
+                                        'can be enabled per interface AF; '
+                                        f'got {", ".join(enabled_modes)}'
+                                    )
+
+                                if ipv4_ip_frr is not None:
+                                    ip_str = 'true' if ipv4_ip_frr else 'false'
+                                    configurations.append_line(
+                                        f'fast-reroute ip enabled {ip_str}'
+                                    )
+
+                                # IPv4 TI-LFA SR-MPLS fast-reroute
                                 if ipv4_ti_lfa is not None:
                                     enabled_str = 'true' if ipv4_ti_lfa else 'false'
                                     configurations.append_line(
@@ -1117,11 +1322,15 @@ class Isis(ABC):
                     hello_auth_enabled = attributes.value('hello_authentication')
                     auth_password = attributes.value('auth_password')
                     crypto_algorithm = attributes.value('crypto_algorithm')
+                    auth_keychain = attributes.value('auth_keychain')
+                    auth_type = attributes.value('auth_type')
 
                     if (
                         hello_auth_enabled is not None
                         or auth_password
                         or crypto_algorithm
+                        or auth_keychain
+                        or auth_type
                     ):
                         if hello_auth_enabled is not None:
                             hello_str = 'true' if hello_auth_enabled else 'false'
@@ -1140,6 +1349,17 @@ class Isis(ABC):
                             configurations.append_line(
                                 'authentication key crypto-algorithm '
                                 f'{crypto_algorithm}'
+                            )
+                        if auth_keychain:
+                            configurations.append_line(
+                                'authentication keychain '
+                                f'{auth_keychain}'
+                            )
+
+                        if auth_type:
+                            configurations.append_line(
+                                'authentication auth-type '
+                                f'{auth_type}'
                             )
                     else:
                         hello_auth_mode = attributes.value(
