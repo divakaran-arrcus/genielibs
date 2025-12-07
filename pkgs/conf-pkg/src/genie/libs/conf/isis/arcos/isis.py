@@ -70,6 +70,40 @@ class Isis(ABC):
             type=(None, managedattribute.test_istype(str)),
             doc='SRMS mapping name to advertise')
 
+        # Global auto-cost reference bandwidth
+        auto_cost_reference_bandwidth = managedattribute(
+            name='auto_cost_reference_bandwidth',
+            default=None,
+            type=(None, managedattribute.test_istype(int)),
+            doc='Auto-cost reference bandwidth in Mbps')
+
+        # Global MPLS IGP-LDP synchronization
+        mpls_igp_ldp_sync_enabled = managedattribute(
+            name='mpls_igp_ldp_sync_enabled',
+            default=None,
+            type=(None, managedattribute.test_istype(bool)),
+            doc='Enable global MPLS IGP-LDP synchronization')
+
+        # Global overload-bit permanent set-bit
+        lsp_bit_overload_set_bit = managedattribute(
+            name='lsp_bit_overload_set_bit',
+            default=None,
+            type=(None, managedattribute.test_istype(bool)),
+            doc='Set overload-bit permanently (set-bit true/false)')
+
+        # Global hello-authentication auth-type and keychain
+        global_hello_auth_type = managedattribute(
+            name='global_hello_auth_type',
+            default=None,
+            type=(None, managedattribute.test_istype(str)),
+            doc='Global hello-authentication auth-type (SIMPLE_KEY or KEYCHAIN)')
+
+        global_hello_keychain = managedattribute(
+            name='global_hello_keychain',
+            default=None,
+            type=(None, managedattribute.test_istype(str)),
+            doc='Global hello-authentication keychain name')
+
         def build_config(self, apply=True, attributes=None, unconfig=False, **kwargs):
             """Build ISIS configuration for an ArcOS device.
 
@@ -222,7 +256,19 @@ class Isis(ABC):
                                 f'global lsp-bit attached-bit suppress-bit {suppress_str}'
                             )
 
-                        lsp_overload_set_on_boot = attributes.value('lsp_bit_overload_set_on_boot')
+                        lsp_overload_set_bit = attributes.value(
+                            'lsp_bit_overload_set_bit'
+                        )
+                        if lsp_overload_set_bit is not None:
+                            set_str = 'true' if lsp_overload_set_bit else 'false'
+                            configurations.append_line(
+                                'global lsp-bit overload-bit '
+                                f'set-bit {set_str}'
+                            )
+
+                        lsp_overload_set_on_boot = attributes.value(
+                            'lsp_bit_overload_set_on_boot'
+                        )
                         if lsp_overload_set_on_boot is not None:
                             boot_str = 'true' if lsp_overload_set_on_boot else 'false'
                             configurations.append_line(
@@ -275,6 +321,27 @@ class Isis(ABC):
                         if lsp_mtu_size is not None:
                             configurations.append_line(
                                 f'global transport lsp-mtu-size {lsp_mtu_size}'
+                            )
+
+                        # MPLS IGP-LDP synchronization
+                        mpls_igp_ldp_sync = attributes.value(
+                            'mpls_igp_ldp_sync_enabled'
+                        )
+                        if mpls_igp_ldp_sync is not None:
+                            enabled_str = 'true' if mpls_igp_ldp_sync else 'false'
+                            configurations.append_line(
+                                'global mpls igp-ldp-sync enabled '
+                                f'{enabled_str}'
+                            )
+
+                        # Auto-cost reference bandwidth
+                        auto_cost_ref_bw = attributes.value(
+                            'auto_cost_reference_bandwidth'
+                        )
+                        if auto_cost_ref_bw is not None:
+                            configurations.append_line(
+                                'global auto-cost reference-bandwidth '
+                                f'{auto_cost_ref_bw}'
                             )
 
                         # ========================================
@@ -463,6 +530,24 @@ class Isis(ABC):
                                     'key crypto-algorithm MD5'
                                 )
 
+                        global_hello_keychain = attributes.value(
+                            'global_hello_keychain'
+                        )
+                        if global_hello_keychain:
+                            configurations.append_line(
+                                'global hello-authentication keychain '
+                                f'{global_hello_keychain}'
+                            )
+
+                        global_hello_auth_type = attributes.value(
+                            'global_hello_auth_type'
+                        )
+                        if global_hello_auth_type:
+                            configurations.append_line(
+                                'global hello-authentication auth-type '
+                                f'{global_hello_auth_type}'
+                            )
+
                         # ========================================
                         # LEVEL-SPECIFIC CONFIGURATION
                         # ========================================
@@ -555,6 +640,21 @@ class Isis(ABC):
         class AddressFamilyAttributes(ABC):
             """Address-family specific ISIS attributes for IPv4/IPv6 (global)."""
 
+            default_info_orig_enabled = managedattribute(
+                name='default_info_orig_enabled',
+                default=None,
+                type=(None, managedattribute.test_istype(bool)))
+
+            default_info_orig_always = managedattribute(
+                name='default_info_orig_always',
+                default=None,
+                type=(None, managedattribute.test_istype(bool)))
+
+            default_info_orig_export_policy = managedattribute(
+                name='default_info_orig_export_policy',
+                default=None,
+                type=(None, managedattribute.test_istype(str)))
+
             def build_config(self, apply=True, attributes=None, unconfig=False, **kwargs):
                 """Build global address-family configuration."""
                 assert not kwargs, "Unexpected kwargs: {}".format(kwargs)
@@ -613,6 +713,31 @@ class Isis(ABC):
                         multi_topo = attributes.value('ipv6_multi_topology')
                         if multi_topo:
                             configurations.append_line('multi-topology enabled true')
+
+                    default_info_enabled = attributes.value(
+                        'default_info_orig_enabled'
+                    )
+                    if default_info_enabled is not None:
+                        enabled_str = 'true' if default_info_enabled else 'false'
+                        line = (
+                            'default-information originate enabled '
+                            f'{enabled_str}'
+                        )
+
+                        default_info_always = attributes.value(
+                            'default_info_orig_always'
+                        )
+                        if default_info_always is not None:
+                            always_str = 'true' if default_info_always else 'false'
+                            line += f' always {always_str}'
+
+                        default_info_export_policy = attributes.value(
+                            'default_info_orig_export_policy'
+                        )
+                        if default_info_export_policy:
+                            line += f' export-policy {default_info_export_policy}'
+
+                        configurations.append_line(line)
 
                     # Summary prefixes
                     summary_prefixes = attributes.value('summary_prefixes')
@@ -759,6 +884,22 @@ class Isis(ABC):
                 type=(None, managedattribute.test_istype(dict)),
                 doc='IPv4 Prefix-SID: {algorithm, sid_type, value, label_option, clear_n_flag}')
 
+            # Legacy aggregate IPv4 TI-LFA and SR SID knobs (compatibility)
+            ti_lfa_sr_mpls_enabled = managedattribute(
+                name='ti_lfa_sr_mpls_enabled',
+                default=None,
+                type=(None, managedattribute.test_istype(bool)))
+
+            sr_adjacency_sid = managedattribute(
+                name='sr_adjacency_sid',
+                default=None,
+                type=(None, managedattribute.test_istype(dict)))
+
+            sr_prefix_sid = managedattribute(
+                name='sr_prefix_sid',
+                default=None,
+                type=(None, managedattribute.test_istype(dict)))
+
             # ========================================
             # IPv6 UNICAST Address Family Attributes
             # ========================================
@@ -894,7 +1035,13 @@ class Isis(ABC):
                                 configurations.append_line('enabled true')
 
                                 # IPv4 TI-LFA SR-MPLS fast-reroute
-                                ipv4_ti_lfa = attributes.value('ipv4_ti_lfa_sr_mpls_enabled')
+                                ipv4_ti_lfa = attributes.value(
+                                    'ipv4_ti_lfa_sr_mpls_enabled'
+                                )
+                                if ipv4_ti_lfa is None:
+                                    ipv4_ti_lfa = attributes.value(
+                                        'ti_lfa_sr_mpls_enabled'
+                                    )
                                 if ipv4_ti_lfa is not None:
                                     enabled_str = 'true' if ipv4_ti_lfa else 'false'
                                     configurations.append_line(
@@ -903,6 +1050,8 @@ class Isis(ABC):
 
                                 # IPv4 Adjacency-SID
                                 ipv4_adj_sid = attributes.value('ipv4_adjacency_sid')
+                                if not ipv4_adj_sid:
+                                    ipv4_adj_sid = attributes.value('sr_adjacency_sid')
                                 if ipv4_adj_sid:
                                     adj_type = ipv4_adj_sid.get('adjacency_type', 'POINT_TO_POINT') if isinstance(ipv4_adj_sid, dict) else 'POINT_TO_POINT'
                                     with configurations.submode_context(f'adjacency-sid {adj_type}'):
@@ -916,6 +1065,8 @@ class Isis(ABC):
 
                                 # IPv4 Prefix-SID
                                 ipv4_pfx_sid = attributes.value('ipv4_prefix_sid')
+                                if not ipv4_pfx_sid:
+                                    ipv4_pfx_sid = attributes.value('sr_prefix_sid')
                                 if ipv4_pfx_sid:
                                     algorithm = ipv4_pfx_sid.get('algorithm', 'SPF') if isinstance(ipv4_pfx_sid, dict) else 'SPF'
                                     with configurations.submode_context(f'prefix-sid {algorithm}'):
