@@ -226,6 +226,12 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         da.max_ecmp_paths = 16
         da.lsp_mtu_size = 8000
 
+        # Auto-cost reference bandwidth
+        da.auto_cost_reference_bandwidth = 100000
+
+        # Global MPLS IGP-LDP synchronization
+        da.mpls_igp_ldp_sync_enabled = True
+
         # Segment routing global enable
         da.segment_routing_enabled = False
 
@@ -245,6 +251,7 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         # LSP bits (attached/overload)
         da.lsp_bit_attached_ignore = True
         da.lsp_bit_attached_suppress = True
+        da.lsp_bit_overload_set_bit = True
         da.lsp_bit_overload_set_on_boot = True
         da.lsp_bit_overload_advertise_high_metric = True
         da.lsp_bit_overload_reset_trigger = "WAIT_DELAY"
@@ -278,6 +285,18 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         # Max ECMP paths and LSP MTU size
         self.assertIn("global max-ecmp-paths 16", cfg_str)
         self.assertIn("global transport lsp-mtu-size 8000", cfg_str)
+
+        # Auto-cost reference bandwidth
+        self.assertIn(
+            "global auto-cost reference-bandwidth 100000",
+            cfg_str,
+        )
+
+        # Global MPLS IGP-LDP sync
+        self.assertIn(
+            "global mpls igp-ldp-sync enabled true",
+            cfg_str,
+        )
 
         # Segment-routing enable
         self.assertIn("global segment-routing enabled false", cfg_str)
@@ -323,6 +342,10 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
             cfg_str,
         )
         self.assertIn(
+            "global lsp-bit overload-bit set-bit true",
+            cfg_str,
+        )
+        self.assertIn(
             "global lsp-bit overload-bit set-bit-on-boot true",
             cfg_str,
         )
@@ -339,6 +362,51 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         # SRv6 global enable + locator
         self.assertIn("global srv6 enabled true", cfg_str)
         self.assertIn("global srv6 locator base_slice0", cfg_str)
+
+    def test_default_information_originate(self):
+        """Verify AF default-information originate knobs for ArcOS ISIS."""
+        isis = GenieIsis(pid="default")
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        af_ipv4 = da.address_family_attr[AddressFamily.ipv4_unicast]
+        af_ipv4.enabled = True
+        af_ipv4.default_info_orig_enabled = True
+        af_ipv4.default_info_orig_always = True
+        af_ipv4.default_info_orig_export_policy = "def-info-origin"
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        self.assertIn(
+            "default-information originate enabled true always true export-policy def-info-origin",
+            cfg_str,
+        )
+
+    def test_global_hello_auth_keychain_and_auth_type(self):
+        """Verify global hello-auth keychain and auth-type configuration."""
+        isis = GenieIsis(pid="default")
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        da.global_hello_keychain = "isis"
+        da.global_hello_auth_type = "KEYCHAIN"
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        self.assertIn(
+            "global hello-authentication keychain isis",
+            cfg_str,
+        )
+        self.assertIn(
+            "global hello-authentication auth-type KEYCHAIN",
+            cfg_str,
+        )
 
     def test_interface_basic(self):
         """Verify basic per-interface ISIS configuration for ArcOS."""
