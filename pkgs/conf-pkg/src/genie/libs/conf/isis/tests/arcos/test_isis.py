@@ -88,6 +88,104 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         self.assertIn("authentication key auth-password ENC_L1", cfg_str)
         self.assertIn("authentication key auth-password ENC_L2", cfg_str)
 
+    def test_level_csnp_psnp_and_keychain_auth(self):
+        """Verify level CSNP/PSNP auth and keychain/auth-type configuration."""
+
+        isis = GenieIsis(pid="default")
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_1_2
+
+        # Level 1 authentication settings
+        da.level1_csnp_authentication = True
+        da.level1_psnp_authentication = True
+        da.level1_lsp_authentication = True
+        da.level1_auth_password = "ENC_L1"
+        da.level1_crypto_algorithm = "MD5"
+        da.level1_keychain = "isis-l1"
+        da.level1_auth_type = "KEYCHAIN"
+
+        # Level 2 authentication settings
+        da.level2_csnp_authentication = False
+        da.level2_psnp_authentication = False
+        da.level2_lsp_authentication = False
+        da.level2_auth_password = "ENC_L2"
+        da.level2_crypto_algorithm = "MD5"
+        da.level2_keychain = "isis-l2"
+        da.level2_auth_type = "SIMPLE_KEY"
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Level 1 block
+        self.assertIn("level 1", cfg_str)
+        self.assertIn("authentication csnp-authentication true", cfg_str)
+        self.assertIn("authentication psnp-authentication true", cfg_str)
+        self.assertIn("authentication lsp-authentication true", cfg_str)
+        self.assertIn("authentication key auth-password ENC_L1", cfg_str)
+        self.assertIn("authentication key crypto-algorithm MD5", cfg_str)
+        self.assertIn("authentication keychain isis-l1", cfg_str)
+        self.assertIn("authentication auth-type KEYCHAIN", cfg_str)
+
+        # Level 2 block
+        self.assertIn("level 2", cfg_str)
+        self.assertIn("authentication csnp-authentication false", cfg_str)
+        self.assertIn("authentication psnp-authentication false", cfg_str)
+        self.assertIn("authentication lsp-authentication false", cfg_str)
+        self.assertIn("authentication key auth-password ENC_L2", cfg_str)
+        self.assertIn("authentication key crypto-algorithm MD5", cfg_str)
+        self.assertIn("authentication keychain isis-l2", cfg_str)
+        self.assertIn("authentication auth-type SIMPLE_KEY", cfg_str)
+
+    def test_level_labeled_preference(self):
+        """Verify per-level labeled-preference route preference configuration."""
+
+        isis = GenieIsis(pid="default")
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_1_2
+
+        # Distinct preferences per level to ensure separation
+        da.level1_labeled_preference = 114
+        da.level2_labeled_preference = 115
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Level 1 labeled preference
+        self.assertIn("level 1", cfg_str)
+        self.assertIn("labeled-preference 114", cfg_str)
+
+        # Level 2 labeled preference
+        self.assertIn("level 2", cfg_str)
+        self.assertIn("labeled-preference 115", cfg_str)
+
+    def test_level_traffic_engineering_enabled(self):
+        """Verify per-level traffic-engineering enabled configuration."""
+
+        isis = GenieIsis(pid="default")
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_1_2
+
+        # Enable TE on level 1, disable on level 2
+        da.level1_traffic_engineering_enabled = True
+        da.level2_traffic_engineering_enabled = False
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Level 1 TE enabled
+        self.assertIn("level 1", cfg_str)
+        self.assertIn("traffic-engineering enabled true", cfg_str)
+
+        # Level 2 TE disabled
+        self.assertIn("level 2", cfg_str)
+        self.assertIn("traffic-engineering enabled false", cfg_str)
+
     def test_interface_flexible_algorithm_metrics(self):
         """Verify per-interface flexible-algorithm TE/delay metrics on level 2."""
 
@@ -467,6 +565,8 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         ia.hello_authentication = True
         ia.auth_password = "ENC_PW"
         ia.crypto_algorithm = "MD5"
+        ia.auth_keychain = "isis-intf"
+        ia.auth_type = "KEYCHAIN"
 
         cfgs = isis.build_config(devices=[self.device], apply=False)
         cfg_str = str(cfgs["rtr1"])
@@ -481,10 +581,81 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         self.assertIn("authentication hello-authentication true", cfg_str)
         self.assertIn("authentication key auth-password ENC_PW", cfg_str)
         self.assertIn("authentication key crypto-algorithm MD5", cfg_str)
+        self.assertIn("authentication keychain isis-intf", cfg_str)
+        self.assertIn("authentication auth-type KEYCHAIN", cfg_str)
 
         # Per-interface level stanzas
         self.assertIn("level 1", cfg_str)
         self.assertIn("level 2", cfg_str)
+
+    def test_interface_timers_metrics_authentication(self):
+        """Verify interface timers, metrics, and authentication configuration."""
+
+        isis = GenieIsis(pid="default")
+
+        # Attach ISIS feature to interface
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0005.00"
+        da.is_type = GenieIsis.IsType.level_1_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.if_type = "point-to-point"
+        ia.interface_id = "swp1"
+        ia.hello_interval = 15
+        ia.hello_multiplier = 5
+        ia.metric_level1 = 100
+        ia.metric_level2 = 200
+        ia.hello_authentication = True
+        ia.auth_password = "ENC_PW"
+        ia.crypto_algorithm = "MD5"
+        ia.auth_keychain = "isis-intf"
+        ia.auth_type = "KEYCHAIN"
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        # Timers and metrics
+        self.assertIn("timers hello-interval 15", cfg_str)
+        self.assertIn("timers hello-multiplier 5", cfg_str)
+        self.assertIn("level 1 metric 100", cfg_str)
+        self.assertIn("level 2 metric 200", cfg_str)
+
+        # Interface authentication
+        self.assertIn("authentication hello-authentication true", cfg_str)
+        self.assertIn("authentication key auth-password ENC_PW", cfg_str)
+        self.assertIn("authentication key crypto-algorithm MD5", cfg_str)
+        self.assertIn("authentication keychain isis-intf", cfg_str)
+        self.assertIn("authentication auth-type KEYCHAIN", cfg_str)
+
+        # Per-interface level stanzas
+        self.assertIn("level 1", cfg_str)
+        self.assertIn("level 2", cfg_str)
+
+    def test_interface_mpls_igp_ldp_sync(self):
+        """Verify interface-level MPLS IGP-LDP synchronization configuration."""
+
+        isis = GenieIsis(pid="default")
+
+        # Attach ISIS feature to interface
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.interface_id = "swp1"
+        ia.mpls_igp_ldp_sync_enabled = True
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        self.assertIn("interface swp1", cfg_str)
+        self.assertIn("mpls igp-ldp-sync enabled true", cfg_str)
 
     def test_unconfig_whole_protocol(self):
         """Verify that build_unconfig removes the ISIS protocol subtree."""
@@ -526,6 +697,122 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         self.assertIn("interface swp1", cfg_str)
         self.assertIn("af IPV4 UNICAST", cfg_str)
         self.assertIn("fast-reroute ti-lfa sr-mpls enabled true", cfg_str)
+
+    def test_interface_ip_frr_ipv6(self):
+        """Verify IPv6 AF IP fast-reroute configuration on interface."""
+
+        isis = GenieIsis(pid="default")
+
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.if_type = "point-to-point"
+        ia.interface_id = "swp1"
+        ia.ipv6_unicast_enabled = True
+        ia.ipv6_ip_frr_enabled = True
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        self.assertIn("interface swp1", cfg_str)
+        self.assertIn("af IPV6 UNICAST", cfg_str)
+        self.assertIn("fast-reroute ip enabled true", cfg_str)
+
+    def test_interface_ti_lfa_srv6_ipv6(self):
+        """Verify IPv6 AF TI-LFA SRv6 fast-reroute configuration on interface."""
+
+        isis = GenieIsis(pid="default")
+
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.if_type = "point-to-point"
+        ia.interface_id = "swp1"
+        ia.ipv6_unicast_enabled = True
+        ia.ipv6_ti_lfa_srv6_enabled = True
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        self.assertIn("interface swp1", cfg_str)
+        self.assertIn("af IPV6 UNICAST", cfg_str)
+        self.assertIn("fast-reroute ti-lfa srv6 enabled true", cfg_str)
+
+    def test_interface_ip_frr_ipv4(self):
+        """Verify IPv4 AF IP fast-reroute configuration on interface."""
+
+        isis = GenieIsis(pid="default")
+
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.if_type = "point-to-point"
+        ia.interface_id = "swp1"
+        ia.ipv4_unicast_enabled = True
+        ia.ipv4_ip_frr_enabled = True
+
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        cfg_str = str(cfgs["rtr1"])
+
+        self.assertIn("interface swp1", cfg_str)
+        self.assertIn("af IPV4 UNICAST", cfg_str)
+        self.assertIn("fast-reroute ip enabled true", cfg_str)
+
+    def test_interface_fast_reroute_modes_mutually_exclusive_ipv4(self):
+        """Verify that IPv4 AF IP-FRR and TI-LFA SR-MPLS are mutually exclusive."""
+
+        isis = GenieIsis(pid="default")
+
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.interface_id = "swp1"
+        ia.ipv4_ip_frr_enabled = True
+        ia.ti_lfa_sr_mpls_enabled = True
+
+        with self.assertRaises(ValueError):
+            isis.build_config(devices=[self.device], apply=False)
+
+    def test_interface_fast_reroute_modes_mutually_exclusive_ipv6(self):
+        """Verify that IPv6 AF IP-FRR and TI-LFA SR-MPLS are mutually exclusive."""
+
+        isis = GenieIsis(pid="default")
+
+        self.intf1.add_feature(isis)
+
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+
+        ia = da.interface_attr[self.intf1]
+        ia.enabled = True
+        ia.interface_id = "swp1"
+        ia.ipv6_unicast_enabled = True
+        ia.ipv6_ip_frr_enabled = True
+        ia.ipv6_ti_lfa_sr_mpls_enabled = True
+
+        with self.assertRaises(ValueError):
+            isis.build_config(devices=[self.device], apply=False)
 
     def test_interface_adjacency_sid(self):
         """Verify adjacency-sid configuration on P2P interface."""
