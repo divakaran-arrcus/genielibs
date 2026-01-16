@@ -47,7 +47,7 @@ def get_software_version(device) -> Optional[str]:
     """Return the ArcOS software version string from ``show version``.
 
     This is a convenience wrapper over :func:`get_version_info` that
-    extracts the ``version`` field (for example, ``"8.2.1A"``).
+    extracts the ``sw-version`` field (for example, ``"v8.4.1.EFT1:Jan_16_26:2_43_AM"``).
 
     Args:
         device: pyATS/Unicon device object.
@@ -58,7 +58,7 @@ def get_software_version(device) -> Optional[str]:
     """
 
     info = get_version_info(device)
-    ver = info.get("version") if isinstance(info, dict) else None
+    ver = info.get("sw-version") if isinstance(info, dict) else None
 
     if not ver:
         log.info("Software version not found in parsed 'show version' output")

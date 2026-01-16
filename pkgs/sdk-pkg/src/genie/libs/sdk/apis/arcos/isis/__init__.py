@@ -12,6 +12,7 @@ from .get import (
     get_isis_global,
 )
 from .verify import (
+    verify_isis_system_id,
     verify_isis_neighbor_present,
     verify_isis_neighbor_not_present,
     verify_isis_neighbor_state,
@@ -85,6 +86,25 @@ from .configure import (
     # Phase 2 Tier 3: SR-MPLS - Global Enable
     configure_isis_segment_routing,
     unconfigure_isis_segment_routing,
+    # Phase 3: Route Redistribution (Table Connection)
+    configure_table_connection,
+    unconfigure_table_connection,
+    configure_table_connection_policy,
+    unconfigure_table_connection_policy,
+    # Phase 3: Overload Bit Control
+    configure_isis_overload_bit,
+    unconfigure_isis_overload_bit,
+    # Phase 3: LSP MTU
+    configure_isis_lsp_mtu,
+    unconfigure_isis_lsp_mtu,
+    # Phase 3: Summary Address
+    configure_isis_summary_address_ipv4,
+    unconfigure_isis_summary_address_ipv4,
+    configure_isis_summary_address_ipv6,
+    unconfigure_isis_summary_address_ipv6,
+    # Phase 3: Multi-Topology IPv6
+    configure_isis_ipv6_multi_topology,
+    unconfigure_isis_ipv6_multi_topology,
 )
 
 __all__ = [
@@ -101,6 +121,7 @@ __all__ = [
     "get_isis_lsp_count",
     "get_isis_global",
     # Verify APIs
+    "verify_isis_system_id",
     "verify_isis_neighbor_present",
     "verify_isis_neighbor_not_present",
     "verify_isis_neighbor_state",
@@ -173,4 +194,23 @@ __all__ = [
     # Configure APIs - Phase 2 Tier 3: SR-MPLS - Global Enable
     "configure_isis_segment_routing",
     "unconfigure_isis_segment_routing",
+    # Configure APIs - Phase 3: Route Redistribution (Table Connection)
+    "configure_table_connection",
+    "unconfigure_table_connection",
+    "configure_table_connection_policy",
+    "unconfigure_table_connection_policy",
+    # Configure APIs - Phase 3: Overload Bit Control
+    "configure_isis_overload_bit",
+    "unconfigure_isis_overload_bit",
+    # Configure APIs - Phase 3: LSP MTU
+    "configure_isis_lsp_mtu",
+    "unconfigure_isis_lsp_mtu",
+    # Configure APIs - Phase 3: Summary Address
+    "configure_isis_summary_address_ipv4",
+    "unconfigure_isis_summary_address_ipv4",
+    "configure_isis_summary_address_ipv6",
+    "unconfigure_isis_summary_address_ipv6",
+    # Configure APIs - Phase 3: Multi-Topology IPv6
+    "configure_isis_ipv6_multi_topology",
+    "unconfigure_isis_ipv6_multi_topology",
 ]
