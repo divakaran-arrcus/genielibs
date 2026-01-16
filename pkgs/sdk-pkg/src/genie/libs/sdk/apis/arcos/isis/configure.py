@@ -3063,3 +3063,867 @@ def unconfigure_isis_segment_routing(device, network_instance='default',
         raise SubCommandFailure(
             f"Could not disable Segment Routing on {device.name}. Error:\n{e}"
         )
+
+
+# ============================================================================
+# PHASE 3: Advanced ISIS Features
+# ============================================================================
+
+# ============================================================================
+# Category 1: Route Redistribution (Table Connection)
+# ============================================================================
+
+def configure_table_connection(device, source_protocol, destination_protocol,
+                                address_family, source_instance='default',
+                                destination_instance='default', import_policy=None,
+                                network_instance='default'):
+    """Configure route redistribution (table connection) from source to destination protocol.
+    
+    This API configures table-connection at the network-instance level to redistribute
+    routes between routing protocols.
+    
+    Args:
+        device (obj): Device object
+        source_protocol (str): Source protocol - one of: STATIC, DIRECTLY_CONNECTED, BGP, 
+                              ISIS, OSPF, OSPF3, ADJACENCY, SIDMGR
+        destination_protocol (str): Destination protocol - one of: BGP, ISIS, OSPF, OSPF3
+        address_family (str): Address family - IPV4 or IPV6
+        source_instance (str, optional): Source protocol instance name. Defaults to 'default'.
+        destination_instance (str, optional): Destination protocol instance name. 
+                                             Defaults to 'default'.
+        import_policy (list, optional): List of import policy names to apply.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to configure table connection
+        ValueError: Invalid source_protocol, destination_protocol, or address_family
+    
+    Example:
+        >>> # Redistribute static routes into ISIS with policy
+        >>> configure_table_connection(
+        ...     device=device,
+        ...     source_protocol='STATIC',
+        ...     destination_protocol='ISIS',
+        ...     address_family='IPV4',
+        ...     import_policy=['static2isis', 'set_metric']
+        ... )
+        
+        >>> # Redistribute connected routes into ISIS
+        >>> configure_table_connection(
+        ...     device=device,
+        ...     source_protocol='DIRECTLY_CONNECTED',
+        ...     destination_protocol='ISIS',
+        ...     address_family='IPV4',
+        ...     import_policy=['connected2isis']
+        ... )
+    """
+    log.info(
+        f"Configuring table connection from {source_protocol} to {destination_protocol} "
+        f"({address_family}) on {device.name} (network-instance: {network_instance})"
+    )
+    
+    # Validate protocols
+    valid_sources = ['STATIC', 'DIRECTLY_CONNECTED', 'BGP', 'ISIS', 'OSPF', 'OSPF3', 
+                     'ADJACENCY', 'SIDMGR']
+    valid_destinations = ['BGP', 'ISIS', 'OSPF', 'OSPF3']
+    valid_afs = ['IPV4', 'IPV6']
+    
+    if source_protocol not in valid_sources:
+        raise ValueError(
+            f"Invalid source_protocol '{source_protocol}'. "
+            f"Must be one of: {', '.join(valid_sources)}"
+        )
+    
+    if destination_protocol not in valid_destinations:
+        raise ValueError(
+            f"Invalid destination_protocol '{destination_protocol}'. "
+            f"Must be one of: {', '.join(valid_destinations)}"
+        )
+    
+    if address_family not in valid_afs:
+        raise ValueError(
+            f"Invalid address_family '{address_family}'. Must be one of: {', '.join(valid_afs)}"
+        )
+    
+    config = [
+        f'network-instance {network_instance}',
+        f'table-connection {source_protocol} {destination_protocol} {address_family}',
+        f'src-dst-instance {source_instance} {destination_instance}'
+    ]
+    
+    if import_policy:
+        # Format as [ policy1 policy2 ... ]
+        policy_str = ' '.join(import_policy)
+        config.append(f'import-policy [ {policy_str} ]')
+    
+    config.extend(['exit', '!'])
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure table connection from {source_protocol} to "
+            f"{destination_protocol} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_table_connection(device, source_protocol, destination_protocol,
+                                  address_family, source_instance='default',
+                                  destination_instance='default',
+                                  network_instance='default'):
+    """Remove route redistribution (table connection) between protocols.
+    
+    Args:
+        device (obj): Device object
+        source_protocol (str): Source protocol
+        destination_protocol (str): Destination protocol
+        address_family (str): Address family - IPV4 or IPV6
+        source_instance (str, optional): Source protocol instance name. Defaults to 'default'.
+        destination_instance (str, optional): Destination protocol instance name. 
+                                             Defaults to 'default'.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to unconfigure table connection
+    
+    Example:
+        >>> unconfigure_table_connection(
+        ...     device=device,
+        ...     source_protocol='STATIC',
+        ...     destination_protocol='ISIS',
+        ...     address_family='IPV4'
+        ... )
+    """
+    log.info(
+        f"Removing table connection from {source_protocol} to {destination_protocol} "
+        f"({address_family}) on {device.name}"
+    )
+    
+    config = [
+        f'network-instance {network_instance}',
+        f'no table-connection {source_protocol} {destination_protocol} {address_family} '
+        f'src-dst-instance {source_instance} {destination_instance}',
+        '!'
+    ]
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove table connection from {source_protocol} to "
+            f"{destination_protocol} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_table_connection_policy(device, source_protocol, destination_protocol,
+                                       address_family, import_policy,
+                                       source_instance='default',
+                                       destination_instance='default',
+                                       network_instance='default'):
+    """Update or add import policies to an existing table connection.
+    
+    Args:
+        device (obj): Device object
+        source_protocol (str): Source protocol
+        destination_protocol (str): Destination protocol
+        address_family (str): Address family - IPV4 or IPV6
+        import_policy (list): List of import policy names to apply
+        source_instance (str, optional): Source protocol instance name. Defaults to 'default'.
+        destination_instance (str, optional): Destination protocol instance name. 
+                                             Defaults to 'default'.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to configure table connection policy
+    
+    Example:
+        >>> configure_table_connection_policy(
+        ...     device=device,
+        ...     source_protocol='STATIC',
+        ...     destination_protocol='ISIS',
+        ...     address_family='IPV4',
+        ...     import_policy=['new_policy1', 'new_policy2']
+        ... )
+    """
+    log.info(
+        f"Configuring import policy for table connection {source_protocol} to "
+        f"{destination_protocol} on {device.name}"
+    )
+    
+    policy_str = ' '.join(import_policy)
+    config = [
+        f'network-instance {network_instance}',
+        f'table-connection {source_protocol} {destination_protocol} {address_family}',
+        f'src-dst-instance {source_instance} {destination_instance}',
+        f'import-policy [ {policy_str} ]',
+        'exit',
+        '!'
+    ]
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure import policy for table connection on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_table_connection_policy(device, source_protocol, destination_protocol,
+                                         address_family, source_instance='default',
+                                         destination_instance='default',
+                                         network_instance='default'):
+    """Remove import policies from a table connection.
+    
+    Args:
+        device (obj): Device object
+        source_protocol (str): Source protocol
+        destination_protocol (str): Destination protocol
+        address_family (str): Address family - IPV4 or IPV6
+        source_instance (str, optional): Source protocol instance name. Defaults to 'default'.
+        destination_instance (str, optional): Destination protocol instance name. 
+                                             Defaults to 'default'.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to unconfigure table connection policy
+    
+    Example:
+        >>> unconfigure_table_connection_policy(
+        ...     device=device,
+        ...     source_protocol='STATIC',
+        ...     destination_protocol='ISIS',
+        ...     address_family='IPV4'
+        ... )
+    """
+    log.info(
+        f"Removing import policy from table connection {source_protocol} to "
+        f"{destination_protocol} on {device.name}"
+    )
+    
+    config = [
+        f'network-instance {network_instance}',
+        f'table-connection {source_protocol} {destination_protocol} {address_family}',
+        f'src-dst-instance {source_instance} {destination_instance}',
+        'no import-policy',
+        'exit',
+        '!'
+    ]
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove import policy from table connection on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+# ============================================================================
+# Category 2: Overload Bit Control
+# ============================================================================
+
+def configure_isis_overload_bit(device, mode, reset_trigger=None, wait_delay=None,
+                                 network_instance='default', protocol_instance='default'):
+    """Configure ISIS overload bit behavior.
+    
+    Supports permanent overload, boot-time overload with triggers, or high-metric advertisement.
+    The modes are mutually exclusive - only one can be active at a time.
+    
+    Args:
+        device (obj): Device object
+        mode (str): Overload mode - one of: 'set-bit', 'set-bit-on-boot', 'advertise-high-metric'
+        reset_trigger (str, optional): Reset trigger for 'set-bit-on-boot' mode - 
+                                       'WAIT_DELAY' or 'WAIT_FOR_BGP'
+        wait_delay (int, optional): Delay in seconds if reset_trigger is 'WAIT_DELAY'
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to configure overload bit
+        ValueError: Invalid mode or missing required parameters
+    
+    Example:
+        >>> # Permanent overload
+        >>> configure_isis_overload_bit(
+        ...     device=device,
+        ...     mode='set-bit'
+        ... )
+        
+        >>> # Overload on boot with 300 second delay
+        >>> configure_isis_overload_bit(
+        ...     device=device,
+        ...     mode='set-bit-on-boot',
+        ...     reset_trigger='WAIT_DELAY',
+        ...     wait_delay=300
+        ... )
+        
+        >>> # Overload on boot waiting for BGP
+        >>> configure_isis_overload_bit(
+        ...     device=device,
+        ...     mode='set-bit-on-boot',
+        ...     reset_trigger='WAIT_FOR_BGP'
+        ... )
+        
+        >>> # Advertise high metric instead
+        >>> configure_isis_overload_bit(
+        ...     device=device,
+        ...     mode='advertise-high-metric'
+        ... )
+    """
+    log.info(
+        f"Configuring ISIS overload bit (mode: {mode}) on {device.name}"
+    )
+    
+    # Validate mode
+    valid_modes = ['set-bit', 'set-bit-on-boot', 'advertise-high-metric']
+    if mode not in valid_modes:
+        raise ValueError(
+            f"Invalid mode '{mode}'. Must be one of: {', '.join(valid_modes)}"
+        )
+    
+    # Validate reset_trigger if provided
+    if reset_trigger:
+        valid_triggers = ['WAIT_DELAY', 'WAIT_FOR_BGP']
+        if reset_trigger not in valid_triggers:
+            raise ValueError(
+                f"Invalid reset_trigger '{reset_trigger}'. "
+                f"Must be one of: {', '.join(valid_triggers)}"
+            )
+        
+        if reset_trigger == 'WAIT_DELAY' and wait_delay is None:
+            raise ValueError("wait_delay is required when reset_trigger is 'WAIT_DELAY'")
+    
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [isis_context]
+    
+    # First disable all overload modes (they are mutually exclusive)
+    config.extend([
+        'no global lsp-bit overload-bit set-bit',
+        'no global lsp-bit overload-bit set-bit-on-boot',
+        'no global lsp-bit overload-bit advertise-high-metric',
+        'no global lsp-bit overload-bit reset-trigger'
+    ])
+    
+    # Configure the requested mode
+    if mode == 'set-bit':
+        config.append('global lsp-bit overload-bit set-bit true')
+    
+    elif mode == 'set-bit-on-boot':
+        config.append('global lsp-bit overload-bit set-bit-on-boot true')
+        
+        if reset_trigger:
+            if reset_trigger == 'WAIT_DELAY':
+                config.extend([
+                    f'global lsp-bit overload-bit reset-trigger {reset_trigger}',
+                    f'delay {wait_delay}',
+                    'exit'
+                ])
+            else:  # WAIT_FOR_BGP
+                config.append(f'global lsp-bit overload-bit reset-trigger {reset_trigger}')
+    
+    elif mode == 'advertise-high-metric':
+        config.append('global lsp-bit overload-bit advertise-high-metric true')
+    
+    config.append('!')
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS overload bit on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_overload_bit(device, network_instance='default',
+                                   protocol_instance='default'):
+    """Disable all overload bit configurations and return to normal operation.
+    
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to unconfigure overload bit
+    
+    Example:
+        >>> unconfigure_isis_overload_bit(
+        ...     device=device,
+        ...     protocol_instance='default'
+        ... )
+    """
+    log.info(
+        f"Disabling all overload bit configurations on {device.name}"
+    )
+    
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global lsp-bit overload-bit set-bit',
+        'no global lsp-bit overload-bit set-bit-on-boot',
+        'no global lsp-bit overload-bit advertise-high-metric',
+        'no global lsp-bit overload-bit reset-trigger',
+        '!'
+    ]
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not disable overload bit on {device.name}. Error:\n{e}"
+        )
+
+
+# ============================================================================
+# Category 3: LSP MTU Configuration
+# ============================================================================
+
+def configure_isis_lsp_mtu(device, mtu, network_instance='default',
+                           protocol_instance='default'):
+    """Configure ISIS LSP MTU size.
+    
+    Args:
+        device (obj): Device object
+        mtu (int): LSP MTU size in bytes (typically 512-9192)
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to configure LSP MTU
+    
+    Example:
+        >>> configure_isis_lsp_mtu(
+        ...     device=device,
+        ...     mtu=1500,
+        ...     protocol_instance='default'
+        ... )
+    """
+    log.info(
+        f"Configuring ISIS LSP MTU {mtu} on {device.name}"
+    )
+    
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global transport lsp-mtu-size {mtu}',
+        '!'
+    ]
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS LSP MTU on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_lsp_mtu(device, network_instance='default',
+                             protocol_instance='default'):
+    """Reset LSP MTU to default value.
+    
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to unconfigure LSP MTU
+    
+    Example:
+        >>> unconfigure_isis_lsp_mtu(
+        ...     device=device,
+        ...     protocol_instance='default'
+        ... )
+    """
+    log.info(
+        f"Resetting ISIS LSP MTU to default on {device.name}"
+    )
+    
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global transport lsp-mtu-size',
+        '!'
+    ]
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not reset ISIS LSP MTU on {device.name}. Error:\n{e}"
+        )
+
+
+# ============================================================================
+# Category 4: Summary Address / Route Aggregation
+# ============================================================================
+
+def configure_isis_summary_address_ipv4(device, prefix, metric=None, level=None,
+                                        tag=None, adv_unreachable=None,
+                                        apply_policy=None, unreachable_component_tag=None,
+                                        network_instance='default',
+                                        protocol_instance='default'):
+    """Configure IPv4 summary address (route aggregation) in ISIS.
+    
+    Args:
+        device (obj): Device object
+        prefix (str): Summary prefix in CIDR notation (e.g., '10.0.0.0/8')
+        metric (int, optional): Metric for summarized prefix
+        level (str, optional): ISIS level - LEVEL_1, LEVEL_2, or LEVEL_1_2 (default: LEVEL_1_2)
+        tag (int, optional): Route tag (1-4294967295)
+        adv_unreachable (bool, optional): Enable UPA for components
+        apply_policy (list, optional): List of policy names to apply
+        unreachable_component_tag (int, optional): Tag value to limit UPA generation
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to configure summary address
+    
+    Example:
+        >>> # Basic summary
+        >>> configure_isis_summary_address_ipv4(
+        ...     device=device,
+        ...     prefix='10.0.0.0/8',
+        ...     metric=100,
+        ...     level='LEVEL_2'
+        ... )
+        
+        >>> # Advanced summary with policy and UPA
+        >>> configure_isis_summary_address_ipv4(
+        ...     device=device,
+        ...     prefix='192.168.0.0/16',
+        ...     metric=50,
+        ...     level='LEVEL_1_2',
+        ...     tag=100,
+        ...     adv_unreachable=True,
+        ...     apply_policy=['summary_policy'],
+        ...     unreachable_component_tag=200
+        ... )
+    """
+    log.info(
+        f"Configuring IPv4 summary address {prefix} on {device.name}"
+    )
+    
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'global af IPV4 UNICAST',
+        f'summary-prefix {prefix}'
+    ]
+    
+    if metric is not None:
+        config.append(f'metric {metric}')
+    
+    if level:
+        config.append(f'level {level}')
+    
+    if tag is not None:
+        config.append(f'tag {tag}')
+    
+    if adv_unreachable is not None:
+        adv_str = 'true' if adv_unreachable else 'false'
+        config.append(f'adv-unreachable {adv_str}')
+    
+    if apply_policy:
+        policy_str = ' '.join(apply_policy)
+        config.append(f'apply-policy [ {policy_str} ]')
+    
+    if unreachable_component_tag is not None:
+        config.append(f'unreachable-component-tag {unreachable_component_tag}')
+    
+    config.extend(['exit', 'exit', '!'])
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure IPv4 summary address {prefix} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_summary_address_ipv4(device, prefix, network_instance='default',
+                                          protocol_instance='default'):
+    """Remove IPv4 summary address configuration.
+    
+    Args:
+        device (obj): Device object
+        prefix (str): Summary prefix to remove
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to unconfigure summary address
+    
+    Example:
+        >>> unconfigure_isis_summary_address_ipv4(
+        ...     device=device,
+        ...     prefix='10.0.0.0/8'
+        ... )
+    """
+    log.info(
+        f"Removing IPv4 summary address {prefix} on {device.name}"
+    )
+    
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'global af IPV4 UNICAST',
+        f'no summary-prefix {prefix}',
+        'exit',
+        '!'
+    ]
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove IPv4 summary address {prefix} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_summary_address_ipv6(device, prefix, metric=None, level=None,
+                                        tag=None, adv_unreachable=None,
+                                        apply_policy=None, unreachable_component_tag=None,
+                                        network_instance='default',
+                                        protocol_instance='default'):
+    """Configure IPv6 summary address (route aggregation) in ISIS.
+    
+    Args:
+        device (obj): Device object
+        prefix (str): Summary prefix in CIDR notation (e.g., '2001:db8::/32')
+        metric (int, optional): Metric for summarized prefix
+        level (str, optional): ISIS level - LEVEL_1, LEVEL_2, or LEVEL_1_2 (default: LEVEL_1_2)
+        tag (int, optional): Route tag (1-4294967295)
+        adv_unreachable (bool, optional): Enable UPA for components
+        apply_policy (list, optional): List of policy names to apply
+        unreachable_component_tag (int, optional): Tag value to limit UPA generation
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to configure IPv6 summary address
+    
+    Example:
+        >>> configure_isis_summary_address_ipv6(
+        ...     device=device,
+        ...     prefix='2001:db8::/32',
+        ...     metric=100,
+        ...     level='LEVEL_2'
+        ... )
+    """
+    log.info(
+        f"Configuring IPv6 summary address {prefix} on {device.name}"
+    )
+    
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'global af IPV6 UNICAST',
+        f'summary-prefix {prefix}'
+    ]
+    
+    if metric is not None:
+        config.append(f'metric {metric}')
+    
+    if level:
+        config.append(f'level {level}')
+    
+    if tag is not None:
+        config.append(f'tag {tag}')
+    
+    if adv_unreachable is not None:
+        adv_str = 'true' if adv_unreachable else 'false'
+        config.append(f'adv-unreachable {adv_str}')
+    
+    if apply_policy:
+        policy_str = ' '.join(apply_policy)
+        config.append(f'apply-policy [ {policy_str} ]')
+    
+    if unreachable_component_tag is not None:
+        config.append(f'unreachable-component-tag {unreachable_component_tag}')
+    
+    config.extend(['exit', 'exit', '!'])
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure IPv6 summary address {prefix} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_summary_address_ipv6(device, prefix, network_instance='default',
+                                          protocol_instance='default'):
+    """Remove IPv6 summary address configuration.
+    
+    Args:
+        device (obj): Device object
+        prefix (str): IPv6 summary prefix to remove
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to unconfigure IPv6 summary address
+    
+    Example:
+        >>> unconfigure_isis_summary_address_ipv6(
+        ...     device=device,
+        ...     prefix='2001:db8::/32'
+        ... )
+    """
+    log.info(
+        f"Removing IPv6 summary address {prefix} on {device.name}"
+    )
+    
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'global af IPV6 UNICAST',
+        f'no summary-prefix {prefix}',
+        'exit',
+        '!'
+    ]
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove IPv6 summary address {prefix} on {device.name}. Error:\n{e}"
+        )
+
+
+# ============================================================================
+# Category 5: Multi-Topology (IPv6)
+# ============================================================================
+
+def configure_isis_ipv6_multi_topology(device, enabled=True, network_instance='default',
+                                       protocol_instance='default'):
+    """Enable or disable multi-topology for IPv6 address family in ISIS.
+    
+    Multi-topology allows separate topologies for different address families.
+    This setting is only available for IPv6 (not IPv4).
+    
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Enable or disable multi-topology. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to configure IPv6 multi-topology
+    
+    Example:
+        >>> # Enable IPv6 multi-topology
+        >>> configure_isis_ipv6_multi_topology(
+        ...     device=device,
+        ...     enabled=True
+        ... )
+        
+        >>> # Disable IPv6 multi-topology
+        >>> configure_isis_ipv6_multi_topology(
+        ...     device=device,
+        ...     enabled=False
+        ... )
+    """
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} IPv6 multi-topology on {device.name}"
+    )
+    
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    enabled_str = 'true' if enabled else 'false'
+    config = [
+        isis_context,
+        'global af IPV6 UNICAST',
+        f'multi-topology enabled {enabled_str}',
+        'exit',
+        '!'
+    ]
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure IPv6 multi-topology on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_ipv6_multi_topology(device, network_instance='default',
+                                         protocol_instance='default'):
+    """Reset IPv6 multi-topology to default (enabled).
+    
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+    
+    Returns:
+        None
+    
+    Raises:
+        SubCommandFailure: Failed to unconfigure IPv6 multi-topology
+    
+    Example:
+        >>> unconfigure_isis_ipv6_multi_topology(
+        ...     device=device
+        ... )
+    """
+    log.info(
+        f"Resetting IPv6 multi-topology to default on {device.name}"
+    )
+    
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'global af IPV6 UNICAST',
+        'no multi-topology enabled',
+        'exit',
+        '!'
+    ]
+    
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not reset IPv6 multi-topology on {device.name}. Error:\n{e}"
+        )

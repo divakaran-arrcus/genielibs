@@ -17,10 +17,55 @@ from genie.utils.timeout import Timeout
 from genie.libs.sdk.apis.arcos.isis.get import (
     get_isis_adjacency_state,
     get_isis_routes,
+    get_isis_system_id,
     is_isis_neighbor_present,
 )
 
 log = logging.getLogger(__name__)
+
+
+def verify_isis_system_id(
+    device,
+    instance: str = "default",
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify that ISIS system-id is available.
+
+    This is useful to verify that ISIS subsystem has started and is responding
+    to queries after configuration.
+
+    Args:
+        device: pyATS device object.
+        instance: ISIS instance name (default: "default").
+        max_time: Maximum time to wait (seconds).
+        check_interval: Poll interval (seconds).
+
+    Returns:
+        True if the system-id is available within the timeout, False otherwise.
+    """
+
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            system_id = get_isis_system_id(device, instance=instance)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("get_isis_system_id failed for instance %s: %s", instance, exc)
+            system_id = None
+
+        log.debug(
+            "verify_isis_system_id(instance=%s): system_id=%s",
+            instance,
+            system_id,
+        )
+
+        if system_id is not None:
+            return True
+
+        timeout.sleep()
+
+    return False
 
 
 def verify_isis_neighbor_present(
