@@ -9,6 +9,7 @@ standard Genie conf StaticRouting abstraction.
 from abc import ABC
 import logging
 
+from genie.decorator import managedattribute
 from genie.conf.base.attributes import AttributesHelper
 from genie.conf.base.cli import CliConfigBuilder
 from genie.conf.base.config import CliConfig
@@ -86,6 +87,37 @@ class StaticRouting(ABC):
                 class RouteAttributes(ABC):
                     """Static route attributes for ARCOS."""
 
+                    # ARCOS-specific route-level attributes
+                    description = managedattribute(
+                        name='description',
+                        default=None,
+                        type=(None, managedattribute.test_istype(str)),
+                        doc='Route description')
+
+                    preference = managedattribute(
+                        name='preference',
+                        default=None,
+                        type=(None, managedattribute.test_istype(int)),
+                        doc='Administrative distance / preference')
+
+                    tag = managedattribute(
+                        name='tag',
+                        default=None,
+                        type=(None, managedattribute.test_istype(int)),
+                        doc='Route tag')
+
+                    local_label_index = managedattribute(
+                        name='local_label_index',
+                        default=None,
+                        type=(None, managedattribute.test_istype(int)),
+                        doc='Local MPLS label index')
+
+                    bfd_profile = managedattribute(
+                        name='bfd_profile',
+                        default=None,
+                        type=(None, managedattribute.test_istype(str)),
+                        doc='BFD profile name')
+
                     def build_config(self, apply=True, attributes=None, unconfig=False, **kwargs):
                         """Build static route configuration."""
                         attributes = AttributesHelper(self, attributes)
@@ -145,6 +177,43 @@ class StaticRouting(ABC):
                     class NextHopAttributes(ABC):
                         """Next-hop attributes for ARCOS static routes."""
 
+                        # ARCOS-specific next-hop attributes
+                        next_hop_index = managedattribute(
+                            name='next_hop_index',
+                            default=None,
+                            type=(None, managedattribute.test_istype(str)),
+                            doc='Next-hop index identifier (string)')
+
+                        interface = managedattribute(
+                            name='interface',
+                            default=None,
+                            type=(None, managedattribute.test_istype(str)),
+                            doc='Outgoing interface')
+
+                        metric = managedattribute(
+                            name='metric',
+                            default=None,
+                            type=(None, managedattribute.test_istype(int)),
+                            doc='Next-hop metric')
+
+                        next_network_instance = managedattribute(
+                            name='next_network_instance',
+                            default=None,
+                            type=(None, managedattribute.test_istype(str)),
+                            doc='Next network instance for VRF leaking')
+
+                        remote_label_stack = managedattribute(
+                            name='remote_label_stack',
+                            default=None,
+                            type=(None, managedattribute.test_istype((list, str))),
+                            doc='Remote MPLS label stack (list of ints or "IMPLICIT-NULL")')
+
+                        bfd_destination_address = managedattribute(
+                            name='bfd_destination_address',
+                            default=None,
+                            type=(None, managedattribute.test_istype(str)),
+                            doc='BFD destination address (IPv4 or IPv6)')
+
                         def build_config(self, apply=True, attributes=None, unconfig=False, **kwargs):
                             """Build next-hop configuration."""
                             attributes = AttributesHelper(self, attributes)
@@ -174,12 +243,8 @@ class StaticRouting(ABC):
 
                                 # Interface
                                 interface = attributes.value('interface')
-                                subinterface = attributes.value('subinterface')
                                 if interface is not None:
-                                    if subinterface is not None:
-                                        configurations.append_line(f'interface {interface} subinterface {subinterface}')
-                                    else:
-                                        configurations.append_line(f'interface {interface}')
+                                    configurations.append_line(f'interface {interface}')
 
                                 # Metric
                                 metric = attributes.value('metric')
@@ -198,7 +263,7 @@ class StaticRouting(ABC):
                                         # IMPLICIT-NULL
                                         configurations.append_line(f'remote-label-stack {remote_label_stack}')
                                     elif isinstance(remote_label_stack, (list, tuple)):
-                                        # Array of labels
+                                        # Array of labels (space-separated within square brackets)
                                         labels_str = ' '.join(str(label) for label in remote_label_stack)
                                         configurations.append_line(f'remote-label-stack [ {labels_str} ]')
 
