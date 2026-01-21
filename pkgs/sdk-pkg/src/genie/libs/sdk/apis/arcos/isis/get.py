@@ -7,12 +7,10 @@ These functions wrap ``device.parse("show isis ...")`` and return
 simplified dictionaries for common use cases.
 """
 
-from __future__ import annotations
-
+from typing import Dict, Any, Optional
 import logging
-from typing import Any, Dict, Optional
-
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
+from unicon.core.errors import SubCommandFailure
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +44,9 @@ def get_isis_neighbors(
 
     Uses the upstream ArcOS ISIS adjacency parser via
     ``device.parse("show isis adjacency")``.
+    
+    For L1/L2 routers, queries each level separately and aggregates results
+    as the wildcard query may not work correctly.
 
     Args:
         device: pyATS device object.
@@ -57,25 +58,40 @@ def get_isis_neighbors(
         Dict mapping neighbor system-id -> neighbor info dict.
     """
 
+    # Use full wildcard command - parser handles L1/L2 splitting internally
     try:
-        parsed = device.parse("show isis adjacency")
+        cmd = f"show network-instance * protocol ISIS {instance} interface * level * adjacency"
+        log.debug(f"get_isis_neighbors: executing command: {cmd}")
+        parsed = device.parse(cmd)
+        log.debug(f"get_isis_neighbors: parsed data keys: {parsed.keys() if parsed else 'None'}")
+        
+        isis = _safe_get_isis(parsed, ni="default", instance=instance)
+        log.debug(f"get_isis_neighbors: isis data keys: {isis.keys() if isis else 'None'}")
+        all_neighbors = isis.get("neighbors", {}) or {}
+        log.debug(f"get_isis_neighbors: found {len(all_neighbors)} neighbors")
+                    
     except SchemaEmptyParserError:
-        return {}
-    except Exception as exc:  # pragma: no cover - defensive
-        log.error("Failed to get ISIS neighbors: %s", exc)
-        return {}
-
-    isis = _safe_get_isis(parsed, ni="default", instance=instance)
-    neighbors = isis.get("neighbors", {}) or {}
+        # No neighbors found
+        log.debug("get_isis_neighbors: SchemaEmptyParserError - no neighbors found")
+        all_neighbors = {}
+    except SubCommandFailure as exc:
+        # ISIS instance doesn't exist or command is invalid (e.g., after ISIS removal)
+        log.debug(f"get_isis_neighbors: SubCommandFailure - {exc}")
+        all_neighbors = {}
+    except Exception as exc:
+        log.warning(f"get_isis_neighbors: Unexpected exception - {exc}")
+        import traceback
+        log.warning(f"Traceback: {traceback.format_exc()}")
+        all_neighbors = {}
 
     if interface:
-        neighbors = {
+        all_neighbors = {
             sys_id: info
-            for sys_id, info in neighbors.items()
+            for sys_id, info in all_neighbors.items()
             if info.get("interface") == interface
         }
 
-    return neighbors
+    return all_neighbors
 
 
 def is_isis_neighbor_present(
