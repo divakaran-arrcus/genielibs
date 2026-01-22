@@ -18,7 +18,7 @@ from genie.libs.sdk.apis.arcos.isis.get import (
     get_isis_adjacency_state,
     get_isis_routes,
     get_isis_system_id,
-    is_isis_neighbor_present,
+    is_isis_adjacency_present,
 )
 
 log = logging.getLogger(__name__)
@@ -68,45 +68,45 @@ def verify_isis_system_id(
     return False
 
 
-def verify_isis_neighbor_present(
+def verify_isis_adjacency_present(
     device,
-    neighbor: str,
+    adjacency: str,
     instance: str = "default",
     interface: Optional[str] = None,
     max_time: int = 60,
     check_interval: int = 10,
 ) -> bool:
-    """Verify that an ISIS neighbor is present.
+    """Verify that an ISIS adjacency is present.
 
     Args:
         device: pyATS device object.
-        neighbor: Neighbor system-id to look for.
+        adjacency: Adjacency system-id to look for.
         instance: ISIS instance name (default: "default").
         interface: Optional interface filter.
         max_time: Maximum time to wait (seconds).
         check_interval: Poll interval (seconds).
 
     Returns:
-        True if the neighbor is present within the timeout, False otherwise.
+        True if the adjacency is present within the timeout, False otherwise.
     """
 
     timeout = Timeout(max_time, check_interval)
 
     while timeout.iterate():
         try:
-            present = is_isis_neighbor_present(
+            present = is_isis_adjacency_present(
                 device,
-                neighbor=neighbor,
+                adjacency=adjacency,
                 instance=instance,
                 interface=interface,
             )
         except Exception as exc:  # pragma: no cover - defensive
-            log.error("is_isis_neighbor_present failed for %s: %s", neighbor, exc)
+            log.error("is_isis_adjacency_present failed for %s: %s", adjacency, exc)
             present = False
 
         log.debug(
-            "verify_isis_neighbor_present(%s): present=%s",
-            neighbor,
+            "verify_isis_adjacency_present(%s): present=%s",
+            adjacency,
             present,
         )
 
@@ -118,36 +118,36 @@ def verify_isis_neighbor_present(
     return False
 
 
-def verify_isis_neighbor_not_present(
+def verify_isis_adjacency_not_present(
     device,
-    neighbor: str,
+    adjacency: str,
     instance: str = "default",
     interface: Optional[str] = None,
     max_time: int = 60,
     check_interval: int = 10,
 ) -> bool:
-    """Verify that an ISIS neighbor is NOT present.
+    """Verify that an ISIS adjacency is NOT present.
 
-    This is the logical negation of :func:`verify_isis_neighbor_present`.
+    This is the logical negation of :func:`verify_isis_adjacency_present`.
     """
 
     timeout = Timeout(max_time, check_interval)
 
     while timeout.iterate():
         try:
-            present = is_isis_neighbor_present(
+            present = is_isis_adjacency_present(
                 device,
-                neighbor=neighbor,
+                adjacency=adjacency,
                 instance=instance,
                 interface=interface,
             )
         except Exception as exc:  # pragma: no cover - defensive
-            log.error("is_isis_neighbor_present failed for %s: %s", neighbor, exc)
+            log.error("is_isis_adjacency_present failed for %s: %s", adjacency, exc)
             present = True
 
         log.debug(
-            "verify_isis_neighbor_not_present(%s): present=%s",
-            neighbor,
+            "verify_isis_adjacency_not_present(%s): present=%s",
+            adjacency,
             present,
         )
 
@@ -159,20 +159,20 @@ def verify_isis_neighbor_not_present(
     return False
 
 
-def verify_isis_neighbor_state(
+def verify_isis_adjacency_state(
     device,
-    neighbor: str,
+    adjacency: str,
     expected_state: str,
     instance: str = "default",
     interface: Optional[str] = None,
     max_time: int = 60,
     check_interval: int = 10,
 ) -> bool:
-    """Verify ISIS adjacency state for a given neighbor.
+    """Verify ISIS adjacency state for a given adjacency.
 
     Args:
         device: pyATS device object.
-        neighbor: Neighbor system-id.
+        adjacency: Adjacency system-id.
         expected_state: Expected adjacency state string (e.g. 'UP').
         instance: ISIS instance name.
         interface: Optional interface filter.
@@ -188,17 +188,17 @@ def verify_isis_neighbor_state(
         try:
             state = get_isis_adjacency_state(
                 device,
-                neighbor=neighbor,
+                adjacency=adjacency,
                 instance=instance,
                 interface=interface,
             )
         except Exception as exc:  # pragma: no cover - defensive
-            log.error("get_isis_adjacency_state failed for %s: %s", neighbor, exc)
+            log.error("get_isis_adjacency_state failed for %s: %s", adjacency, exc)
             state = None
 
         log.debug(
-            "verify_isis_neighbor_state(%s): current=%s, expected=%s",
-            neighbor,
+            "verify_isis_adjacency_state(%s): current=%s, expected=%s",
+            adjacency,
             state,
             expected_state,
         )
