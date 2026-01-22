@@ -1,9 +1,9 @@
 from .get import (
-    get_isis_neighbors,
-    is_isis_neighbor_present,
+    get_isis_adjacency,
+    is_isis_adjacency_present,
     get_isis_adjacency_state,
-    get_isis_neighbor_count,
-    get_isis_interface_information,
+    get_isis_adjacency_count,
+    get_isis_interface,
     get_isis_system_id,
     get_isis_net,
     get_isis_routes,
@@ -13,9 +13,9 @@ from .get import (
 )
 from .verify import (
     verify_isis_system_id,
-    verify_isis_neighbor_present,
-    verify_isis_neighbor_not_present,
-    verify_isis_neighbor_state,
+    verify_isis_adjacency_present,
+    verify_isis_adjacency_not_present,
+    verify_isis_adjacency_state,
     verify_isis_route_present,
 )
 from .configure import (
@@ -109,11 +109,11 @@ from .configure import (
 
 __all__ = [
     # Get APIs
-    "get_isis_neighbors",
-    "is_isis_neighbor_present",
+    "get_isis_adjacency",
+    "is_isis_adjacency_present",
     "get_isis_adjacency_state",
-    "get_isis_neighbor_count",
-    "get_isis_interface_information",
+    "get_isis_adjacency_count",
+    "get_isis_interface",
     "get_isis_system_id",
     "get_isis_net",
     "get_isis_routes",
@@ -122,9 +122,9 @@ __all__ = [
     "get_isis_global",
     # Verify APIs
     "verify_isis_system_id",
-    "verify_isis_neighbor_present",
-    "verify_isis_neighbor_not_present",
-    "verify_isis_neighbor_state",
+    "verify_isis_adjacency_present",
+    "verify_isis_adjacency_not_present",
+    "verify_isis_adjacency_state",
     "verify_isis_route_present",
     # Configure APIs - Phase 1
     "configure_isis_net_address",
