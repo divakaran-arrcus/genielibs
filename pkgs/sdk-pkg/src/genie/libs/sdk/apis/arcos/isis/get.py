@@ -35,106 +35,230 @@ def _safe_get_global(
     return isis_root.get("global", {}) or {}
 
 
-def get_isis_neighbors(
+def _transform_neighbor_to_adjacency(data: Any) -> Any:
+    """Recursively transform 'neighbor' keys to 'adjacency' in nested structures.
+    
+    This ensures consistent terminology across all ISIS API return values.
+    """
+    if isinstance(data, dict):
+        return {
+            ('adjacency' if k == 'neighbor' else k): _transform_neighbor_to_adjacency(v)
+            for k, v in data.items()
+        }
+    elif isinstance(data, list):
+        return [_transform_neighbor_to_adjacency(item) for item in data]
+    else:
+        return data
+
+
+def get_isis_adjacency(
     device,
-    instance: str = "default",
+    adjacency: Optional[str] = None,
     interface: Optional[str] = None,
-) -> Dict[str, Dict[str, Any]]:
-    """Get ISIS neighbors on ArcOS.
+    instance: str = "default",
+    level: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Get ISIS adjacencies on ArcOS.
 
     Uses the upstream ArcOS ISIS adjacency parser via
     ``device.parse("show isis adjacency")``.
     
-    For L1/L2 routers, queries each level separately and aggregates results
-    as the wildcard query may not work correctly.
+    Returns hierarchical structure: interface → level → adjacency.
+    For L1/L2 routers, LEVEL_1_2 adjacencies appear in both levels.
 
     Args:
         device: pyATS device object.
+        adjacency: Optional adjacency system-id filter (e.g., "rtr2" or "2222.2222.2222").
+        interface: Optional interface filter (e.g., "swp1").
         instance: ISIS instance name (default: "default").
-        interface: Optional interface filter; if provided, only neighbors
-                   on this interface are returned.
+        level: Optional level filter (1 or 2).
 
     Returns:
-        Dict mapping neighbor system-id -> neighbor info dict.
+        Dict with hierarchical structure:
+        {
+            "interface": {
+                "swp1": {
+                    "level": {
+                        2: {
+                            "adjacency": {
+                                "rtr1": {"state": "UP", ...}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        If filters are provided, returns only matching data.
+        All 'neighbor' keys in parser output are transformed to 'adjacency'.
     """
 
     # Use full wildcard command - parser handles L1/L2 splitting internally
     try:
         cmd = f"show network-instance * protocol ISIS {instance} interface * level * adjacency"
-        log.debug(f"get_isis_neighbors: executing command: {cmd}")
+        log.debug(f"get_isis_adjacency: executing command: {cmd}")
         parsed = device.parse(cmd)
-        log.debug(f"get_isis_neighbors: parsed data keys: {parsed.keys() if parsed else 'None'}")
         
         isis = _safe_get_isis(parsed, ni="default", instance=instance)
-        log.debug(f"get_isis_neighbors: isis data keys: {isis.keys() if isis else 'None'}")
-        all_neighbors = isis.get("neighbors", {}) or {}
-        log.debug(f"get_isis_neighbors: found {len(all_neighbors)} neighbors")
+        interfaces = isis.get("interface", {}) or {}
+        log.debug(f"get_isis_adjacency: found {len(interfaces)} interfaces")
                     
     except SchemaEmptyParserError:
-        # No neighbors found
-        log.debug("get_isis_neighbors: SchemaEmptyParserError - no neighbors found")
-        all_neighbors = {}
+        log.debug("get_isis_adjacency: SchemaEmptyParserError - no adjacencies found")
+        interfaces = {}
     except SubCommandFailure as exc:
-        # ISIS instance doesn't exist or command is invalid (e.g., after ISIS removal)
-        log.debug(f"get_isis_neighbors: SubCommandFailure - {exc}")
-        all_neighbors = {}
+        log.debug(f"get_isis_adjacency: SubCommandFailure - {exc}")
+        interfaces = {}
     except Exception as exc:
-        log.warning(f"get_isis_neighbors: Unexpected exception - {exc}")
+        log.warning(f"get_isis_adjacency: Unexpected exception - {exc}")
         import traceback
         log.warning(f"Traceback: {traceback.format_exc()}")
-        all_neighbors = {}
+        interfaces = {}
 
-    if interface:
-        all_neighbors = {
-            sys_id: info
-            for sys_id, info in all_neighbors.items()
-            if info.get("interface") == interface
-        }
+    # Apply filters if provided
+    if adjacency or interface or level is not None:
+        filtered = {}
+        
+        for intf_name, intf_data in interfaces.items():
+            # Skip if interface filter doesn't match
+            if interface and intf_name != interface:
+                continue
+            
+            levels = intf_data.get("level", {})
+            
+            # Apply level filter if provided
+            if level is not None:
+                if level not in levels:
+                    continue
+                levels_to_check = {level: levels[level]}
+            else:
+                levels_to_check = levels
+            
+            # Apply adjacency filter if provided
+            if adjacency:
+                filtered_levels = {}
+                for lvl_num, lvl_data in levels_to_check.items():
+                    adjacencies = lvl_data.get("adjacency", {})
+                    # Match by system-id (key in adjacency dict)
+                    if adjacency in adjacencies:
+                        filtered_levels[lvl_num] = {
+                            "adjacency": {adjacency: adjacencies[adjacency]}
+                        }
+                if filtered_levels:
+                    filtered[intf_name] = {"level": filtered_levels}
+            else:
+                # No adjacency filter, include all
+                if level is not None:
+                    filtered[intf_name] = {"level": levels_to_check}
+                else:
+                    filtered[intf_name] = intf_data
+        
+        result = {"interface": filtered} if filtered else {}
+    else:
+        result = {"interface": interfaces} if interfaces else {}
+    
+    # Transform all 'neighbor' keys to 'adjacency'
+    return _transform_neighbor_to_adjacency(result)
 
-    return all_neighbors
 
-
-def is_isis_neighbor_present(
+def is_isis_adjacency_present(
     device,
-    neighbor: str,
+    adjacency: str,
     instance: str = "default",
     interface: Optional[str] = None,
+    level: Optional[int] = None,
 ) -> bool:
-    """Check if a given ISIS neighbor is present."""
+    """Check if a given ISIS adjacency is present.
+    
+    Args:
+        device: pyATS device object.
+        adjacency: Adjacency system-id to check.
+        instance: ISIS instance name (default: "default").
+        interface: Optional interface filter.
+        level: Optional level filter (1 or 2).
+    
+    Returns:
+        True if adjacency is found, False otherwise.
+    """
 
-    neighs = get_isis_neighbors(device, instance=instance, interface=interface)
-    return neighbor in neighs
+    data = get_isis_adjacency(device, instance=instance, interface=interface, level=level)
+    interfaces = data.get("interface", {})
+    
+    # Search through all interfaces and levels
+    for intf_data in interfaces.values():
+        for level_data in intf_data.get("level", {}).values():
+            adjacencies = level_data.get("adjacency", {})
+            if adjacency in adjacencies:
+                return True
+    return False
 
 
 def get_isis_adjacency_state(
     device,
-    neighbor: str,
+    adjacency: str,
     instance: str = "default",
     interface: Optional[str] = None,
+    level: Optional[int] = None,
 ) -> Optional[str]:
-    """Get ISIS adjacency state for a given neighbor.
+    """Get ISIS adjacency state for a given adjacency.
 
-    Returns the raw state string (e.g. 'UP', 'DOWN', etc.) if present.
+    Args:
+        device: pyATS device object.
+        adjacency: Adjacency system-id.
+        instance: ISIS instance name (default: "default").
+        interface: Optional interface filter.
+        level: Optional level filter (1 or 2).
+
+    Returns:
+        The raw state string (e.g. 'UP', 'DOWN', etc.) if present, None otherwise.
     """
 
-    neighs = get_isis_neighbors(device, instance=instance, interface=interface)
-    entry = neighs.get(neighbor)
-    if not entry:
-        return None
-
-    # The parser stores adjacency state under 'state' or 'adjacency-state'
-    state = entry.get("state") or entry.get("adjacency-state")
-    return state
-
-
-def get_isis_neighbor_count(device, instance: str = "default") -> int:
-    """Get total ISIS neighbor count for an instance."""
-
-    neighbors = get_isis_neighbors(device, instance=instance)
-    return len(neighbors)
+    data = get_isis_adjacency(device, instance=instance, interface=interface, level=level)
+    interfaces = data.get("interface", {})
+    
+    # Search through all interfaces and levels for the adjacency
+    for intf_data in interfaces.values():
+        for level_data in intf_data.get("level", {}).values():
+            adjacencies = level_data.get("adjacency", {})
+            if adjacency in adjacencies:
+                entry = adjacencies[adjacency]
+                return entry.get("state") or entry.get("adjacency-state")
+    
+    return None
 
 
-def get_isis_interface_information(
+def get_isis_adjacency_count(
+    device, 
+    instance: str = "default",
+    interface: Optional[str] = None,
+    level: Optional[int] = None,
+) -> int:
+    """Get ISIS adjacency count for an instance.
+    
+    Args:
+        device: pyATS device object.
+        instance: ISIS instance name (default: "default").
+        interface: Optional interface filter.
+        level: Optional level filter (1 or 2).
+    
+    Returns:
+        Total count of adjacencies (including duplicates for LEVEL_1_2).
+        For example, a LEVEL_1_2 adjacency appears in both L1 and L2 counts.
+    """
+
+    data = get_isis_adjacency(device, instance=instance, interface=interface, level=level)
+    interfaces = data.get("interface", {})
+    
+    count = 0
+    for intf_data in interfaces.values():
+        for level_data in intf_data.get("level", {}).values():
+            adjacencies = level_data.get("adjacency", {})
+            count += len(adjacencies)
+    
+    return count
+
+
+def get_isis_interface(
     device,
     interface: str,
     instance: str = "default",
@@ -142,7 +266,9 @@ def get_isis_interface_information(
     """Get ISIS interface information for a given interface on ArcOS."""
 
     try:
-        parsed = device.parse("show isis interface")
+        parsed = device.parse(
+            f"show network-instance default protocol ISIS {instance} interface"
+        )
     except SchemaEmptyParserError:
         return None
     except Exception as exc:  # pragma: no cover - defensive
@@ -162,7 +288,9 @@ def get_isis_system_id(device, instance: str = "default") -> Optional[str]:
     """Get ISIS system-id for an ArcOS instance."""
 
     try:
-        parsed = device.parse("show isis global")
+        parsed = device.parse(
+            f"show network-instance default protocol ISIS {instance} global state"
+        )
     except SchemaEmptyParserError:
         return None
     except Exception as exc:  # pragma: no cover - defensive
@@ -180,7 +308,9 @@ def get_isis_net(device, instance: str = "default") -> Optional[str]:
     """
 
     try:
-        parsed = device.parse("show isis global")
+        parsed = device.parse(
+            f"show network-instance default protocol ISIS {instance} global state"
+        )
     except SchemaEmptyParserError:
         return None
     except Exception as exc:  # pragma: no cover - defensive
@@ -210,16 +340,26 @@ def get_isis_routes(
         Dict of prefix -> route info dict for the selected AF.
     """
 
+    # Map address_family to AFI for command (IPV4/IPV6 for parser)
+    afi_cmd_map = {
+        "ipv4": "IPV4",
+        "ipv6": "IPV6",
+    }
+    afi = afi_cmd_map.get(address_family.lower())
+    if afi is None:
+        raise ValueError(f"Unsupported address_family: {address_family}")
+    
+    # Map address_family to result key (IPV4-UNICAST/IPV6-UNICAST)
     af_map = {
         "ipv4": "IPV4-UNICAST",
         "ipv6": "IPV6-UNICAST",
     }
     af_key = af_map.get(address_family.lower())
-    if af_key is None:
-        raise ValueError(f"Unsupported address_family: {address_family}")
 
     try:
-        parsed = device.parse("show isis route")
+        parsed = device.parse(
+            f"show network-instance default protocol ISIS {instance} global af {afi} UNICAST route"
+        )
     except SchemaEmptyParserError:
         return {}
     except Exception as exc:  # pragma: no cover - defensive
@@ -239,7 +379,9 @@ def get_isis_global(device, instance: str = "default") -> Dict[str, Any]:
     """
 
     try:
-        parsed = device.parse("show isis global")
+        parsed = device.parse(
+            f"show network-instance default protocol ISIS {instance} global state"
+        )
     except SchemaEmptyParserError:
         return {}
     except Exception as exc:  # pragma: no cover - defensive
@@ -294,17 +436,27 @@ def get_isis_route(
         ...     print(f"Route has {nh_count} next-hops")
     """
 
+    # Map address_family to AFI for command (IPV4/IPV6 for parser)
+    afi_cmd_map = {
+        "ipv4": "IPV4",
+        "ipv6": "IPV6",
+    }
+    afi = afi_cmd_map.get(address_family.lower())
+    if afi is None:
+        raise ValueError(f"Unsupported address_family: {address_family}")
+    
+    # Map address_family to result key (IPV4-UNICAST/IPV6-UNICAST)
     af_map = {
         "ipv4": "IPV4-UNICAST",
         "ipv6": "IPV6-UNICAST",
     }
     af_key = af_map.get(address_family.lower())
-    if af_key is None:
-        raise ValueError(f"Unsupported address_family: {address_family}")
 
     try:
         # Use specific route query for efficiency
-        parsed = device.parse(f"show isis route {prefix}")
+        parsed = device.parse(
+            f"show network-instance default protocol ISIS {instance} global af {afi} UNICAST route {prefix}"
+        )
     except SchemaEmptyParserError:
         log.debug("Route %s not found in ISIS routing table", prefix)
         return None
@@ -347,46 +499,51 @@ def get_isis_lsp_count(
 
     Args:
         device: pyATS device object.
-        level: ISIS level ('level_1' or 'level_2').
+        level: ISIS level ('level-1', 'level-2', 'level_1', 'level_2', '1', or '2').
         instance: ISIS instance name (default: "default").
 
     Returns:
         int: Number of LSPs for the specified level, or 0 if none found.
 
     Example:
-        >>> l1_count = get_isis_lsp_count(device, 'level_1')
-        >>> l2_count = get_isis_lsp_count(device, 'level_2')
+        >>> l1_count = get_isis_lsp_count(device, 'level-1')
+        >>> l2_count = get_isis_lsp_count(device, 'level-2')
         >>> print(f"L1 LSPs: {l1_count}, L2 LSPs: {l2_count}")
     """
 
-    # Map API level format to parser output format
+    # Normalize level format to number (1 or 2) for command
     level_map = {
-        'level_1': 'Level 1',
-        'level_2': 'Level 2',
-        'Level 1': 'Level 1',
-        'Level 2': 'Level 2',
+        'level_1': '1',
+        'level_2': '2',
+        'level-1': '1',
+        'level-2': '2',
+        '1': '1',
+        '2': '2',
     }
 
-    target_level = level_map.get(level)
-    if target_level is None:
-        log.warning("Invalid ISIS level: %s (expected 'level_1' or 'level_2')", level)
+    level_num = level_map.get(level)
+    if level_num is None:
+        log.warning(
+            "Invalid ISIS level: %s (expected 'level-1', 'level-2', 'level_1', 'level_2', '1', or '2')", 
+            level
+        )
         return 0
 
     try:
-        parsed = device.parse("show isis database")
+        # Use full OpenConfig command with explicit level
+        parsed = device.parse(
+            f"show network-instance default protocol ISIS {instance} level {level_num} link-state-database lsp"
+        )
     except SchemaEmptyParserError:
+        log.debug("No LSPs found for level %s", level)
         return 0
-    except Exception as exc:  # pragma: no cover - defensive
-        log.error("Failed to get ISIS database: %s", exc)
+    except Exception as exc:
+        log.error("Failed to get ISIS LSP database for level %s: %s", level, exc)
         return 0
 
-    isis = _safe_get_isis(parsed, ni="default", instance=instance)
-    lsps = isis.get("lsps", {}) or {}
+    # Navigate to LSP database (matches ShowIsisLsp parser structure)
+    ni_data = parsed.get("network-instance", {}).get("default", {})
+    isis_data = ni_data.get("isis", {}).get(instance, {})
+    lsp_db = isis_data.get("database", {})
 
-    # Count LSPs for the target level
-    count = 0
-    for lsp_id, lsp_data in lsps.items():
-        if lsp_data.get("level") == target_level:
-            count += 1
-
-    return count
+    return len(lsp_db)
