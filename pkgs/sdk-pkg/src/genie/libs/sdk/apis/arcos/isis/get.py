@@ -35,22 +35,6 @@ def _safe_get_global(
     return isis_root.get("global", {}) or {}
 
 
-def _transform_neighbor_to_adjacency(data: Any) -> Any:
-    """Recursively transform 'neighbor' keys to 'adjacency' in nested structures.
-    
-    This ensures consistent terminology across all ISIS API return values.
-    """
-    if isinstance(data, dict):
-        return {
-            ('adjacency' if k == 'neighbor' else k): _transform_neighbor_to_adjacency(v)
-            for k, v in data.items()
-        }
-    elif isinstance(data, list):
-        return [_transform_neighbor_to_adjacency(item) for item in data]
-    else:
-        return data
-
-
 def get_isis_adjacency(
     device,
     adjacency: Optional[str] = None,
@@ -74,7 +58,7 @@ def get_isis_adjacency(
         level: Optional level filter (1 or 2).
 
     Returns:
-        Dict with hierarchical structure:
+        Dict with hierarchical structure (same as parser):
         {
             "interface": {
                 "swp1": {
@@ -90,7 +74,6 @@ def get_isis_adjacency(
         }
         
         If filters are provided, returns only matching data.
-        All 'neighbor' keys in parser output are transformed to 'adjacency'.
     """
 
     # Use full wildcard command - parser handles L1/L2 splitting internally
@@ -157,8 +140,7 @@ def get_isis_adjacency(
     else:
         result = {"interface": interfaces} if interfaces else {}
     
-    # Transform all 'neighbor' keys to 'adjacency'
-    return _transform_neighbor_to_adjacency(result)
+    return result
 
 
 def is_isis_adjacency_present(

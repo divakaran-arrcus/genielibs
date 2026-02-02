@@ -42,20 +42,32 @@ def configure_static_route(device, prefix, next_hop='null', metric=None, tag=Non
         f"network-instance: {network_instance})"
     )
     
+    # Build configuration using correct ArcOS protocol STATIC syntax
     config = [
         f'network-instance {network_instance}',
-        'static-routes',
-        f'route {prefix}',
-        f'next-hop {next_hop}'
+        'protocol STATIC default',
+        f'static-route {prefix}'
     ]
+    
+    # Add set-tag if provided
+    if tag is not None:
+        config.append(f'set-tag {tag}')
+    
+    # Configure next-hop-index with DROP or IP address
+    config.append('next-hop-index nh1')
+    
+    if next_hop.lower() == 'null':
+        config.append('next-hop DROP')
+    else:
+        config.append(f'next-hop {next_hop}')
     
     if metric is not None:
         config.append(f'metric {metric}')
     
-    if tag is not None:
-        config.append(f'tag {tag}')
+    # Exit from next-hop-index, static-route, protocol, network-instance
+    config.extend(['exit', 'exit', 'exit', 'exit'])
     
-    config.extend(['exit', 'exit', 'exit'])
+    log.info(f"Configuration commands to be sent:\n{chr(10).join(['  ' + cmd for cmd in config])}")
     
     try:
         device.configure(config)
@@ -93,8 +105,11 @@ def unconfigure_static_route(device, prefix, network_instance='default'):
     
     config = [
         f'network-instance {network_instance}',
-        f'no static-routes route {prefix}'
+        'protocol STATIC default',
+        f'no static-route {prefix}'
     ]
+    
+    log.info(f"Configuration commands to be sent:\n{chr(10).join(['  ' + cmd for cmd in config])}")
     
     try:
         device.configure(config)
