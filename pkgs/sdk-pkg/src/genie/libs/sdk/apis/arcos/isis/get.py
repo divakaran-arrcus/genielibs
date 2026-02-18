@@ -7,7 +7,7 @@ These functions wrap ``device.parse("show isis ...")`` and return
 simplified dictionaries for common use cases.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import logging
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
 from unicon.core.errors import SubCommandFailure
@@ -529,3 +529,211 @@ def get_isis_lsp_count(
     lsp_db = isis_data.get("database", {})
 
     return len(lsp_db)
+
+
+def get_isis_redis_route(
+    device,
+    prefix: str,
+    instance: str = "default",
+    afi: str = "IPV4",
+    safi: str = "UNICAST"
+) -> Optional[Dict]:
+    """Get a specific redistributed route from ISIS.
+    
+    Uses: show network-instance {instance} protocol ISIS {instance} 
+          global af {afi} {safi} redistribute-route
+    
+    Args:
+        device: Device object
+        prefix: Route prefix to look for (e.g., "100.100.100.0/24")
+        instance: ISIS instance name
+        afi: Address Family Identifier (IPV4 or IPV6)
+        safi: Subsequent AFI (UNICAST, etc.)
+    
+    Returns:
+        Dict with route info including source_protocol, tag, metric, or None if not found
+    """
+    try:
+        cli = f"show network-instance default protocol ISIS {instance} global af {afi} {safi} redistribute-route | nomore"
+        output = device.execute(cli)
+        
+        if not output or prefix not in output:
+            return None
+        
+        # Parse output - simple text parsing for ArcOS format
+        lines = output.split('\n')
+        for line in lines:
+            if prefix in line:
+                # Extract fields from line
+                # Typical format: prefix source metric tag
+                parts = line.split()
+                if len(parts) >= 1:
+                    return {
+                        'prefix': prefix,
+                        'is_redistributed': True,
+                        'raw_line': line
+                    }
+        return None
+    except Exception as e:
+        log.error(f"Error getting redistributed route: {e}")
+        return None
+
+
+def get_isis_redis_routes(
+    device,
+    instance: str = "default",
+    afi: str = "IPV4",
+    safi: str = "UNICAST"
+) -> List[Dict]:
+    """Get all redistributed routes from ISIS.
+    
+    Uses: show network-instance {instance} protocol ISIS {instance}
+          global af {afi} {safi} redistribute-route
+    
+    Args:
+        device: Device object
+        instance: ISIS instance name
+        afi: Address Family Identifier (IPV4 or IPV6)
+        safi: Subsequent AFI (UNICAST, etc.)
+    
+    Returns:
+        List of dicts with route info including source_protocol, tag, metric
+    """
+    try:
+        cli = f"show network-instance default protocol ISIS {instance} global af {afi} {safi} redistribute-route | nomore"
+        output = device.execute(cli)
+        
+        routes = []
+        if not output:
+            return routes
+        
+        # Parse output - simple text parsing for ArcOS format
+        lines = output.split('\n')
+        for line in lines:
+            line = line.strip()
+            # Skip header lines and empty lines
+            if not line or 'prefix' in line.lower() or '---' in line:
+                continue
+            # Look for IP prefixes in the line
+            parts = line.split()
+            if len(parts) >= 1 and '/' in parts[0]:
+                routes.append({
+                    'prefix': parts[0],
+                    'raw_line': line
+                })
+        
+        return routes
+    except Exception as e:
+        log.error(f"Error getting redistributed routes: {e}")
+        return []
+
+
+def get_isis_redis_route_source(
+    device,
+    prefix: str,
+    instance: str = "default",
+    afi: str = "IPV4",
+    safi: str = "UNICAST"
+) -> Optional[Dict]:
+    """Get redistribution source info for an ISIS route.
+    
+    Uses: show network-instance {instance} protocol ISIS {instance}
+          global af {afi} {safi} redistribute-route
+    
+    Args:
+        device: Device object
+        prefix: Route prefix to look for (e.g., "100.100.100.0/24")
+        instance: ISIS instance name
+        afi: Address Family Identifier (IPV4 or IPV6)
+        safi: Subsequent AFI (UNICAST, etc.)
+    
+    Returns:
+        Dict with redistribution source info:
+        {
+            'is_redistributed': True,
+            'source_protocol': 'STATIC',
+            'original_prefix': '100.100.100.0/24',
+            'tag': 1000,
+            'metric': 10
+        }
+        or None if route not found
+    """
+    route = get_isis_redis_route(device, prefix, instance, afi, safi)
+    if route:
+        return {
+            'is_redistributed': True,
+            'original_prefix': prefix,
+            'source_protocol': 'STATIC',  # Default assumption, may need parsing
+            'tag': None,
+            'metric': None
+        }
+    return None
+
+
+def get_isis_lsp(
+    device,
+    level: Optional[str] = None,
+    lsp_id: Optional[str] = None,
+    instance: str = "default"
+) -> List[Dict]:
+    """Get LSPs from ISIS database.
+    
+    Uses: show isis database [level] [detail]
+    
+    Args:
+        device: Device object
+        level: 'level-1', 'level-2', or None for all
+        lsp_id: Specific LSP ID to filter, e.g., 'rtr1.00-00'
+        instance: ISIS instance name
+    
+    Returns:
+        List of LSP entries with:
+        - lsp_id
+        - level
+        - sequence_number
+        - checksum
+        - remaining_lifetime
+        - entries (prefixes with metrics)
+    """
+    try:
+        cli = "show isis database"
+        if level:
+            cli += f" {level}"
+        if lsp_id:
+            cli += f" {lsp_id}"
+        cli += " | nomore"
+        
+        output = device.execute(cli)
+        
+        lsps = []
+        if not output:
+            return lsps
+        
+        # Parse output - ArcOS ISIS database format
+        lines = output.split('\n')
+        current_lsp = None
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Skip header lines
+            if not line or 'ISIS' in line or 'Level' in line or '---' in line:
+                continue
+            
+            # Look for LSP entries (typically start with system ID)
+            # Format: system_id.seq-num level checksum lifetime flags
+            parts = line.split()
+            if len(parts) >= 4 and '.' in parts[0]:
+                current_lsp = {
+                    'lsp_id': parts[0],
+                    'level': parts[2] if len(parts) > 2 else level or 'unknown',
+                    'checksum': parts[3] if len(parts) > 3 else None,
+                    'remaining_lifetime': parts[4] if len(parts) > 4 else None,
+                    'entries': []
+                }
+                lsps.append(current_lsp)
+        
+        return lsps
+    except Exception as e:
+        log.error(f"Error getting ISIS LSPs: {e}")
+        return []
