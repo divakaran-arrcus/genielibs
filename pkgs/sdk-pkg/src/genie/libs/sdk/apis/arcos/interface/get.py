@@ -56,8 +56,8 @@ def get_interface_status(device, interface: str) -> Optional[str]:
     if not data:
         return None
 
-    admin_status = str(data.get("admin_status", "")).upper()
-    oper_status = str(data.get("oper_status", "")).upper()
+    admin_status = str(data.get("admin-status", "")).upper()
+    oper_status = str(data.get("oper-status", "")).upper()
 
     if admin_status == "DOWN" or not data.get("enabled", True):
         return "admin-down"

@@ -79,23 +79,21 @@ def get_isis_adjacency(
     # Use full wildcard command - parser handles L1/L2 splitting internally
     try:
         cmd = f"show network-instance * protocol ISIS {instance} interface * level * adjacency"
-        log.debug(f"get_isis_adjacency: executing command: {cmd}")
+        log.debug("get_isis_adjacency: executing command: %s", cmd)
         parsed = device.parse(cmd)
-        
+
         isis = _safe_get_isis(parsed, ni="default", instance=instance)
         interfaces = isis.get("interface", {}) or {}
-        log.debug(f"get_isis_adjacency: found {len(interfaces)} interfaces")
+        log.debug("get_isis_adjacency: found %d interfaces", len(interfaces))
                     
     except SchemaEmptyParserError:
         log.debug("get_isis_adjacency: SchemaEmptyParserError - no adjacencies found")
         interfaces = {}
     except SubCommandFailure as exc:
-        log.debug(f"get_isis_adjacency: SubCommandFailure - {exc}")
+        log.debug("get_isis_adjacency: SubCommandFailure - %s", exc)
         interfaces = {}
-    except Exception as exc:
-        log.warning(f"get_isis_adjacency: Unexpected exception - {exc}")
-        import traceback
-        log.warning(f"Traceback: {traceback.format_exc()}")
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("get_isis_adjacency: Unexpected exception - %s", exc)
         interfaces = {}
 
     # Apply filters if provided
@@ -280,7 +278,7 @@ def get_isis_system_id(device, instance: str = "default") -> Optional[str]:
         return None
 
     global_entry = _safe_get_global(parsed, ni="default", instance=instance)
-    return global_entry.get("system_id")
+    return global_entry.get("system-id")
 
 
 def get_isis_net(device, instance: str = "default") -> Optional[str]:
@@ -519,7 +517,7 @@ def get_isis_lsp_count(
     except SchemaEmptyParserError:
         log.debug("No LSPs found for level %s", level)
         return 0
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - defensive
         log.error("Failed to get ISIS LSP database for level %s: %s", level, exc)
         return 0
 
@@ -536,96 +534,88 @@ def get_isis_redis_route(
     prefix: str,
     instance: str = "default",
     afi: str = "IPV4",
-    safi: str = "UNICAST"
-) -> Optional[Dict]:
+    safi: str = "UNICAST",
+) -> Optional[Dict[str, Any]]:
     """Get a specific redistributed route from ISIS.
-    
-    Uses: show network-instance {instance} protocol ISIS {instance} 
-          global af {afi} {safi} redistribute-route
-    
+
+    Uses the upstream ``ShowIsisRedistributeRoute`` parser via
+    ``device.parse("show ... redistribute-route")``.
+
     Args:
-        device: Device object
-        prefix: Route prefix to look for (e.g., "100.100.100.0/24")
-        instance: ISIS instance name
-        afi: Address Family Identifier (IPV4 or IPV6)
-        safi: Subsequent AFI (UNICAST, etc.)
-    
+        device: pyATS device object.
+        prefix: Route prefix to look for (e.g., "100.100.100.0/24").
+        instance: ISIS instance name (default: "default").
+        afi: Address Family Identifier ("IPV4" or "IPV6").
+        safi: Subsequent AFI (default: "UNICAST").
+
     Returns:
-        Dict with route info including source_protocol, tag, metric, or None if not found
+        Dict with route info (prefix, levels with metric/tag/source) or
+        None if not found.
     """
+
+    af_key = f"{afi}-{safi}"
+
     try:
-        cli = f"show network-instance default protocol ISIS {instance} global af {afi} {safi} redistribute-route | nomore"
-        output = device.execute(cli)
-        
-        if not output or prefix not in output:
-            return None
-        
-        # Parse output - simple text parsing for ArcOS format
-        lines = output.split('\n')
-        for line in lines:
-            if prefix in line:
-                # Extract fields from line
-                # Typical format: prefix source metric tag
-                parts = line.split()
-                if len(parts) >= 1:
-                    return {
-                        'prefix': prefix,
-                        'is_redistributed': True,
-                        'raw_line': line
-                    }
+        parsed = device.parse(
+            f"show network-instance default protocol ISIS {instance} "
+            f"global af {afi} UNICAST redistribute-route"
+        )
+    except SchemaEmptyParserError:
+        log.debug("No redistributed routes found for %s", af_key)
         return None
-    except Exception as e:
-        log.error(f"Error getting redistributed route: {e}")
+    except Exception as exc:  # pragma: no cover - defensive
+        log.error("Failed to get ISIS redistributed route for %s: %s", prefix, exc)
         return None
+
+    isis = _safe_get_isis(parsed, ni="default", instance=instance)
+    redist = isis.get("redistribute-routes", {})
+    af_entry = redist.get(af_key, {})
+    routes = af_entry.get("routes", {})
+
+    return routes.get(prefix)
 
 
 def get_isis_redis_routes(
     device,
     instance: str = "default",
     afi: str = "IPV4",
-    safi: str = "UNICAST"
-) -> List[Dict]:
+    safi: str = "UNICAST",
+) -> List[Dict[str, Any]]:
     """Get all redistributed routes from ISIS.
-    
-    Uses: show network-instance {instance} protocol ISIS {instance}
-          global af {afi} {safi} redistribute-route
-    
+
+    Uses the upstream ``ShowIsisRedistributeRoute`` parser via
+    ``device.parse("show ... redistribute-route")``.
+
     Args:
-        device: Device object
-        instance: ISIS instance name
-        afi: Address Family Identifier (IPV4 or IPV6)
-        safi: Subsequent AFI (UNICAST, etc.)
-    
+        device: pyATS device object.
+        instance: ISIS instance name (default: "default").
+        afi: Address Family Identifier ("IPV4" or "IPV6").
+        safi: Subsequent AFI (default: "UNICAST").
+
     Returns:
-        List of dicts with route info including source_protocol, tag, metric
+        List of dicts, each containing 'prefix' and 'levels' info.
     """
+
+    af_key = f"{afi}-{safi}"
+
     try:
-        cli = f"show network-instance default protocol ISIS {instance} global af {afi} {safi} redistribute-route | nomore"
-        output = device.execute(cli)
-        
-        routes = []
-        if not output:
-            return routes
-        
-        # Parse output - simple text parsing for ArcOS format
-        lines = output.split('\n')
-        for line in lines:
-            line = line.strip()
-            # Skip header lines and empty lines
-            if not line or 'prefix' in line.lower() or '---' in line:
-                continue
-            # Look for IP prefixes in the line
-            parts = line.split()
-            if len(parts) >= 1 and '/' in parts[0]:
-                routes.append({
-                    'prefix': parts[0],
-                    'raw_line': line
-                })
-        
-        return routes
-    except Exception as e:
-        log.error(f"Error getting redistributed routes: {e}")
+        parsed = device.parse(
+            f"show network-instance default protocol ISIS {instance} "
+            f"global af {afi} UNICAST redistribute-route"
+        )
+    except SchemaEmptyParserError:
+        log.debug("No redistributed routes found for %s", af_key)
         return []
+    except Exception as exc:  # pragma: no cover - defensive
+        log.error("Failed to get ISIS redistributed routes for %s: %s", af_key, exc)
+        return []
+
+    isis = _safe_get_isis(parsed, ni="default", instance=instance)
+    redist = isis.get("redistribute-routes", {})
+    af_entry = redist.get(af_key, {})
+    routes = af_entry.get("routes", {})
+
+    return list(routes.values())
 
 
 def get_isis_redis_route_source(
@@ -633,107 +623,122 @@ def get_isis_redis_route_source(
     prefix: str,
     instance: str = "default",
     afi: str = "IPV4",
-    safi: str = "UNICAST"
-) -> Optional[Dict]:
+    safi: str = "UNICAST",
+) -> Optional[Dict[str, Any]]:
     """Get redistribution source info for an ISIS route.
-    
-    Uses: show network-instance {instance} protocol ISIS {instance}
-          global af {afi} {safi} redistribute-route
-    
+
+    Retrieves source-identifier, metric, and route-tag from the parsed
+    redistribute-route data for the first level entry found.
+
     Args:
-        device: Device object
-        prefix: Route prefix to look for (e.g., "100.100.100.0/24")
-        instance: ISIS instance name
-        afi: Address Family Identifier (IPV4 or IPV6)
-        safi: Subsequent AFI (UNICAST, etc.)
-    
+        device: pyATS device object.
+        prefix: Route prefix to look for (e.g., "100.100.100.0/24").
+        instance: ISIS instance name (default: "default").
+        afi: Address Family Identifier ("IPV4" or "IPV6").
+        safi: Subsequent AFI (default: "UNICAST").
+
     Returns:
-        Dict with redistribution source info:
-        {
-            'is_redistributed': True,
-            'source_protocol': 'STATIC',
-            'original_prefix': '100.100.100.0/24',
-            'tag': 1000,
-            'metric': 10
-        }
-        or None if route not found
+        Dict with redistribution source info, or None if route not found.
+        Example::
+
+            {
+                'is_redistributed': True,
+                'original_prefix': '100.100.100.0/24',
+                'source_protocol': 'STATIC',
+                'tag': 1000,
+                'metric': 10,
+            }
     """
+
     route = get_isis_redis_route(device, prefix, instance, afi, safi)
-    if route:
-        return {
-            'is_redistributed': True,
-            'original_prefix': prefix,
-            'source_protocol': 'STATIC',  # Default assumption, may need parsing
-            'tag': None,
-            'metric': None
-        }
-    return None
+    if not route:
+        return None
+
+    # Extract source info from first level entry
+    levels = route.get("levels", {})
+    source_protocol = None
+    tag = None
+    metric = None
+
+    for level_data in levels.values():
+        source_protocol = level_data.get("source-identifier", source_protocol)
+        tag = level_data.get("route-tag", tag)
+        metric = level_data.get("metric", metric)
+        break  # use first level entry
+
+    return {
+        "is_redistributed": True,
+        "original_prefix": prefix,
+        "source_protocol": source_protocol,
+        "tag": tag,
+        "metric": metric,
+    }
 
 
 def get_isis_lsp(
     device,
     level: Optional[str] = None,
     lsp_id: Optional[str] = None,
-    instance: str = "default"
-) -> List[Dict]:
-    """Get LSPs from ISIS database.
-    
-    Uses: show isis database [level] [detail]
-    
+    instance: str = "default",
+) -> List[Dict[str, Any]]:
+    """Get LSPs from ISIS link-state database.
+
+    Uses the upstream ``ShowIsisLsp`` parser via
+    ``device.parse("show ... link-state-database lsp")``.
+
     Args:
-        device: Device object
-        level: 'level-1', 'level-2', or None for all
-        lsp_id: Specific LSP ID to filter, e.g., 'rtr1.00-00'
-        instance: ISIS instance name
-    
+        device: pyATS device object.
+        level: ISIS level ('level-1', 'level-2', 'level_1', 'level_2',
+               '1', '2') or None for all levels (wildcard).
+        lsp_id: Optional specific LSP ID to filter (e.g., 'rtr1.00-00').
+        instance: ISIS instance name (default: "default").
+
     Returns:
-        List of LSP entries with:
-        - lsp_id
-        - level
-        - sequence_number
-        - checksum
-        - remaining_lifetime
-        - entries (prefixes with metrics)
+        List of LSP entry dicts from the parser database, each containing
+        at minimum 'lsp-id' and optional fields like 'sequence',
+        'checksum', 'remaining-lifetime', 'system-id', 'tlvs', etc.
     """
+
+    # Normalize level format to number for command, or use wildcard
+    level_num = "*"
+    if level is not None:
+        level_map = {
+            "level_1": "1",
+            "level_2": "2",
+            "level-1": "1",
+            "level-2": "2",
+            "1": "1",
+            "2": "2",
+        }
+        level_num = level_map.get(level)
+        if level_num is None:
+            log.warning(
+                "Invalid ISIS level: %s (expected 'level-1', 'level-2', "
+                "'level_1', 'level_2', '1', or '2')",
+                level,
+            )
+            return []
+
     try:
-        cli = "show isis database"
-        if level:
-            cli += f" {level}"
-        if lsp_id:
-            cli += f" {lsp_id}"
-        cli += " | nomore"
-        
-        output = device.execute(cli)
-        
-        lsps = []
-        if not output:
-            return lsps
-        
-        # Parse output - ArcOS ISIS database format
-        lines = output.split('\n')
-        current_lsp = None
-        
-        for line in lines:
-            line = line.strip()
-            
-            # Skip header lines
-            if not line or 'ISIS' in line or 'Level' in line or '---' in line:
-                continue
-            
-            # Look for LSP entries (typically start with system ID)
-            # Format: system_id.seq-num level checksum lifetime flags
-            parts = line.split()
-            if len(parts) >= 4 and '.' in parts[0]:
-                current_lsp = {
-                    'lsp_id': parts[0],
-                    'level': parts[2] if len(parts) > 2 else level or 'unknown',
-                    'checksum': parts[3] if len(parts) > 3 else None,
-                    'remaining_lifetime': parts[4] if len(parts) > 4 else None,
-                    'entries': []
-                }
-                lsps.append(current_lsp)
-        
-        return lsps
-    except Exception as e:
-        log.error(f"Error getting ISIS LSPs: {e}")
+        parsed = device.parse(
+            f"show network-instance default protocol ISIS {instance} "
+            f"level {level_num} link-state-database lsp"
+        )
+    except SchemaEmptyParserError:
+        log.debug("No LSPs found for level %s", level)
         return []
+    except Exception as exc:  # pragma: no cover - defensive
+        log.error("Failed to get ISIS LSP database for level %s: %s", level, exc)
+        return []
+
+    ni_data = parsed.get("network-instance", {}).get("default", {})
+    isis_data = ni_data.get("isis", {}).get(instance, {})
+    lsp_db = isis_data.get("database", {})
+
+    lsps = list(lsp_db.values())
+
+    # Apply optional lsp_id filter
+    if lsp_id:
+        lsps = [lsp for lsp in lsps if lsp.get("lsp-id", "").startswith(lsp_id)]
+
+    return lsps
