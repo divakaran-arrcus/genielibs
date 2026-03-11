@@ -1551,6 +1551,304 @@ def unconfigure_isis_interface_auth_password(device, interface, network_instance
 
 
 # ============================================================================
+# Category 1b: Level-Context PDU Authentication (LSP, CSNP, PSNP)
+# ============================================================================
+
+
+def _level_number(level):
+    """Extract numeric level (1 or 2) from level string.
+
+    Args:
+        level (str): Level in format 'level_1' or 'level_2'
+
+    Returns:
+        str: '1' or '2'
+
+    Raises:
+        ValueError: If level is not 'level_1' or 'level_2'
+    """
+    mapping = {'level_1': '1', 'level_2': '2'}
+    if level not in mapping:
+        raise ValueError(
+            f"Invalid level '{level}'. Must be 'level_1' or 'level_2'"
+        )
+    return mapping[level]
+
+
+def configure_isis_lsp_authentication(device, level, enabled=True,
+                                       network_instance='default',
+                                       protocol_instance='default'):
+    """Enable or disable ISIS LSP authentication at the level context.
+
+    Args:
+        device (obj): Device object
+        level (str): ISIS level — 'level_1' or 'level_2'
+        enabled (bool, optional): Enable or disable LSP authentication. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure LSP authentication
+
+    Example:
+        >>> configure_isis_lsp_authentication(device, level='level_2', enabled=True)
+    """
+    lvl = _level_number(level)
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} ISIS LSP authentication "
+        f"level {lvl} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    enabled_str = 'true' if enabled else 'false'
+    config = [
+        isis_context,
+        f'level {lvl}',
+        f'authentication lsp-authentication {enabled_str}',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure LSP authentication level {lvl} on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_isis_lsp_authentication(device, level,
+                                         network_instance='default',
+                                         protocol_instance='default'):
+    """Remove ISIS LSP authentication at the level context.
+
+    Args:
+        device (obj): Device object
+        level (str): ISIS level — 'level_1' or 'level_2'
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove LSP authentication
+
+    Example:
+        >>> unconfigure_isis_lsp_authentication(device, level='level_2')
+    """
+    lvl = _level_number(level)
+    log.info(
+        f"Removing ISIS LSP authentication level {lvl} from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        'no authentication lsp-authentication',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove LSP authentication level {lvl} from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_isis_csnp_authentication(device, level, enabled=True,
+                                        network_instance='default',
+                                        protocol_instance='default'):
+    """Enable or disable ISIS CSNP authentication at the level context.
+
+    Args:
+        device (obj): Device object
+        level (str): ISIS level — 'level_1' or 'level_2'
+        enabled (bool, optional): Enable or disable CSNP authentication. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure CSNP authentication
+
+    Example:
+        >>> configure_isis_csnp_authentication(device, level='level_2', enabled=True)
+    """
+    lvl = _level_number(level)
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} ISIS CSNP authentication "
+        f"level {lvl} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    enabled_str = 'true' if enabled else 'false'
+    config = [
+        isis_context,
+        f'level {lvl}',
+        f'authentication csnp-authentication {enabled_str}',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure CSNP authentication level {lvl} on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_isis_csnp_authentication(device, level,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Remove ISIS CSNP authentication at the level context.
+
+    Args:
+        device (obj): Device object
+        level (str): ISIS level — 'level_1' or 'level_2'
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove CSNP authentication
+
+    Example:
+        >>> unconfigure_isis_csnp_authentication(device, level='level_2')
+    """
+    lvl = _level_number(level)
+    log.info(
+        f"Removing ISIS CSNP authentication level {lvl} from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        'no authentication csnp-authentication',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove CSNP authentication level {lvl} from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_isis_psnp_authentication(device, level, enabled=True,
+                                        network_instance='default',
+                                        protocol_instance='default'):
+    """Enable or disable ISIS PSNP authentication at the level context.
+
+    Args:
+        device (obj): Device object
+        level (str): ISIS level — 'level_1' or 'level_2'
+        enabled (bool, optional): Enable or disable PSNP authentication. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure PSNP authentication
+
+    Example:
+        >>> configure_isis_psnp_authentication(device, level='level_2', enabled=True)
+    """
+    lvl = _level_number(level)
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} ISIS PSNP authentication "
+        f"level {lvl} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    enabled_str = 'true' if enabled else 'false'
+    config = [
+        isis_context,
+        f'level {lvl}',
+        f'authentication psnp-authentication {enabled_str}',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure PSNP authentication level {lvl} on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_isis_psnp_authentication(device, level,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Remove ISIS PSNP authentication at the level context.
+
+    Args:
+        device (obj): Device object
+        level (str): ISIS level — 'level_1' or 'level_2'
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove PSNP authentication
+
+    Example:
+        >>> unconfigure_isis_psnp_authentication(device, level='level_2')
+    """
+    lvl = _level_number(level)
+    log.info(
+        f"Removing ISIS PSNP authentication level {lvl} from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        'no authentication psnp-authentication',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove PSNP authentication level {lvl} from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+# ============================================================================
 # Category 2: Maximum ECMP Paths
 # ============================================================================
 
@@ -3926,4 +4224,127 @@ def unconfigure_isis_ipv6_multi_topology(device, network_instance='default',
     except SubCommandFailure as e:
         raise SubCommandFailure(
             f"Could not reset IPv6 multi-topology on {device.name}. Error:\n{e}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Inter-level Propagation Policy (Route Leaking)
+# ---------------------------------------------------------------------------
+
+
+def configure_isis_level_import_policy(device, direction, policy_name,
+                                       network_instance='default',
+                                       protocol_instance='default'):
+    """Configure ISIS inter-level route leaking import policy.
+
+    Applies a routing policy to control prefix propagation between ISIS
+    levels. The policy must already be defined via the routing-policy
+    APIs before calling this function.
+
+    Args:
+        device (obj): Device object
+        direction (str): Leak direction — 'level1-to-level2' or
+            'level2-to-level1'
+        policy_name (str): Name of the routing-policy to apply
+        network_instance (str, optional): Network instance name.
+            Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If direction is invalid
+        SubCommandFailure: Failed to configure import policy
+
+    Example:
+        >>> configure_isis_level_import_policy(
+        ...     device=device,
+        ...     direction='level2-to-level1',
+        ...     policy_name='LEAK-L2-TO-L1',
+        ... )
+    """
+    valid_directions = ('level1-to-level2', 'level2-to-level1')
+    if direction not in valid_directions:
+        raise ValueError(
+            f"Invalid direction '{direction}'. "
+            f"Must be one of: {', '.join(valid_directions)}"
+        )
+
+    log.info(
+        f"Configuring ISIS {direction} import-policy {policy_name} "
+        f"on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global inter-level-propagation-policies {direction} import-policy {policy_name}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS {direction} import-policy {policy_name} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_level_import_policy(device, direction,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Remove ISIS inter-level route leaking import policy.
+
+    Args:
+        device (obj): Device object
+        direction (str): Leak direction — 'level1-to-level2' or
+            'level2-to-level1'
+        network_instance (str, optional): Network instance name.
+            Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If direction is invalid
+        SubCommandFailure: Failed to remove import policy
+
+    Example:
+        >>> unconfigure_isis_level_import_policy(
+        ...     device=device,
+        ...     direction='level2-to-level1',
+        ... )
+    """
+    valid_directions = ('level1-to-level2', 'level2-to-level1')
+    if direction not in valid_directions:
+        raise ValueError(
+            f"Invalid direction '{direction}'. "
+            f"Must be one of: {', '.join(valid_directions)}"
+        )
+
+    log.info(
+        f"Removing ISIS {direction} import-policy from {device.name} "
+        f"(network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global no inter-level-propagation-policies {direction} import-policy',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS {direction} import-policy "
+            f"from {device.name}. Error:\n{e}"
         )
