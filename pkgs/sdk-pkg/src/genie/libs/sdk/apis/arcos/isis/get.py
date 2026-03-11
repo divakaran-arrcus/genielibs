@@ -433,9 +433,15 @@ def get_isis_route(
     af_key = af_map.get(address_family.lower())
 
     try:
-        # Use specific route query for efficiency
-        parsed = device.parse(
-            f"show network-instance default protocol ISIS {instance} global af {afi} UNICAST route {prefix}"
+        # Use the parser directly with the prefix parameter
+        # (device.parse() can't match commands with extra trailing args)
+        from genie.libs.parser.arcos.show_isis import ShowIsisRoute
+        parser = ShowIsisRoute(device=device)
+        parsed = parser.parse(
+            network_instance="default",
+            protocol_instance=instance,
+            afi=afi,
+            prefix=prefix,
         )
     except SchemaEmptyParserError:
         log.debug("Route %s not found in ISIS routing table", prefix)
