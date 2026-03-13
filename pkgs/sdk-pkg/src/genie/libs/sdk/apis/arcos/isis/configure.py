@@ -3457,8 +3457,8 @@ def configure_table_connection(device, source_protocol, destination_protocol,
         policy_str = ' '.join(import_policy)
         config.append(f'import-policy [ {policy_str} ]')
     
-    config.extend(['exit', '!'])
-    
+    config.extend(['exit', 'exit'])
+
     try:
         device.configure(config)
     except SubCommandFailure as e:
@@ -3507,7 +3507,7 @@ def unconfigure_table_connection(device, source_protocol, destination_protocol,
         f'network-instance {network_instance}',
         f'no table-connection {source_protocol} {destination_protocol} {address_family} '
         f'src-dst-instance {source_instance} {destination_instance}',
-        '!'
+        'exit',
     ]
     
     try:
@@ -3564,7 +3564,7 @@ def configure_table_connection_policy(device, source_protocol, destination_proto
         f'src-dst-instance {source_instance} {destination_instance}',
         f'import-policy [ {policy_str} ]',
         'exit',
-        '!'
+        'exit',
     ]
     
     try:
