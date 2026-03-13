@@ -748,3 +748,62 @@ def get_isis_lsp(
         lsps = [lsp for lsp in lsps if lsp.get("lsp-id", "").startswith(lsp_id)]
 
     return lsps
+
+
+def get_isis_global_timers(
+    device,
+    instance: str = "default",
+    network_instance: str = "default",
+) -> Dict[str, Any]:
+    """Get ISIS global timer configuration on ArcOS.
+
+    Uses the upstream ArcOS ISIS global timers parser via
+    ``device.parse("show network-instance ... protocol ISIS ... global timers")``.
+
+    Args:
+        device: pyATS device object.
+        instance: ISIS protocol instance name (default: "default").
+        network_instance: Network instance name (default: "default").
+
+    Returns:
+        Dict with ISIS timer values, or empty dict if not found:
+
+        .. code-block:: python
+
+            {
+                "lsp-lifetime-interval": 1200,
+                "lsp-refresh-interval": 600,
+                "lsp-flood-delay-adj-up": 0,
+                "spf": {
+                    "spf-hold-interval": "5000",
+                    "spf-first-interval": "50",
+                    "spf-second-interval": "200",
+                    "spf-mla-interval": "25",
+                },
+            }
+
+        Returns empty dict on error or if no timers configured.
+    """
+
+    cmd = (
+        f"show network-instance {network_instance} protocol ISIS {instance} global timers"
+    )
+    log.debug("get_isis_global_timers: executing command: %s", cmd)
+
+    try:
+        parsed = device.parse(cmd)
+    except SchemaEmptyParserError:
+        log.debug("get_isis_global_timers: SchemaEmptyParserError - no data found")
+        return {}
+    except SubCommandFailure as exc:
+        log.debug("get_isis_global_timers: SubCommandFailure - %s", exc)
+        return {}
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("get_isis_global_timers: Unexpected exception - %s", exc)
+        return {}
+
+    instance_data = _safe_get_isis(parsed, ni=network_instance, instance=instance)
+    timers = instance_data.get("timers", {})
+
+    log.debug("get_isis_global_timers: returning timers: %s", timers)
+    return timers

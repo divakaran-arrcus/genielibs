@@ -4348,3 +4348,51 @@ def unconfigure_isis_level_import_policy(device, direction,
             f"Could not remove ISIS {direction} import-policy "
             f"from {device.name}. Error:\n{e}"
         )
+
+
+def restart_isis_instance(device, network_instance='default', protocol_instance='default'):
+    """Restart the ISIS protocol instance.
+
+    Executes ``restart isis {network_instance} {protocol_instance}`` and
+    automatically confirms the restart dialog prompt with "yes".
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to restart ISIS instance
+
+    Example:
+        >>> restart_isis_instance(device)
+        >>> restart_isis_instance(device, network_instance='default', protocol_instance='default')
+    """
+
+    log.info(
+        f"Restarting ISIS instance {protocol_instance} in network-instance "
+        f"{network_instance} on {device.name}"
+    )
+
+    cmd = f"restart isis {network_instance} {protocol_instance}"
+
+    try:
+        from unicon.eal.dialogs import Dialog, Statement
+
+        confirm_dialog = Dialog([
+            Statement(
+                pattern=r'.*[Rr]estart.*\[',
+                action='sendline(yes)',
+                loop_continue=True,
+                continue_timer=False,
+            )
+        ])
+        device.execute(cmd, reply=confirm_dialog)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not restart ISIS instance {protocol_instance} "
+            f"on {device.name}. Error:\n{e}"
+        )
