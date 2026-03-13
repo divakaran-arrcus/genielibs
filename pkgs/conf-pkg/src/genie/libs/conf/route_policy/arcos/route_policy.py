@@ -31,9 +31,22 @@ def _build_defined_sets(cfg: CliConfigBuilder, defined_sets: Dict[str, Any]) -> 
     - ``prefix_sets``
     - ``next_hop_sets``
 
-    Other families (string-sets, tag-sets, BGP-defined-sets) can be added
-    later as needed.
+    Other families (string-sets, BGP-defined-sets) can be added later as
+    needed.
     """
+
+    # Tag-sets ---------------------------------------------------------
+    tag_sets: Dict[str, Any] = defined_sets.get("tag_sets") or {}
+    for name in sorted(tag_sets):
+        entry = tag_sets.get(name) or {}
+        tags = entry.get("tags") or []
+        if not tags:
+            continue
+
+        tag_str = " ".join(str(t) for t in tags)
+        cfg.append_line(f"routing-policy defined-sets tag-set {name}")
+        cfg.append_line(f" tag-value [ {tag_str} ]")
+        cfg.append_line("!")
 
     # Prefix-sets ------------------------------------------------------
     prefix_sets: Dict[str, Any] = defined_sets.get("prefix_sets") or {}
@@ -237,6 +250,12 @@ class RoutePolicy(ABC):
                 rp_root: Dict[str, Any] = rp or {}
                 defined_sets: Dict[str, Any] = rp_root.get("defined_sets") or {}
                 policy_defs: Dict[str, Any] = rp_root.get("policy_definitions") or {}
+
+                tag_sets: Dict[str, Any] = defined_sets.get("tag_sets") or {}
+                for name in sorted(tag_sets):
+                    cfg.append_line(
+                        f"routing-policy defined-sets tag-set {name}"
+                    )
 
                 prefix_sets: Dict[str, Any] = defined_sets.get("prefix_sets") or {}
                 for name in sorted(prefix_sets):
