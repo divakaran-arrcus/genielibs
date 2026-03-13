@@ -1,0 +1,184 @@
+"""ArcOS system-level configure APIs.
+
+High-level helpers for operations that span connection management and
+device-level configuration.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Optional
+
+from unicon.core.errors import SubCommandFailure
+
+log = logging.getLogger(__name__)
+
+
+def load_config_file(
+    device,
+    local_path: str,
+    remote_dir: str = "/tmp",
+    timeout: int = 120,
+) -> None:
+    """Copy a local config file to the device and load-override + commit it.
+
+    This function performs three steps:
+
+    1. **File transfer** — Copies ``local_path`` to ``remote_dir/<filename>``
+       on the device using SFTP (paramiko), opening a dedicated SSH connection
+       independent of the existing Unicon session.
+
+    2. **Load override** — Calls ``device.load(remote_path, timeout=timeout)``
+       which sends ``load override <remote_path>`` in config mode and waits
+       through the spinner for the completion message.
+
+    3. **Commit** — The ``device.load()`` service automatically commits and
+       returns the device to exec mode.
+
+    Args:
+        device: pyATS device object (must be connected).
+        local_path (str): Absolute or relative path to the config file on the
+            local machine.
+        remote_dir (str): Directory on the device where the file is staged.
+            Defaults to ``'/tmp'``.
+        timeout (int): Maximum seconds to wait for each of the load and commit
+            stages.  Defaults to 120.
+
+    Returns:
+        None
+
+    Raises:
+        FileNotFoundError: If ``local_path`` does not exist on the local machine.
+        SubCommandFailure: If the SFTP transfer fails, or if ``load override``
+            or ``commit`` fail on the device.
+
+    Example:
+        >>> load_config_file(device, '/home/user/router.cfg')
+        >>> load_config_file(device, '/home/user/router.cfg', timeout=150)
+    """
+    local = Path(local_path).expanduser().resolve()
+    if not local.exists():
+        raise FileNotFoundError(f"Config file not found: {local_path}")
+
+    filename = local.name
+    remote_path = f"{remote_dir}/{filename}"
+
+    # ── Step 1: Transfer file to device via SFTP ──────────────────────────
+    _sftp_put(device, local, remote_path)
+
+    # ── Step 2 & 3: load override + commit (handled by device.load) ───────
+    log.info(
+        "load_config_file: calling device.load('%s', timeout=%d) on %s",
+        remote_path,
+        timeout,
+        device.name,
+    )
+    try:
+        device.load(remote_path, timeout=timeout)
+    except SubCommandFailure:
+        raise
+    except Exception as exc:
+        raise SubCommandFailure(
+            f"device.load failed on {device.name}: {exc}"
+        ) from exc
+
+    log.info("load_config_file: completed successfully on %s", device.name)
+
+
+# ── Private helpers ────────────────────────────────────────────────────────────
+
+
+def _sftp_put(device, local_path: Path, remote_path: str) -> None:
+    """Transfer ``local_path`` to ``remote_path`` on the device via SFTP.
+
+    Opens a dedicated paramiko SSH connection using the device's testbed
+    credentials (``device.credentials.default``).  This is independent of the
+    existing Unicon CLI session so it does not disturb device state.
+
+    Args:
+        device: pyATS device object.
+        local_path (Path): Resolved local file path.
+        remote_path (str): Destination path on the device (e.g. ``'/tmp/r.cfg'``).
+
+    Raises:
+        SubCommandFailure: On any SSH or SFTP error.
+    """
+    import paramiko  # pyATS dependency — always available in the venv
+
+    conn_info = device.connections.cli
+    host = str(conn_info.ip)
+    port = int(getattr(conn_info, "port", 22))
+    username = str(device.credentials.default.username)
+    # SecretString.plaintext gives the actual value; str() returns masked ****
+    _pw = device.credentials.default.password
+    password = _pw.plaintext if hasattr(_pw, "plaintext") else str(_pw)
+
+    log.info(
+        "load_config_file: SFTP %s → %s:%s%s",
+        local_path.name,
+        device.name,
+        host,
+        remote_path,
+    )
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(
+            hostname=host,
+            port=port,
+            username=username,
+            password=password,
+            timeout=30,
+            look_for_keys=False,
+            allow_agent=False,
+        )
+        # Try SFTP first; fall back to SSH exec + cat if subsystem unavailable
+        try:
+            with client.open_sftp() as sftp:
+                sftp.put(str(local_path), remote_path)
+            log.info("load_config_file: SFTP transfer complete → %s", remote_path)
+        except Exception as sftp_exc:
+            log.debug(
+                "load_config_file: SFTP unavailable (%s), falling back to SSH exec",
+                sftp_exc,
+            )
+            _ssh_exec_put(client, local_path, remote_path)
+            log.info("load_config_file: SSH exec transfer complete → %s", remote_path)
+    except SubCommandFailure:
+        raise
+    except Exception as exc:
+        raise SubCommandFailure(
+            f"SFTP transfer of {local_path.name} to {device.name}:{remote_path} failed: {exc}"
+        ) from exc
+    finally:
+        client.close()
+
+
+def _ssh_exec_put(client, local_path: Path, remote_path: str) -> None:
+    """Transfer a file over an open paramiko SSH connection using exec_command.
+
+    Uses ``cat > remote_path`` via SSH exec channel — works when the SFTP
+    subsystem is not available on the device.
+
+    Args:
+        client: Open paramiko.SSHClient.
+        local_path (Path): Local file to transfer.
+        remote_path (str): Destination path on the device.
+
+    Raises:
+        SubCommandFailure: If the transfer fails.
+    """
+    content = local_path.read_bytes()
+    stdin, stdout, stderr = client.exec_command(f"cat > {remote_path}")
+    stdin.write(content)
+    stdin.channel.shutdown_write()
+
+    exit_code = stdout.channel.recv_exit_status()
+    err_output = stderr.read().decode(errors="replace").strip()
+
+    if exit_code != 0:
+        raise SubCommandFailure(
+            f"SSH exec transfer to {remote_path} failed (exit {exit_code}): {err_output}"
+        )
