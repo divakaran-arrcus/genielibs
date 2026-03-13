@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def _build_defined_sets(cfg: CliConfigBuilder, defined_sets: Dict[str, Any]) -> None:
-    """Render ArcOS routing-policy defined-sets.
+    """Render ArcOS routing-policy defined-sets using flat single-line commands.
 
     Supported families in v1:
     - ``prefix_sets``
@@ -44,9 +44,9 @@ def _build_defined_sets(cfg: CliConfigBuilder, defined_sets: Dict[str, Any]) -> 
             continue
 
         tag_str = " ".join(str(t) for t in tags)
-        cfg.append_line(f"routing-policy defined-sets tag-set {name}")
-        cfg.append_line(f" tag-value [ {tag_str} ]")
-        cfg.append_line("!")
+        cfg.append_line(
+            f"routing-policy defined-sets tag-set {name} tag-value [ {tag_str} ]"
+        )
 
     # Prefix-sets ------------------------------------------------------
     prefix_sets: Dict[str, Any] = defined_sets.get("prefix_sets") or {}
@@ -56,17 +56,14 @@ def _build_defined_sets(cfg: CliConfigBuilder, defined_sets: Dict[str, Any]) -> 
         if not prefixes:
             continue
 
-        cfg.append_line(f"routing-policy defined-sets prefix-set {name}")
-
         for pref in prefixes:
             ip = pref.get("ip_prefix")
             mask = pref.get("masklength_range")
             if not ip or not mask:
                 continue
-            cfg.append_line(f" prefix {ip} {mask}")
-            cfg.append_line(" !")
-
-        cfg.append_line("!")
+            cfg.append_line(
+                f"routing-policy defined-sets prefix-set {name} prefix {ip} {mask}"
+            )
 
     # Next-hop-sets ----------------------------------------------------
     nh_sets: Dict[str, Any] = defined_sets.get("next_hop_sets") or {}
@@ -77,13 +74,13 @@ def _build_defined_sets(cfg: CliConfigBuilder, defined_sets: Dict[str, Any]) -> 
             continue
 
         addr_str = " ".join(str(a) for a in addrs)
-        cfg.append_line(f"routing-policy defined-sets next-hop-set {name}")
-        cfg.append_line(f" address [ {addr_str} ]")
-        cfg.append_line("!")
+        cfg.append_line(
+            f"routing-policy defined-sets next-hop-set {name} address [ {addr_str} ]"
+        )
 
 
 def _build_policy_definitions(cfg: CliConfigBuilder, policy_defs: Dict[str, Any]) -> None:
-    """Render ArcOS routing-policy policy-definitions.
+    """Render ArcOS routing-policy policy-definitions using flat single-line commands.
 
     v1 handles:
     - Statement ordering (numeric-first, then lexicographic).
@@ -102,7 +99,8 @@ def _build_policy_definitions(cfg: CliConfigBuilder, policy_defs: Dict[str, Any]
         if not stmts:
             continue
 
-        cfg.append_line(f"routing-policy policy-definition {pname}")
+        # Base path for this policy definition
+        pol_base = f"routing-policy policy-definition {pname}"
 
         # Sort statements numerically when possible, else lexicographically
         def _stmt_sort_key(key: str) -> tuple[int, Any]:
@@ -113,7 +111,7 @@ def _build_policy_definitions(cfg: CliConfigBuilder, policy_defs: Dict[str, Any]
 
         for sname in sorted(stmts, key=_stmt_sort_key):
             stmt = stmts.get(sname) or {}
-            cfg.append_line(f" statement {sname}")
+            stmt_base = f"{pol_base} statement {sname}"
 
             conditions = stmt.get("conditions") or {}
             actions = stmt.get("actions") or {}
@@ -125,11 +123,11 @@ def _build_policy_definitions(cfg: CliConfigBuilder, policy_defs: Dict[str, Any]
 
             if prefix_set:
                 cfg.append_line(
-                    f"  conditions match-prefix-set prefix-set {prefix_set}"
+                    f"{stmt_base} conditions match-prefix-set prefix-set {prefix_set}"
                 )
             if mps_opt:
                 cfg.append_line(
-                    f"  conditions match-prefix-set match-set-options {mps_opt}"
+                    f"{stmt_base} conditions match-prefix-set match-set-options {mps_opt}"
                 )
 
             # Match next-hop-set --------------------------------------
@@ -139,11 +137,11 @@ def _build_policy_definitions(cfg: CliConfigBuilder, policy_defs: Dict[str, Any]
 
             if nh_set:
                 cfg.append_line(
-                    f"  conditions match-next-hop-set next-hop-set {nh_set}"
+                    f"{stmt_base} conditions match-next-hop-set next-hop-set {nh_set}"
                 )
             if mnh_opt:
                 cfg.append_line(
-                    "  conditions match-next-hop-set match-set-options "
+                    f"{stmt_base} conditions match-next-hop-set match-set-options "
                     f"{mnh_opt}"
                 )
 
@@ -154,44 +152,40 @@ def _build_policy_definitions(cfg: CliConfigBuilder, policy_defs: Dict[str, Any]
 
             if tag_set:
                 cfg.append_line(
-                    f"  conditions match-tag-set tag-set {tag_set}"
+                    f"{stmt_base} conditions match-tag-set tag-set {tag_set}"
                 )
             if mts_opt:
                 cfg.append_line(
-                    f"  conditions match-tag-set match-set-options {mts_opt}"
+                    f"{stmt_base} conditions match-tag-set match-set-options {mts_opt}"
                 )
 
             # TODO: bgp_conditions, igp_conditions, etc.
 
             # Actions --------------------------------------------------
             if actions.get("accept_route"):
-                cfg.append_line("  actions accept-route")
+                cfg.append_line(f"{stmt_base} actions accept-route")
             if actions.get("reject_route"):
-                cfg.append_line("  actions reject-route")
+                cfg.append_line(f"{stmt_base} actions reject-route")
             if actions.get("next_policy"):
-                cfg.append_line("  actions next-policy")
+                cfg.append_line(f"{stmt_base} actions next-policy")
 
             igp = actions.get("igp_actions") or {}
             if igp:
                 set_tag = igp.get("set_tag")
                 if set_tag is not None:
                     cfg.append_line(
-                        f"  actions igp-actions set-tag {set_tag}"
+                        f"{stmt_base} actions igp-actions set-tag {set_tag}"
                     )
 
                 isis = igp.get("isis_actions") or {}
                 set_level = isis.get("set_level")
                 if set_level is not None:
                     cfg.append_line(
-                        f"  actions igp-actions isis-actions set-level {set_level}"
+                        f"{stmt_base} actions igp-actions isis-actions set-level {set_level}"
                     )
 
             # TODO: ospf_actions (set_metric), bgp_actions (set-community,
             # med, local-pref, etc.)
-
-            cfg.append_line(" !")
-
-        cfg.append_line("!")
 
 
 class RoutePolicy(ABC):
