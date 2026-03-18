@@ -86,6 +86,52 @@ def load_config_file(
     log.info("load_config_file: completed successfully on %s", device.name)
 
 
+def rollback_configuration(
+    device,
+    sno: int = 0,
+    timeout: int = 120,
+) -> None:
+    """Rollback device configuration to a previous commit point.
+
+    Uses the confd ``rollback configuration <sno>`` command followed by
+    ``commit``.  The underlying Unicon Rollback service handles spinner
+    characters and Proceed? prompts.
+
+    Args:
+        device: pyATS device object (must be connected).
+        sno (int): Rollback sequence number.  ``0`` means the most recent
+            commit (i.e. undo the last change).  Defaults to 0.
+        timeout (int): Maximum seconds to wait for commit.  Defaults to 120.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If rollback or commit fails on the device.
+
+    Example:
+        >>> rollback_configuration(device)            # rollback most recent commit
+        >>> rollback_configuration(device, sno=3)     # rollback to commit #3
+        >>> rollback_configuration(device, timeout=180)
+    """
+    log.info(
+        "rollback_configuration: calling device.rollback(sno=%d, timeout=%d) on %s",
+        sno,
+        timeout,
+        device.name,
+    )
+    try:
+        device.rollback(sno=sno, timeout=timeout)
+    except SubCommandFailure:
+        raise
+    except Exception as exc:
+        raise SubCommandFailure(
+            f"device.rollback failed on {device.name}: {exc}"
+        ) from exc
+
+    log.info("rollback_configuration: completed successfully on %s", device.name)
+
+
 # ── Private helpers ────────────────────────────────────────────────────────────
 
 
