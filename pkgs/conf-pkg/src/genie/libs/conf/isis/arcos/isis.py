@@ -123,6 +123,16 @@ class Isis(ABC):
             type=(None, managedattribute.test_istype(str)),
             doc='SRMS mapping name to advertise')
 
+        # Flexible Algorithm Definitions (global)
+        flexible_algorithms = managedattribute(
+            name='flexible_algorithms',
+            default=None,
+            type=(None, managedattribute.test_istype(dict)),
+            doc='Dict of flex-algo definitions keyed by algorithm ID (128-255). '
+                'Each value is a dict with keys: advertise_definition_enabled (bool), '
+                'metric_type (str: IGP_METRIC|TE_METRIC|LINK_DELAY), '
+                'admin_groups_include_any (list of str)')
+
         # Global auto-cost reference bandwidth
         auto_cost_reference_bandwidth = managedattribute(
             name='auto_cost_reference_bandwidth',
@@ -519,6 +529,71 @@ class Isis(ABC):
                                 'global dynamic-delay-measurement '
                                 f'advertisement-interval {ddm_adv_interval}'
                             )
+
+                        # ========================================
+                        # FLEXIBLE ALGORITHM DEFINITIONS
+                        # ========================================
+
+                        flex_algos = attributes.value('flexible_algorithms')
+                        if flex_algos and isinstance(flex_algos, dict):
+                            for algo_id in sorted(flex_algos.keys()):
+                                algo_attrs = flex_algos[algo_id]
+                                if not isinstance(algo_attrs, dict):
+                                    # Bare flex-algo with no sub-attributes
+                                    configurations.append_line(
+                                        f'global flexible-algorithm {algo_id}'
+                                    )
+                                    configurations.append_line('!')
+                                    continue
+
+                                adv_enabled = algo_attrs.get(
+                                    'advertise_definition_enabled'
+                                )
+                                metric_type = algo_attrs.get('metric_type')
+                                admin_groups = algo_attrs.get(
+                                    'admin_groups_include_any'
+                                )
+
+                                # If no sub-attributes set, emit bare line
+                                if (
+                                    adv_enabled is None
+                                    and metric_type is None
+                                    and admin_groups is None
+                                ):
+                                    configurations.append_line(
+                                        f'global flexible-algorithm {algo_id}'
+                                    )
+                                    configurations.append_line('!')
+                                else:
+                                    with configurations.submode_context(
+                                        f'global flexible-algorithm {algo_id}'
+                                    ):
+                                        if adv_enabled is not None:
+                                            adv_str = (
+                                                'true' if adv_enabled else 'false'
+                                            )
+                                            configurations.append_line(
+                                                'advertise-definition enabled '
+                                                f'{adv_str}'
+                                            )
+                                        if metric_type:
+                                            configurations.append_line(
+                                                f'metric-type {metric_type}'
+                                            )
+                                        if admin_groups:
+                                            if isinstance(
+                                                admin_groups, (list, tuple)
+                                            ):
+                                                groups_str = ' '.join(
+                                                    str(g) for g in admin_groups
+                                                )
+                                            else:
+                                                groups_str = str(admin_groups)
+                                            configurations.append_line(
+                                                f'admin-groups include-any '
+                                                f'[ {groups_str} ]'
+                                            )
+                                    configurations.append_line('!')
 
                         # ========================================
                         # LSP / SPF TIMERS
@@ -1060,6 +1135,14 @@ class Isis(ABC):
                 type=(None, managedattribute.test_istype(dict)),
                 doc='IPv6 Prefix-SID: {algorithm, sid_type, value, label_option, clear_n_flag}')
 
+            # Flexible-algorithm admin-groups (interface-level)
+            flex_algo_admin_groups = managedattribute(
+                name='flex_algo_admin_groups',
+                default=None,
+                type=(None, managedattribute.test_istype(list)),
+                doc='List of admin-group names for flex-algo on this interface '
+                    '(e.g., ["green", "red", "yellow"])')
+
             # Interface-level authentication keychain and auth-type
             auth_keychain = managedattribute(
                 name='auth_keychain',
@@ -1116,6 +1199,19 @@ class Isis(ABC):
                         network_type = network_type_map.get(if_type, 'POINT_TO_POINT')
                         configurations.append_line(
                             f'network-type {network_type}'
+                        )
+
+                    # Flexible-algorithm admin-groups (interface-level)
+                    flex_admin_groups = attributes.value('flex_algo_admin_groups')
+                    if flex_admin_groups:
+                        if isinstance(flex_admin_groups, (list, tuple)):
+                            groups_str = ' '.join(
+                                str(g) for g in flex_admin_groups
+                            )
+                        else:
+                            groups_str = str(flex_admin_groups)
+                        configurations.append_line(
+                            f'flexible-algorithm admin-groups [ {groups_str} ]'
                         )
 
                     mpls_igp_ldp_sync = attributes.value('mpls_igp_ldp_sync_enabled')
