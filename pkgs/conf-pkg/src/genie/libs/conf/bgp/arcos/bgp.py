@@ -71,7 +71,7 @@ class Bgp(ABC):
                 '(e.g., "IPV4_UNICAST"). Each value is a dict with optional keys: '
                 'ibgp_maximum_paths (int), add_paths_calculate (str), '
                 'networks (list of str), aggregate_addresses (dict), '
-                'rtfilter_enabled (bool)')
+                'rtfilter_enabled (bool), null_label (str)')
 
         # ========================================
         # NEIGHBORS (dict keyed by neighbor address)
@@ -247,7 +247,8 @@ class Bgp(ABC):
 
             has_content = False
             for key in ('ibgp_maximum_paths', 'add_paths_calculate',
-                        'networks', 'aggregate_addresses', 'rtfilter_enabled'):
+                        'networks', 'aggregate_addresses', 'rtfilter_enabled',
+                        'null_label'):
                 if afi_attrs.get(key) is not None:
                     has_content = True
                     break
@@ -260,6 +261,12 @@ class Bgp(ABC):
             with configurations.submode_context(
                 f'global afi-safi {afi_name}'
             ):
+                null_label = afi_attrs.get('null_label')
+                if null_label is not None:
+                    configurations.append_line(
+                        f'null-label {null_label}'
+                    )
+
                 ibgp_max = afi_attrs.get('ibgp_maximum_paths')
                 if ibgp_max is not None:
                     configurations.append_line(
@@ -456,7 +463,12 @@ class Bgp(ABC):
             with configurations.submode_context(f'afi-safi {afi_name}'):
                 add_send = afi_cfg.get('add_paths_send')
                 if add_send is not None:
-                    val = 'true' if add_send else 'false'
+                    # String values like "BACKUP", "ALL" are passed through;
+                    # bool True/False becomes "true"/"false"
+                    if isinstance(add_send, bool):
+                        val = 'true' if add_send else 'false'
+                    else:
+                        val = str(add_send)
                     configurations.append_line(f'add-paths send {val}')
 
                 add_recv = afi_cfg.get('add_paths_receive')
@@ -469,11 +481,11 @@ class Bgp(ABC):
                     if isinstance(import_pol, (list, tuple)):
                         pol_str = ' '.join(str(p) for p in import_pol)
                         configurations.append_line(
-                            f'import-policy [ {pol_str} ]'
+                            f'apply-policy import-policy [ {pol_str} ]'
                         )
                     else:
                         configurations.append_line(
-                            f'import-policy [ {import_pol} ]'
+                            f'apply-policy import-policy [ {import_pol} ]'
                         )
 
                 export_pol = afi_cfg.get('export_policy')
@@ -481,11 +493,11 @@ class Bgp(ABC):
                     if isinstance(export_pol, (list, tuple)):
                         pol_str = ' '.join(str(p) for p in export_pol)
                         configurations.append_line(
-                            f'export-policy [ {pol_str} ]'
+                            f'apply-policy export-policy [ {pol_str} ]'
                         )
                     else:
                         configurations.append_line(
-                            f'export-policy [ {export_pol} ]'
+                            f'apply-policy export-policy [ {export_pol} ]'
                         )
 
             configurations.append_line('!')

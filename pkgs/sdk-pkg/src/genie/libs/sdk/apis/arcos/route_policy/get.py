@@ -21,10 +21,10 @@ def _parse_routing_policy_defined_sets(
     device,
     command: str = "show routing-policy defined-sets",
 ) -> Dict[str, Any]:
-    """Return the normalized ``defined_sets`` subtree for ArcOS.
+    """Return the normalized ``defined-sets`` subtree for ArcOS.
 
     Executes ``device.parse(command)`` and extracts
-    ``parsed["routing_policy"]["defined_sets"]``.
+    ``parsed["routing-policy"]["defined-sets"]``.
     """
 
     try:
@@ -35,15 +35,15 @@ def _parse_routing_policy_defined_sets(
         log.error("Failed to parse %r for routing-policy defined-sets: %s", command, exc)
         return {}
 
-    rp_root = parsed.get("routing_policy", {}) or {}
-    return rp_root.get("defined_sets", {}) or {}
+    rp_root = parsed.get("routing-policy", {}) or {}
+    return rp_root.get("defined-sets", {}) or {}
 
 
 def _parse_routing_policy_policy_definitions(
     device,
     command: str = "show routing-policy policy-definition",
 ) -> Dict[str, Any]:
-    """Return the normalized ``policy_definitions`` subtree for ArcOS."""
+    """Return the normalized ``policy-definitions`` subtree for ArcOS."""
 
     try:
         parsed = device.parse(command)
@@ -57,15 +57,15 @@ def _parse_routing_policy_policy_definitions(
         )
         return {}
 
-    rp_root = parsed.get("routing_policy", {}) or {}
-    return rp_root.get("policy_definitions", {}) or {}
+    rp_root = parsed.get("routing-policy", {}) or {}
+    return rp_root.get("policy-definitions", {}) or {}
 
 
 def _parse_running_config_routing_policy(
     device,
     command: str = "show running-config routing-policy",
 ) -> Dict[str, Any]:
-    """Return the combined ``routing_policy`` tree from running-config."""
+    """Return the combined ``routing-policy`` tree from running-config."""
 
     try:
         parsed = device.parse(command)
@@ -79,7 +79,7 @@ def _parse_running_config_routing_policy(
         )
         return {}
 
-    return parsed.get("routing_policy", {}) or {}
+    return parsed.get("routing-policy", {}) or {}
 
 
 # ---------------------------------------------------------------------------
@@ -96,10 +96,10 @@ def get_routing_policy_defined_sets(
 
     The returned dict may contain the following optional keys:
 
-    - ``"prefix_sets"``
-    - ``"string_sets"``
-    - ``"tag_sets"``
-    - ``"next_hop_sets"``
+    - ``"prefix-sets"``
+    - ``"string-sets"``
+    - ``"tag-sets"``
+    - ``"next-hop-sets"``
     """
 
     return _parse_routing_policy_defined_sets(device, command=command)
@@ -114,7 +114,7 @@ def get_prefix_set(
     """Return a single prefix-set definition by name, or ``None`` if absent."""
 
     defined_sets = _parse_routing_policy_defined_sets(device, command=command)
-    prefix_sets = defined_sets.get("prefix_sets", {}) or {}
+    prefix_sets = defined_sets.get("prefix-sets", {}) or {}
     return prefix_sets.get(name)
 
 
@@ -127,7 +127,7 @@ def get_string_set(
     """Return a single string-set definition by name, or ``None`` if absent."""
 
     defined_sets = _parse_routing_policy_defined_sets(device, command=command)
-    string_sets = defined_sets.get("string_sets", {}) or {}
+    string_sets = defined_sets.get("string-sets", {}) or {}
     return string_sets.get(name)
 
 
@@ -140,7 +140,7 @@ def get_tag_set(
     """Return a single tag-set definition by name, or ``None`` if absent."""
 
     defined_sets = _parse_routing_policy_defined_sets(device, command=command)
-    tag_sets = defined_sets.get("tag_sets", {}) or {}
+    tag_sets = defined_sets.get("tag-sets", {}) or {}
     return tag_sets.get(name)
 
 
@@ -153,7 +153,7 @@ def get_next_hop_set(
     """Return a single next-hop-set definition by name, or ``None`` if absent."""
 
     defined_sets = _parse_routing_policy_defined_sets(device, command=command)
-    nh_sets = defined_sets.get("next_hop_sets", {}) or {}
+    nh_sets = defined_sets.get("next-hop-sets", {}) or {}
     return nh_sets.get(name)
 
 
@@ -230,8 +230,8 @@ def get_running_config_routing_policy(
     shape::
 
         {
-            "defined_sets": {...}?,
-            "policy_definitions": {...}?,
+            "defined-sets": {...}?,
+            "policy-definitions": {...}?,
         }
     """
 
