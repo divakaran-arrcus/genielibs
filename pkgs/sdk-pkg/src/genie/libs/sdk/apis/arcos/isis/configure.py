@@ -4396,3 +4396,282 @@ def restart_isis_instance(device, network_instance='default', protocol_instance=
             f"Could not restart ISIS instance {protocol_instance} "
             f"on {device.name}. Error:\n{e}"
         )
+
+
+# ===========================================================================
+# Flex-Algo Configure APIs
+# ===========================================================================
+
+def configure_isis_flexible_algorithm(device, algo_id, metric_type=None,
+                                       advertise_definition=None,
+                                       network_instance='default',
+                                       protocol_instance='default'):
+    """Configure an ISIS flexible-algorithm definition.
+
+    Args:
+        device (obj): Device object
+        algo_id (int): Flexible-algorithm ID (128-255)
+        metric_type (str, optional): Metric type ('IGP_METRIC', 'TE_METRIC',
+            'LINK_DELAY'). Defaults to None.
+        advertise_definition (bool, optional): Advertise definition in LSPs.
+            Defaults to None.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS flexible-algorithm
+
+    Example:
+        >>> configure_isis_flexible_algorithm(device, 128, metric_type='TE_METRIC')
+    """
+    log.info(
+        f"Configuring ISIS flexible-algorithm {algo_id} on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global flexible-algorithm {algo_id}',
+    ]
+
+    if metric_type is not None:
+        config.append(f'metric-type {metric_type}')
+
+    if advertise_definition is not None:
+        val = 'true' if advertise_definition else 'false'
+        config.append(f'advertise-definition enabled {val}')
+
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS flexible-algorithm {algo_id} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_flexible_algorithm(device, algo_id,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Remove an ISIS flexible-algorithm definition.
+
+    Args:
+        device (obj): Device object
+        algo_id (int): Flexible-algorithm ID (128-255)
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS flexible-algorithm
+
+    Example:
+        >>> unconfigure_isis_flexible_algorithm(device, 128)
+    """
+    log.info(
+        f"Removing ISIS flexible-algorithm {algo_id} from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'no global flexible-algorithm {algo_id}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS flexible-algorithm {algo_id} from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_flex_algo_admin_groups(device, interface, admin_groups,
+                                                      network_instance='default',
+                                                      protocol_instance='default'):
+    """Configure flex-algo admin-groups on an ISIS interface.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name (e.g., 'swp1')
+        admin_groups (list): List of admin-group names (e.g., ['green', 'red'])
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure flex-algo admin-groups
+
+    Example:
+        >>> configure_isis_interface_flex_algo_admin_groups(
+        ...     device, 'swp1', ['green', 'red']
+        ... )
+    """
+    log.info(
+        f"Configuring ISIS flex-algo admin-groups on {interface} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    groups_str = ' '.join(str(g) for g in admin_groups)
+    config = [
+        intf_context,
+        f'flexible-algorithm admin-groups [ {groups_str} ]',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS flex-algo admin-groups on {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_flex_algo_admin_groups(device, interface,
+                                                        network_instance='default',
+                                                        protocol_instance='default'):
+    """Remove flex-algo admin-groups from an ISIS interface.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove flex-algo admin-groups
+
+    Example:
+        >>> unconfigure_isis_interface_flex_algo_admin_groups(device, 'swp1')
+    """
+    log.info(
+        f"Removing ISIS flex-algo admin-groups from {interface} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'no flexible-algorithm admin-groups',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS flex-algo admin-groups from {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_flex_algo_metric(device, interface, level, algo_id,
+                                                te_metric=None, delay_metric=None,
+                                                network_instance='default',
+                                                protocol_instance='default'):
+    """Configure flex-algo TE/delay metric on an ISIS interface at a specific level.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name
+        level (int): ISIS level (1 or 2)
+        algo_id (int): Flexible-algorithm ID (128-255)
+        te_metric (int, optional): TE metric value. Defaults to None.
+        delay_metric (int, optional): Delay metric value. Defaults to None.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure flex-algo metric
+
+    Example:
+        >>> configure_isis_interface_flex_algo_metric(
+        ...     device, 'swp1', 2, 128, te_metric=100
+        ... )
+    """
+    log.info(
+        f"Configuring ISIS flex-algo {algo_id} metric on {interface} level {level} "
+        f"on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {level} flexible-algorithm {algo_id}',
+    ]
+
+    if te_metric is not None:
+        config.append(f'te-metric {te_metric}')
+
+    if delay_metric is not None:
+        config.append(f'delay-metric {delay_metric}')
+
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS flex-algo metric on {interface} level {level} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_flex_algo_metric(device, interface, level, algo_id,
+                                                  network_instance='default',
+                                                  protocol_instance='default'):
+    """Remove flex-algo TE/delay metric from an ISIS interface at a specific level.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name
+        level (int): ISIS level (1 or 2)
+        algo_id (int): Flexible-algorithm ID (128-255)
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove flex-algo metric
+
+    Example:
+        >>> unconfigure_isis_interface_flex_algo_metric(device, 'swp1', 2, 128)
+    """
+    log.info(
+        f"Removing ISIS flex-algo {algo_id} metric from {interface} level {level} "
+        f"on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'no level {level} flexible-algorithm {algo_id}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS flex-algo metric from {interface} level {level} "
+            f"on {device.name}. Error:\n{e}"
+        )
