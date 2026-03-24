@@ -439,3 +439,145 @@ def get_bgp_route_count(device, afi_safi='IPV4_UNICAST',
         protocol_instance=protocol_instance,
     )
     return len(routes)
+
+
+# ---------------------------------------------------------------------------
+# Internal helper — Running config
+# ---------------------------------------------------------------------------
+
+def _parse_bgp_running_config(device, network_instance='default'):
+    """Parse BGP running configuration using ShowBgpConfig parser.
+
+    Args:
+        device: pyATS device object.
+        network_instance: Network instance name.
+
+    Returns:
+        Dict with the BGP instance data for the given NI,
+        or empty dict on error.
+    """
+    try:
+        from genie.libs.parser.arcos.show_bgp import ShowBgpConfig
+        parser = ShowBgpConfig(device=device)
+        parsed = parser.parse(network_instance=network_instance)
+    except SchemaEmptyParserError:
+        log.debug("_parse_bgp_running_config: no data found")
+        return {}
+    except SubCommandFailure as exc:
+        log.debug("_parse_bgp_running_config: SubCommandFailure - %s", exc)
+        return {}
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("_parse_bgp_running_config: Unexpected exception - %s", exc)
+        return {}
+
+    # Navigate to first BGP instance within the NI
+    ni_data = parsed.get("network-instance", {}).get(network_instance, {})
+    bgp_instances = ni_data.get("bgp", {})
+    if not bgp_instances:
+        return {}
+
+    # Return the first (typically "default") BGP instance
+    first_key = next(iter(bgp_instances))
+    return bgp_instances[first_key]
+
+
+# ---------------------------------------------------------------------------
+# Public get APIs — Running config
+# ---------------------------------------------------------------------------
+
+def get_bgp_running_config(device,
+                            network_instance='default') -> Dict[str, Any]:
+    """Get full BGP running configuration on ArcOS.
+
+    Uses the ShowBgpConfig parser to retrieve the parsed running-config
+    with namespace prefixes stripped and structure flattened.
+
+    Args:
+        device: pyATS device object.
+        network_instance: Network instance name (default: "default").
+
+    Returns:
+        Dict with keys 'config', 'neighbors', 'peer-groups' (all optional),
+        or empty dict if BGP is not configured.
+    """
+    return _parse_bgp_running_config(device, network_instance)
+
+
+def get_bgp_running_config_global(device,
+                                    network_instance='default') -> Dict[str, Any]:
+    """Get BGP global running configuration on ArcOS.
+
+    Returns the 'config' section which contains global scalars
+    (as, router-id, adj-rib-out-post, etc.) and afi-safis.
+
+    Args:
+        device: pyATS device object.
+        network_instance: Network instance name (default: "default").
+
+    Returns:
+        Dict with global config fields, or empty dict.
+    """
+    inst = _parse_bgp_running_config(device, network_instance)
+    return inst.get("config", {})
+
+
+def get_bgp_running_config_neighbors(device,
+                                       network_instance='default') -> Dict[str, Any]:
+    """Get all BGP neighbor configurations from running-config on ArcOS.
+
+    Args:
+        device: pyATS device object.
+        network_instance: Network instance name (default: "default").
+
+    Returns:
+        Dict of neighbors keyed by address, or empty dict.
+    """
+    inst = _parse_bgp_running_config(device, network_instance)
+    return inst.get("neighbors", {})
+
+
+def get_bgp_running_config_neighbor(device, neighbor,
+                                      network_instance='default') -> Optional[Dict[str, Any]]:
+    """Get a specific BGP neighbor configuration from running-config on ArcOS.
+
+    Args:
+        device: pyATS device object.
+        neighbor: Neighbor address (IPv4 or IPv6).
+        network_instance: Network instance name (default: "default").
+
+    Returns:
+        Dict with neighbor config data if found, None otherwise.
+    """
+    neighbors = get_bgp_running_config_neighbors(device, network_instance)
+    return neighbors.get(neighbor)
+
+
+def get_bgp_running_config_peer_groups(device,
+                                         network_instance='default') -> Dict[str, Any]:
+    """Get all BGP peer-group configurations from running-config on ArcOS.
+
+    Args:
+        device: pyATS device object.
+        network_instance: Network instance name (default: "default").
+
+    Returns:
+        Dict of peer-groups keyed by name, or empty dict.
+    """
+    inst = _parse_bgp_running_config(device, network_instance)
+    return inst.get("peer-groups", {})
+
+
+def get_bgp_running_config_peer_group(device, peer_group,
+                                        network_instance='default') -> Optional[Dict[str, Any]]:
+    """Get a specific BGP peer-group configuration from running-config on ArcOS.
+
+    Args:
+        device: pyATS device object.
+        peer_group: Peer-group name.
+        network_instance: Network instance name (default: "default").
+
+    Returns:
+        Dict with peer-group config data if found, None otherwise.
+    """
+    peer_groups = get_bgp_running_config_peer_groups(device, network_instance)
+    return peer_groups.get(peer_group)
