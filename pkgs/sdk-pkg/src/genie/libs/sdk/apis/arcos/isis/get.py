@@ -807,3 +807,246 @@ def get_isis_global_timers(
 
     log.debug("get_isis_global_timers: returning timers: %s", timers)
     return timers
+
+
+# ---------------------------------------------------------------------------
+# Flex-Algo Get APIs
+# ---------------------------------------------------------------------------
+
+def get_isis_flex_algo_routes(
+    device,
+    afi: str = "IPV4",
+    algo: str = "*",
+    instance: str = "default",
+) -> Dict[str, Any]:
+    """Get ISIS flex-algo routes for a given AF and algorithm.
+
+    Args:
+        device: pyATS device object.
+        afi: Address family ('IPV4' or 'IPV6').
+        algo: Flexible-algorithm ID (e.g., '128') or '*' for all.
+        instance: ISIS instance name (default: "default").
+
+    Returns:
+        Dict: algorithms → {algo_id → {routes → {prefix → route_data}}},
+        or empty dict if none found.
+    """
+    try:
+        from genie.libs.parser.arcos.show_isis import ShowIsisFlexAlgoRoute
+        parser = ShowIsisFlexAlgoRoute(device=device)
+        parsed = parser.parse(
+            network_instance="default",
+            protocol_instance=instance,
+            afi=afi,
+            algo=algo,
+        )
+    except SchemaEmptyParserError:
+        log.debug("get_isis_flex_algo_routes: no data found")
+        return {}
+    except Exception as exc:
+        log.warning("get_isis_flex_algo_routes: %s", exc)
+        return {}
+
+    isis = _safe_get_isis(parsed, ni="default", instance=instance)
+    return isis.get("flex-algo-routes", {})
+
+
+def get_isis_flex_algo_route(
+    device,
+    prefix: str,
+    afi: str = "IPV4",
+    algo: str = "*",
+    instance: str = "default",
+) -> Optional[Dict[str, Any]]:
+    """Get a specific ISIS flex-algo route by prefix.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix (e.g., '10.0.0.0/24').
+        afi: Address family ('IPV4' or 'IPV6').
+        algo: Flexible-algorithm ID or '*' for all.
+        instance: ISIS instance name.
+
+    Returns:
+        Dict with route data if found, None otherwise.
+    """
+    try:
+        from genie.libs.parser.arcos.show_isis import ShowIsisFlexAlgoRoute
+        parser = ShowIsisFlexAlgoRoute(device=device)
+        parsed = parser.parse(
+            network_instance="default",
+            protocol_instance=instance,
+            afi=afi,
+            algo=algo,
+            prefix=prefix,
+        )
+    except SchemaEmptyParserError:
+        log.debug("get_isis_flex_algo_route: prefix %s not found", prefix)
+        return None
+    except Exception as exc:
+        log.warning("get_isis_flex_algo_route: %s", exc)
+        return None
+
+    isis = _safe_get_isis(parsed, ni="default", instance=instance)
+    flex_routes = isis.get("flex-algo-routes", {})
+
+    # Search through AF entries and algorithms for the prefix
+    for af_data in flex_routes.values():
+        algorithms = af_data.get("algorithms", {})
+        for algo_data in algorithms.values():
+            routes = algo_data.get("routes", {})
+            if prefix in routes:
+                return routes[prefix]
+
+    return None
+
+
+def get_isis_flex_algo_route_count(
+    device,
+    afi: str = "IPV4",
+    algo: str = "*",
+    instance: str = "default",
+) -> int:
+    """Get count of ISIS flex-algo routes.
+
+    Args:
+        device: pyATS device object.
+        afi: Address family ('IPV4' or 'IPV6').
+        algo: Flexible-algorithm ID or '*' for all.
+        instance: ISIS instance name.
+
+    Returns:
+        Total number of flex-algo routes across all algorithms.
+    """
+    flex_routes = get_isis_flex_algo_routes(device, afi=afi, algo=algo, instance=instance)
+
+    count = 0
+    for af_data in flex_routes.values():
+        algorithms = af_data.get("algorithms", {})
+        for algo_data in algorithms.values():
+            routes = algo_data.get("routes", {})
+            count += len(routes)
+
+    return count
+
+
+def is_isis_flex_algo_route_present(
+    device,
+    prefix: str,
+    afi: str = "IPV4",
+    algo: str = "*",
+    instance: str = "default",
+) -> bool:
+    """Check if an ISIS flex-algo route exists.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix to check.
+        afi: Address family ('IPV4' or 'IPV6').
+        algo: Flexible-algorithm ID or '*'.
+        instance: ISIS instance name.
+
+    Returns:
+        True if route found, False otherwise.
+    """
+    route = get_isis_flex_algo_route(
+        device, prefix=prefix, afi=afi, algo=algo, instance=instance
+    )
+    return route is not None
+
+
+def get_isis_flex_algo_fast_reroute(
+    device,
+    afi: str = "IPV4",
+    algo: str = "*",
+    instance: str = "default",
+) -> Dict[str, Any]:
+    """Get ISIS flex-algo fast-reroute entries for a given AF and algorithm.
+
+    Args:
+        device: pyATS device object.
+        afi: Address family ('IPV4' or 'IPV6').
+        algo: Flexible-algorithm ID or '*' for all.
+        instance: ISIS instance name.
+
+    Returns:
+        Dict of flex-algo FRR data, or empty dict if none found.
+    """
+    try:
+        from genie.libs.parser.arcos.show_isis import ShowIsisFlexAlgoFastReroute
+        parser = ShowIsisFlexAlgoFastReroute(device=device)
+        parsed = parser.parse(
+            network_instance="default",
+            protocol_instance=instance,
+            afi=afi,
+            algo=algo,
+        )
+    except SchemaEmptyParserError:
+        log.debug("get_isis_flex_algo_fast_reroute: no data found")
+        return {}
+    except Exception as exc:
+        log.warning("get_isis_flex_algo_fast_reroute: %s", exc)
+        return {}
+
+    isis = _safe_get_isis(parsed, ni="default", instance=instance)
+    return isis.get("flex-algo-fast-reroute", {})
+
+
+def get_isis_flex_algo_definitions(
+    device,
+    instance: str = "default",
+    network_instance: str = "default",
+) -> Dict[str, Any]:
+    """Get ISIS flex-algo definitions from running config.
+
+    Uses the ShowIsisConfig parser to extract flexible-algorithm definitions.
+
+    Args:
+        device: pyATS device object.
+        instance: ISIS protocol instance name.
+        network_instance: Network instance name.
+
+    Returns:
+        Dict of flex-algo definitions keyed by algorithm ID string,
+        or empty dict if none found.
+    """
+    try:
+        cmd = (
+            f"show network-instance {network_instance} protocol ISIS "
+            f"{instance} running-config"
+        )
+        parsed = device.parse(cmd)
+    except SchemaEmptyParserError:
+        log.debug("get_isis_flex_algo_definitions: no data found")
+        return {}
+    except Exception as exc:
+        log.warning("get_isis_flex_algo_definitions: %s", exc)
+        return {}
+
+    isis = _safe_get_isis(parsed, ni=network_instance, instance=instance)
+    global_data = isis.get("global", {})
+    return global_data.get("flexible-algorithms", {})
+
+
+def get_isis_flex_algo_definition(
+    device,
+    algo_id: int,
+    instance: str = "default",
+    network_instance: str = "default",
+) -> Optional[Dict[str, Any]]:
+    """Get a specific ISIS flex-algo definition by algorithm ID.
+
+    Args:
+        device: pyATS device object.
+        algo_id: Flexible-algorithm ID (128-255).
+        instance: ISIS protocol instance name.
+        network_instance: Network instance name.
+
+    Returns:
+        Dict with definition data (id, metric-type, advertise-definition-enabled),
+        or None if not found.
+    """
+    definitions = get_isis_flex_algo_definitions(
+        device, instance=instance, network_instance=network_instance
+    )
+    return definitions.get(str(algo_id))

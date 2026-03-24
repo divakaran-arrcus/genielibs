@@ -19,6 +19,8 @@ from genie.libs.sdk.apis.arcos.isis.get import (
     get_isis_routes,
     get_isis_system_id,
     is_isis_adjacency_present,
+    is_isis_flex_algo_route_present,
+    get_isis_flex_algo_definitions,
 )
 
 log = logging.getLogger(__name__)
@@ -252,6 +254,157 @@ def verify_isis_route_present(
             "verify_isis_route_present(%s, af=%s): present=%s",
             prefix,
             address_family,
+            present,
+        )
+
+        if present:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Flex-Algo Verify APIs
+# ---------------------------------------------------------------------------
+
+def verify_isis_flex_algo_route_present(
+    device,
+    prefix: str,
+    afi: str = "IPV4",
+    algo: str = "*",
+    instance: str = "default",
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify that an ISIS flex-algo route is present.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix to check (e.g., '10.0.0.0/24').
+        afi: Address family ('IPV4' or 'IPV6').
+        algo: Flexible-algorithm ID or '*' for all.
+        instance: ISIS instance name.
+        max_time: Maximum time to wait (seconds).
+        check_interval: Poll interval (seconds).
+
+    Returns:
+        True if route is present within timeout, False otherwise.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            present = is_isis_flex_algo_route_present(
+                device, prefix=prefix, afi=afi, algo=algo, instance=instance
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("is_isis_flex_algo_route_present failed for %s: %s", prefix, exc)
+            present = False
+
+        log.debug(
+            "verify_isis_flex_algo_route_present(%s, algo=%s): present=%s",
+            prefix,
+            algo,
+            present,
+        )
+
+        if present:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+def verify_isis_flex_algo_route_not_present(
+    device,
+    prefix: str,
+    afi: str = "IPV4",
+    algo: str = "*",
+    instance: str = "default",
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify that an ISIS flex-algo route is NOT present.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix to check.
+        afi: Address family ('IPV4' or 'IPV6').
+        algo: Flexible-algorithm ID or '*'.
+        instance: ISIS instance name.
+        max_time: Maximum time to wait (seconds).
+        check_interval: Poll interval (seconds).
+
+    Returns:
+        True if route is absent within timeout, False otherwise.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            present = is_isis_flex_algo_route_present(
+                device, prefix=prefix, afi=afi, algo=algo, instance=instance
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("is_isis_flex_algo_route_present failed for %s: %s", prefix, exc)
+            present = True
+
+        log.debug(
+            "verify_isis_flex_algo_route_not_present(%s, algo=%s): present=%s",
+            prefix,
+            algo,
+            present,
+        )
+
+        if not present:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+def verify_isis_flex_algo_definition_present(
+    device,
+    algo_id: int,
+    instance: str = "default",
+    network_instance: str = "default",
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify that an ISIS flex-algo definition is configured.
+
+    Args:
+        device: pyATS device object.
+        algo_id: Flexible-algorithm ID (128-255).
+        instance: ISIS protocol instance name.
+        network_instance: Network instance name.
+        max_time: Maximum time to wait (seconds).
+        check_interval: Poll interval (seconds).
+
+    Returns:
+        True if definition exists within timeout, False otherwise.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            definitions = get_isis_flex_algo_definitions(
+                device, instance=instance, network_instance=network_instance
+            )
+            present = str(algo_id) in definitions
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error(
+                "get_isis_flex_algo_definitions failed for algo %s: %s", algo_id, exc
+            )
+            present = False
+
+        log.debug(
+            "verify_isis_flex_algo_definition_present(%s): present=%s",
+            algo_id,
             present,
         )
 
