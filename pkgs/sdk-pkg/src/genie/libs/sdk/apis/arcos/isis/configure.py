@@ -4675,3 +4675,993 @@ def unconfigure_isis_interface_flex_algo_metric(device, interface, level, algo_i
             f"Could not remove ISIS flex-algo metric from {interface} level {level} "
             f"on {device.name}. Error:\n{e}"
         )
+
+
+# ===========================================================================
+# Traffic Engineering Configure APIs
+# ===========================================================================
+
+def configure_isis_traffic_engineering_router_id(device, router_id, af='ipv4',
+                                                   network_instance='default',
+                                                   protocol_instance='default'):
+    """Configure ISIS traffic-engineering router-id.
+
+    Args:
+        device (obj): Device object
+        router_id (str): Router-id address (e.g., '1.1.1.1')
+        af (str, optional): Address family ('ipv4' or 'ipv6'). Defaults to 'ipv4'.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS TE router-id
+
+    Example:
+        >>> configure_isis_traffic_engineering_router_id(device, '1.1.1.1')
+    """
+    log.info(
+        f"Configuring ISIS TE {af} router-id {router_id} on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global traffic-engineering {af} router-id {router_id}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS TE router-id on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_traffic_engineering_router_id(device, af='ipv4',
+                                                     network_instance='default',
+                                                     protocol_instance='default'):
+    """Remove ISIS traffic-engineering router-id.
+
+    Args:
+        device (obj): Device object
+        af (str, optional): Address family ('ipv4' or 'ipv6'). Defaults to 'ipv4'.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS TE router-id
+
+    Example:
+        >>> unconfigure_isis_traffic_engineering_router_id(device)
+    """
+    log.info(f"Removing ISIS TE {af} router-id from {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'no global traffic-engineering {af} router-id',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS TE router-id from {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_level_traffic_engineering(device, level, enabled=True,
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Configure per-level ISIS traffic-engineering enabled state.
+
+    Args:
+        device (obj): Device object
+        level (int): ISIS level (1 or 2)
+        enabled (bool, optional): Enable TE. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS level TE
+
+    Example:
+        >>> configure_isis_level_traffic_engineering(device, 2, enabled=True)
+    """
+    val = 'true' if enabled else 'false'
+    log.info(
+        f"Configuring ISIS level {level} traffic-engineering enabled {val} "
+        f"on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {level} traffic-engineering enabled {val}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS level {level} TE on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_isis_level_traffic_engineering(device, level,
+                                                 network_instance='default',
+                                                 protocol_instance='default'):
+    """Remove per-level ISIS traffic-engineering configuration.
+
+    Args:
+        device (obj): Device object
+        level (int): ISIS level (1 or 2)
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS level TE
+
+    Example:
+        >>> unconfigure_isis_level_traffic_engineering(device, 2)
+    """
+    log.info(
+        f"Removing ISIS level {level} traffic-engineering from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'no level {level} traffic-engineering enabled',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS level {level} TE from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+# ===========================================================================
+# Flex-Algo Extended Configure APIs
+# ===========================================================================
+
+def configure_isis_flexible_algorithm_priority(device, algo_id, priority,
+                                                 network_instance='default',
+                                                 protocol_instance='default'):
+    """Configure priority for an ISIS flexible-algorithm definition.
+
+    Args:
+        device (obj): Device object
+        algo_id (int): Flexible-algorithm ID (128-255)
+        priority (int): Priority value (higher wins FAD election)
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure flex-algo priority
+
+    Example:
+        >>> configure_isis_flexible_algorithm_priority(device, 128, 100)
+    """
+    log.info(
+        f"Configuring ISIS flex-algo {algo_id} priority {priority} on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global flexible-algorithm {algo_id}',
+        f'priority {priority}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS flex-algo {algo_id} priority on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_flexible_algorithm_priority(device, algo_id,
+                                                   network_instance='default',
+                                                   protocol_instance='default'):
+    """Remove priority from an ISIS flexible-algorithm definition.
+
+    Args:
+        device (obj): Device object
+        algo_id (int): Flexible-algorithm ID (128-255)
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove flex-algo priority
+
+    Example:
+        >>> unconfigure_isis_flexible_algorithm_priority(device, 128)
+    """
+    log.info(
+        f"Removing ISIS flex-algo {algo_id} priority from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global flexible-algorithm {algo_id}',
+        'no priority',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS flex-algo {algo_id} priority from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_flexible_algorithm_admin_groups(device, algo_id, constraint_type,
+                                                     groups,
+                                                     network_instance='default',
+                                                     protocol_instance='default'):
+    """Configure admin-group constraints for an ISIS flexible-algorithm.
+
+    Args:
+        device (obj): Device object
+        algo_id (int): Flexible-algorithm ID (128-255)
+        constraint_type (str): Constraint type: 'include-any', 'exclude-any',
+            or 'include-all'
+        groups (list): List of admin-group names (e.g., ['red', 'green'])
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure flex-algo admin-group constraint
+
+    Example:
+        >>> configure_isis_flexible_algorithm_admin_groups(
+        ...     device, 128, 'include-any', ['red', 'green']
+        ... )
+    """
+    groups_str = ' '.join(str(g) for g in groups)
+    log.info(
+        f"Configuring ISIS flex-algo {algo_id} admin-groups {constraint_type} "
+        f"[ {groups_str} ] on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global flexible-algorithm {algo_id}',
+        f'admin-groups {constraint_type} [ {groups_str} ]',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS flex-algo {algo_id} admin-groups on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_flexible_algorithm_admin_groups(device, algo_id, constraint_type,
+                                                       network_instance='default',
+                                                       protocol_instance='default'):
+    """Remove admin-group constraints from an ISIS flexible-algorithm.
+
+    Args:
+        device (obj): Device object
+        algo_id (int): Flexible-algorithm ID (128-255)
+        constraint_type (str): Constraint type: 'include-any', 'exclude-any',
+            or 'include-all'
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove flex-algo admin-group constraint
+
+    Example:
+        >>> unconfigure_isis_flexible_algorithm_admin_groups(device, 128, 'include-any')
+    """
+    log.info(
+        f"Removing ISIS flex-algo {algo_id} admin-groups {constraint_type} "
+        f"from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global flexible-algorithm {algo_id}',
+        f'no admin-groups {constraint_type}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS flex-algo {algo_id} admin-groups from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+# ===========================================================================
+# Dynamic Delay Measurement Configure APIs
+# ===========================================================================
+
+def configure_isis_dynamic_delay_measurement(device, probe_interval=None,
+                                               advertisement_interval=None,
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Configure ISIS dynamic delay measurement parameters.
+
+    Args:
+        device (obj): Device object
+        probe_interval (int, optional): TWAMP probe interval in seconds.
+        advertisement_interval (int, optional): Advertisement interval in seconds.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure dynamic delay measurement
+
+    Example:
+        >>> configure_isis_dynamic_delay_measurement(device, probe_interval=20,
+        ...     advertisement_interval=60)
+    """
+    log.info(
+        f"Configuring ISIS dynamic-delay-measurement on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [isis_context]
+
+    if probe_interval is not None:
+        config.append(
+            f'global dynamic-delay-measurement probe-interval {probe_interval}'
+        )
+
+    if advertisement_interval is not None:
+        config.append(
+            f'global dynamic-delay-measurement advertisement-interval '
+            f'{advertisement_interval}'
+        )
+
+    if len(config) == 1:
+        log.warning("No dynamic-delay-measurement parameters provided")
+        return
+
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS dynamic-delay-measurement on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_dynamic_delay_measurement(device, network_instance='default',
+                                                 protocol_instance='default'):
+    """Remove ISIS dynamic delay measurement configuration.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove dynamic delay measurement
+
+    Example:
+        >>> unconfigure_isis_dynamic_delay_measurement(device)
+    """
+    log.info(
+        f"Removing ISIS dynamic-delay-measurement from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global dynamic-delay-measurement probe-interval',
+        'no global dynamic-delay-measurement advertisement-interval',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS dynamic-delay-measurement from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_flex_algo_delay_metric_dynamic(device, interface, level,
+                                                              network_instance='default',
+                                                              protocol_instance='default'):
+    """Configure dynamic delay metric for flex-algo on an ISIS interface level.
+
+    Sets the delay-metric to DYNAMIC (uses TWAMP measurements).
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name
+        level (int): ISIS level (1 or 2)
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure dynamic delay metric
+
+    Example:
+        >>> configure_isis_interface_flex_algo_delay_metric_dynamic(device, 'swp1', 2)
+    """
+    log.info(
+        f"Configuring ISIS flex-algo delay-metric DYNAMIC on {interface} "
+        f"level {level} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {level} flexible-algorithm delay-metric DYNAMIC',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS dynamic delay metric on {interface} "
+            f"level {level} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_flex_algo_delay_metric_dynamic(device, interface, level,
+                                                                network_instance='default',
+                                                                protocol_instance='default'):
+    """Remove dynamic delay metric for flex-algo from an ISIS interface level.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name
+        level (int): ISIS level (1 or 2)
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove dynamic delay metric
+
+    Example:
+        >>> unconfigure_isis_interface_flex_algo_delay_metric_dynamic(device, 'swp1', 2)
+    """
+    log.info(
+        f"Removing ISIS flex-algo delay-metric from {interface} level {level} "
+        f"on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'no level {level} flexible-algorithm delay-metric',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS dynamic delay metric from {interface} "
+            f"level {level} on {device.name}. Error:\n{e}"
+        )
+
+
+# ===========================================================================
+# SRMS (Segment Routing Mapping Server) Configure APIs
+# ===========================================================================
+
+def configure_isis_srms_mapping(device, mapping_name, network_instance='default',
+                                  protocol_instance='default'):
+    """Configure ISIS SRMS mapping name.
+
+    Args:
+        device (obj): Device object
+        mapping_name (str): SRMS mapping name to advertise
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS SRMS mapping
+
+    Example:
+        >>> configure_isis_srms_mapping(device, 'srms1')
+    """
+    log.info(f"Configuring ISIS SRMS mapping '{mapping_name}' on {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global segment-routing srms mapping {mapping_name}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS SRMS mapping on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_srms_mapping(device, network_instance='default',
+                                    protocol_instance='default'):
+    """Remove ISIS SRMS mapping configuration.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS SRMS mapping
+
+    Example:
+        >>> unconfigure_isis_srms_mapping(device)
+    """
+    log.info(f"Removing ISIS SRMS mapping from {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global segment-routing srms mapping',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS SRMS mapping from {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_srms_receive(device, enabled=True, network_instance='default',
+                                  protocol_instance='default'):
+    """Configure ISIS SRMS receive-enabled state.
+
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Enable SRMS receive. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS SRMS receive
+
+    Example:
+        >>> configure_isis_srms_receive(device, enabled=True)
+    """
+    val = 'true' if enabled else 'false'
+    log.info(f"Configuring ISIS SRMS receive-enabled {val} on {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global segment-routing srms receive-enabled {val}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS SRMS receive on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_srms_receive(device, network_instance='default',
+                                    protocol_instance='default'):
+    """Remove ISIS SRMS receive-enabled configuration.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS SRMS receive
+
+    Example:
+        >>> unconfigure_isis_srms_receive(device)
+    """
+    log.info(f"Removing ISIS SRMS receive-enabled from {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global segment-routing srms receive-enabled',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS SRMS receive from {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_srms_advertise(device, enabled=True, network_instance='default',
+                                    protocol_instance='default'):
+    """Configure ISIS SRMS advertise-enabled state.
+
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Enable SRMS advertise. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS SRMS advertise
+
+    Example:
+        >>> configure_isis_srms_advertise(device, enabled=True)
+    """
+    val = 'true' if enabled else 'false'
+    log.info(f"Configuring ISIS SRMS advertise-enabled {val} on {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global segment-routing srms advertise-enabled {val}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS SRMS advertise on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_srms_advertise(device, network_instance='default',
+                                      protocol_instance='default'):
+    """Remove ISIS SRMS advertise-enabled configuration.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS SRMS advertise
+
+    Example:
+        >>> unconfigure_isis_srms_advertise(device)
+    """
+    log.info(f"Removing ISIS SRMS advertise-enabled from {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global segment-routing srms advertise-enabled',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS SRMS advertise from {device.name}. Error:\n{e}"
+        )
+
+
+# ===========================================================================
+# Auto-Cost and MPLS LDP Sync Configure APIs
+# ===========================================================================
+
+def configure_isis_auto_cost_reference_bandwidth(device, bandwidth,
+                                                    network_instance='default',
+                                                    protocol_instance='default'):
+    """Configure ISIS auto-cost reference bandwidth.
+
+    Args:
+        device (obj): Device object
+        bandwidth (int): Reference bandwidth in Mbps
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS auto-cost reference bandwidth
+
+    Example:
+        >>> configure_isis_auto_cost_reference_bandwidth(device, 100000)
+    """
+    log.info(
+        f"Configuring ISIS auto-cost reference-bandwidth {bandwidth} on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global auto-cost reference-bandwidth {bandwidth}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS auto-cost reference-bandwidth on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_auto_cost_reference_bandwidth(device,
+                                                      network_instance='default',
+                                                      protocol_instance='default'):
+    """Remove ISIS auto-cost reference bandwidth configuration.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS auto-cost reference bandwidth
+
+    Example:
+        >>> unconfigure_isis_auto_cost_reference_bandwidth(device)
+    """
+    log.info(f"Removing ISIS auto-cost reference-bandwidth from {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global auto-cost reference-bandwidth',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS auto-cost reference-bandwidth from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_mpls_ldp_sync(device, enabled=True, network_instance='default',
+                                   protocol_instance='default'):
+    """Configure ISIS global MPLS IGP-LDP synchronization.
+
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Enable MPLS LDP sync. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS MPLS LDP sync
+
+    Example:
+        >>> configure_isis_mpls_ldp_sync(device, enabled=True)
+    """
+    val = 'true' if enabled else 'false'
+    log.info(f"Configuring ISIS MPLS igp-ldp-sync enabled {val} on {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global mpls igp-ldp-sync enabled {val}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS MPLS LDP sync on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_mpls_ldp_sync(device, network_instance='default',
+                                     protocol_instance='default'):
+    """Remove ISIS global MPLS IGP-LDP synchronization configuration.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS MPLS LDP sync
+
+    Example:
+        >>> unconfigure_isis_mpls_ldp_sync(device)
+    """
+    log.info(f"Removing ISIS MPLS igp-ldp-sync from {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global mpls igp-ldp-sync enabled',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS MPLS LDP sync from {device.name}. Error:\n{e}"
+        )
+
+
+# ===========================================================================
+# Global Hello Authentication Configure APIs
+# ===========================================================================
+
+def configure_isis_global_hello_auth(device, auth_type, keychain=None,
+                                       network_instance='default',
+                                       protocol_instance='default'):
+    """Configure ISIS global hello-authentication.
+
+    Args:
+        device (obj): Device object
+        auth_type (str): Authentication type ('SIMPLE_KEY' or 'KEYCHAIN')
+        keychain (str, optional): Keychain name (required when auth_type is 'KEYCHAIN').
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS global hello auth
+
+    Example:
+        >>> configure_isis_global_hello_auth(device, 'KEYCHAIN', keychain='isis-key')
+    """
+    log.info(
+        f"Configuring ISIS global hello-authentication auth-type {auth_type} "
+        f"on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [isis_context]
+
+    if keychain is not None:
+        config.append(f'global hello-authentication keychain {keychain}')
+
+    config.append(f'global hello-authentication auth-type {auth_type}')
+
+    if auth_type == 'SIMPLE_KEY':
+        config.append('global hello-authentication key crypto-algorithm MD5')
+
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS global hello auth on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_isis_global_hello_auth(device, network_instance='default',
+                                         protocol_instance='default'):
+    """Remove ISIS global hello-authentication configuration.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS global hello auth
+
+    Example:
+        >>> unconfigure_isis_global_hello_auth(device)
+    """
+    log.info(f"Removing ISIS global hello-authentication from {device.name}")
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global hello-authentication auth-type',
+        'no global hello-authentication keychain',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS global hello auth from {device.name}. "
+            f"Error:\n{e}"
+        )
