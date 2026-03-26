@@ -5665,3 +5665,263 @@ def unconfigure_isis_global_hello_auth(device, network_instance='default',
             f"Could not remove ISIS global hello auth from {device.name}. "
             f"Error:\n{e}"
         )
+
+
+# ===========================================================================
+# Microloop Avoidance (MLA) Configure APIs
+# ===========================================================================
+
+def configure_isis_micro_loop_avoidance_sr_mpls(device, af='IPV4', enabled=True,
+                                                  network_instance='default',
+                                                  protocol_instance='default'):
+    """Configure ISIS micro-loop avoidance for SR-MPLS per address family.
+
+    Enables SR-MPLS based microloop avoidance which temporarily steers traffic
+    via SR tunnels to prevent transient loops during convergence.
+
+    Args:
+        device (obj): Device object
+        af (str, optional): Address family — 'IPV4' or 'IPV6'. Defaults to 'IPV4'.
+        enabled (bool, optional): Enable or disable MLA SR-MPLS. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS micro-loop avoidance SR-MPLS
+
+    Example:
+        >>> configure_isis_micro_loop_avoidance_sr_mpls(device, af='IPV4')
+        >>> configure_isis_micro_loop_avoidance_sr_mpls(device, af='IPV6')
+    """
+    af_upper = af.upper()
+    val = 'true' if enabled else 'false'
+    log.info(
+        f"Configuring ISIS micro-loop-avoidance sr-mpls-enabled {val} "
+        f"for AF {af_upper} on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global af {af_upper} UNICAST micro-loop-avoidance sr-mpls-enabled {val}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS micro-loop-avoidance sr-mpls for "
+            f"AF {af_upper} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_micro_loop_avoidance_sr_mpls(device, af='IPV4',
+                                                     network_instance='default',
+                                                     protocol_instance='default'):
+    """Remove ISIS micro-loop avoidance SR-MPLS configuration per address family.
+
+    Args:
+        device (obj): Device object
+        af (str, optional): Address family — 'IPV4' or 'IPV6'. Defaults to 'IPV4'.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS micro-loop avoidance SR-MPLS
+
+    Example:
+        >>> unconfigure_isis_micro_loop_avoidance_sr_mpls(device, af='IPV4')
+    """
+    af_upper = af.upper()
+    log.info(
+        f"Removing ISIS micro-loop-avoidance sr-mpls-enabled for "
+        f"AF {af_upper} from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global af {af_upper} UNICAST no micro-loop-avoidance sr-mpls-enabled',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS micro-loop-avoidance sr-mpls for "
+            f"AF {af_upper} from {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_micro_loop_avoidance_srv6(device, enabled=True,
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Configure ISIS micro-loop avoidance for SRv6.
+
+    Enables SRv6-based microloop avoidance which temporarily steers traffic
+    via SRv6 tunnels to prevent transient loops during convergence.
+
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Enable or disable MLA SRv6. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS micro-loop avoidance SRv6
+
+    Example:
+        >>> configure_isis_micro_loop_avoidance_srv6(device)
+    """
+    val = 'true' if enabled else 'false'
+    log.info(
+        f"Configuring ISIS micro-loop-avoidance srv6-enabled {val} on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global micro-loop-avoidance srv6-enabled {val}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS micro-loop-avoidance srv6 on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_micro_loop_avoidance_srv6(device, network_instance='default',
+                                                  protocol_instance='default'):
+    """Remove ISIS micro-loop avoidance SRv6 configuration.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS micro-loop avoidance SRv6
+
+    Example:
+        >>> unconfigure_isis_micro_loop_avoidance_srv6(device)
+    """
+    log.info(
+        f"Removing ISIS micro-loop-avoidance srv6-enabled from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global micro-loop-avoidance srv6-enabled',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS micro-loop-avoidance srv6 from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_micro_loop_avoidance_rib_update_delay(device, delay_ms,
+                                                            network_instance='default',
+                                                            protocol_instance='default'):
+    """Configure ISIS micro-loop avoidance RIB update delay.
+
+    The RIB update delay controls how long microloop avoidance paths are
+    retained before being replaced with the normal post-convergence nexthop.
+    Default is 5000ms. Range: 1-60000ms.
+
+    Args:
+        device (obj): Device object
+        delay_ms (int): RIB update delay in milliseconds (1-60000)
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS MLA RIB update delay
+
+    Example:
+        >>> configure_isis_micro_loop_avoidance_rib_update_delay(device, 4500)
+    """
+    log.info(
+        f"Configuring ISIS micro-loop-avoidance rib-update-delay {delay_ms}ms "
+        f"on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global micro-loop-avoidance rib-update-delay {delay_ms}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS micro-loop-avoidance rib-update-delay on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_micro_loop_avoidance_rib_update_delay(device,
+                                                              network_instance='default',
+                                                              protocol_instance='default'):
+    """Remove ISIS micro-loop avoidance RIB update delay (revert to default 5000ms).
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ISIS MLA RIB update delay
+
+    Example:
+        >>> unconfigure_isis_micro_loop_avoidance_rib_update_delay(device)
+    """
+    log.info(
+        f"Removing ISIS micro-loop-avoidance rib-update-delay from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global micro-loop-avoidance rib-update-delay',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS micro-loop-avoidance rib-update-delay from "
+            f"{device.name}. Error:\n{e}"
+        )
