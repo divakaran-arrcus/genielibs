@@ -850,3 +850,283 @@ def configure_routing_policy_match_as_path_set(device, policy_name,
             f"Could not configure match-as-path-set on {policy_name}/"
             f"{statement_name} on {device.name}. Error:\n{e}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Large Community Set
+# ---------------------------------------------------------------------------
+
+
+def configure_large_community_set(device, name, members):
+    """Configure a BGP large-community-set.
+
+    Args:
+        device (obj): Device object.
+        name (str): Large-community-set name.
+        members (list): Large community strings (e.g., ['65001:100:200']).
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure large-community-set.
+    """
+    log.info(f"Configuring large-community-set {name} on {device.name}")
+    if isinstance(members, (list, tuple)):
+        members_str = ' '.join(str(m) for m in members)
+    else:
+        members_str = str(members)
+
+    config = [
+        f'routing-policy defined-sets bgp-defined-sets large-community-set {name}',
+        f'large-community-member [ {members_str} ]',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure large-community-set {name} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_large_community_set(device, name):
+    """Remove a BGP large-community-set."""
+    log.info(f"Removing large-community-set {name} from {device.name}")
+    config = [
+        f'no routing-policy defined-sets bgp-defined-sets large-community-set {name}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove large-community-set {name} from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Remaining BGP Actions
+# ---------------------------------------------------------------------------
+
+
+def configure_routing_policy_set_route_origin(device, policy_name,
+                                               statement_name, origin):
+    """Configure set-route-origin BGP action.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy name.
+        statement_name (str): Statement name.
+        origin (str): Origin value (IGP, EGP, INCOMPLETE).
+    """
+    log.info(f"Configuring set-route-origin {origin} on {policy_name}/{statement_name}")
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'actions bgp-actions set-route-origin {origin}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure set-route-origin on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_routing_policy_adjust_local_pref(device, policy_name,
+                                                statement_name, offset):
+    """Configure adjust-local-pref BGP action.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy name.
+        statement_name (str): Statement name.
+        offset (int): Offset value (positive to increase, negative to decrease).
+    """
+    log.info(f"Configuring adjust-local-pref offset {offset} on {policy_name}/{statement_name}")
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'actions bgp-actions adjust-local-pref offset {offset}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure adjust-local-pref on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_routing_policy_set_aigp(device, policy_name, statement_name,
+                                       aigp_value):
+    """Configure set-aigp BGP action.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy name.
+        statement_name (str): Statement name.
+        aigp_value (int): AIGP metric value.
+    """
+    log.info(f"Configuring set-aigp {aigp_value} on {policy_name}/{statement_name}")
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'actions bgp-actions set-aigp {aigp_value}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure set-aigp on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_routing_policy_adjust_med(device, policy_name, statement_name,
+                                         offset):
+    """Configure adjust-med BGP action.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy name.
+        statement_name (str): Statement name.
+        offset (int): MED offset value.
+    """
+    log.info(f"Configuring adjust-med offset {offset} on {policy_name}/{statement_name}")
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'actions bgp-actions adjust-med offset {offset}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure adjust-med on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_routing_policy_drop_attr(device, policy_name, statement_name,
+                                        attr_codes):
+    """Configure drop-attr BGP action (remove attribute codes).
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy name.
+        statement_name (str): Statement name.
+        attr_codes (list): Attribute codes to drop (e.g., [4, 5, 16]).
+    """
+    log.info(f"Configuring drop-attr {attr_codes} on {policy_name}/{statement_name}")
+    if isinstance(attr_codes, (list, tuple)):
+        codes_str = ' '.join(str(c) for c in attr_codes)
+    else:
+        codes_str = str(attr_codes)
+
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'actions bgp-actions drop-attr [ {codes_str} ]',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure drop-attr on {device.name}. Error:\n{e}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Remaining Conditions
+# ---------------------------------------------------------------------------
+
+
+def configure_routing_policy_match_interface(device, policy_name,
+                                              statement_name, interface):
+    """Configure match-interface condition (for table-connection policies).
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy name.
+        statement_name (str): Statement name.
+        interface (str): Interface name to match.
+    """
+    log.info(f"Configuring match-interface {interface} on {policy_name}/{statement_name}")
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'conditions match-interface interface {interface}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure match-interface on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_routing_policy_match_large_community_set(device, policy_name,
+                                                         statement_name,
+                                                         large_community_set,
+                                                         match_set_options='ANY'):
+    """Configure match-large-community-set BGP condition.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy name.
+        statement_name (str): Statement name.
+        large_community_set (str): Large-community-set name.
+        match_set_options (str): ANY, ALL, or INVERT.
+    """
+    log.info(
+        f"Configuring match-large-community-set {large_community_set} on "
+        f"{policy_name}/{statement_name}"
+    )
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'conditions bgp-conditions match-large-community-set '
+        f'large-community-set {large_community_set}',
+        f'conditions bgp-conditions match-large-community-set '
+        f'match-set-options {match_set_options}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure match-large-community-set on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_routing_policy_call_policy(device, policy_name,
+                                          statement_name, called_policy):
+    """Configure call-policy action (invoke another policy).
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy name.
+        statement_name (str): Statement name.
+        called_policy (str): Name of the policy to call.
+    """
+    log.info(f"Configuring call-policy {called_policy} on {policy_name}/{statement_name}")
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'conditions call-policy {called_policy}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure call-policy on {device.name}. Error:\n{e}"
+        )
