@@ -112,3 +112,79 @@ def get_interface_names(device) -> List[str]:
 
     intfs = get_interfaces(device)
     return list(intfs.keys()) if intfs else []
+
+
+def get_interface_description(device, interface: str) -> Optional[str]:
+    """Get description for an ArcOS interface.
+
+    Args:
+        device: pyATS device object.
+        interface: Interface name (e.g., 'swp1', 'loopback0').
+
+    Returns:
+        Description string, or None if not found.
+    """
+
+    info = get_interface_information(device, interface)
+    if not info:
+        return None
+    return info.get("description")
+
+
+def get_interface_ipv4_addresses(
+    device, interface: str
+) -> Dict[str, Any]:
+    """Get all IPv4 addresses for an ArcOS interface.
+
+    Args:
+        device: pyATS device object.
+        interface: Interface name.
+
+    Returns:
+        Dict keyed by IP address with prefix-length.
+        Empty dict if none found.
+    """
+
+    info = get_interface_information(device, interface)
+    if not info:
+        return {}
+    return info.get("ipv4-addresses", {})
+
+
+def get_interface_ipv4_address(
+    device, interface: str
+) -> Optional[str]:
+    """Get the first IPv4 address for an ArcOS interface.
+
+    Args:
+        device: pyATS device object.
+        interface: Interface name.
+
+    Returns:
+        IPv4 address string (e.g., '1.1.1.1'), or None if not found.
+    """
+
+    addrs = get_interface_ipv4_addresses(device, interface)
+    if not addrs:
+        return None
+    return next(iter(addrs.keys()))
+
+
+def get_interface_ipv6_addresses(
+    device, interface: str
+) -> Dict[str, Any]:
+    """Get all IPv6 addresses for an ArcOS interface.
+
+    Args:
+        device: pyATS device object.
+        interface: Interface name.
+
+    Returns:
+        Dict keyed by IPv6 address with prefix-length.
+        Empty dict if none found.
+    """
+
+    info = get_interface_information(device, interface)
+    if not info:
+        return {}
+    return info.get("ipv6-addresses", {})

@@ -1011,11 +1011,12 @@ def get_isis_flex_algo_definitions(
         or empty dict if none found.
     """
     try:
-        cmd = (
-            f"show network-instance {network_instance} protocol ISIS "
-            f"{instance} running-config"
+        from genie.libs.parser.arcos.show_isis import ShowIsisConfig
+        parser = ShowIsisConfig(device=device)
+        parsed = parser.parse(
+            network_instance=network_instance,
+            protocol_instance=instance,
         )
-        parsed = device.parse(cmd)
     except SchemaEmptyParserError:
         log.debug("get_isis_flex_algo_definitions: no data found")
         return {}
@@ -1050,3 +1051,62 @@ def get_isis_flex_algo_definition(
         device, instance=instance, network_instance=network_instance
     )
     return definitions.get(str(algo_id))
+
+
+def get_isis_flex_algo_fast_reroutes(
+    device,
+    algo: int,
+    afi: str = "IPV4",
+    instance: str = "default",
+) -> Dict[str, Any]:
+    """Get all flex-algo fast-reroute prefix entries for an algorithm.
+
+    Args:
+        device: pyATS device object.
+        algo: Flexible-algorithm ID (e.g., 128).
+        afi: Address family ('IPV4' or 'IPV6').
+        instance: ISIS instance name.
+
+    Returns:
+        Dict of prefix entries keyed by prefix string, each with
+        levels containing reroute-type, metric, nexthop info.
+        Empty dict if none found.
+    """
+
+    frr_data = get_isis_flex_algo_fast_reroute(
+        device, afi=afi, algo=str(algo), instance=instance
+    )
+
+    # Navigate: af_key → algorithms → algo_id → prefixes
+    af_key = f"{afi}-UNICAST"
+    af_entry = frr_data.get(af_key, {})
+    algorithms = af_entry.get("algorithms", {})
+    algo_entry = algorithms.get(str(algo), {})
+
+    return algo_entry.get("prefixes", {})
+
+
+def is_isis_flex_algo_fast_reroute_present(
+    device,
+    prefix: str,
+    algo: int,
+    afi: str = "IPV4",
+    instance: str = "default",
+) -> bool:
+    """Check if a flex-algo fast-reroute entry exists for a prefix.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix (e.g., '3.3.3.3/32').
+        algo: Flexible-algorithm ID.
+        afi: Address family.
+        instance: ISIS instance name.
+
+    Returns:
+        True if FRR entry exists for the prefix, False otherwise.
+    """
+
+    prefixes = get_isis_flex_algo_fast_reroutes(
+        device, algo=algo, afi=afi, instance=instance
+    )
+    return prefix in prefixes
