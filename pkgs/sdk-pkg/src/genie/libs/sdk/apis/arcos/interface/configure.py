@@ -836,3 +836,444 @@ def unconfigure_interface_type(device, interface):
             f"Could not remove type on interface {interface} "
             f"on device {device.name}. Error:\n{e}"
         )
+
+
+# =====================================================================
+# VLAN Double-Tagged
+# =====================================================================
+
+
+def configure_interface_subinterface_vlan_double_tagged(
+    device, interface, sub_id, inner_id, outer_id
+):
+    """Configure double-tagged VLAN match on a subinterface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name (e.g., 'swp5').
+        sub_id (int): Subinterface ID.
+        inner_id (int): Inner VLAN ID.
+        outer_id (int): Outer VLAN ID.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_interface_subinterface_vlan_double_tagged(
+        ...     device, 'swp5', 5001, 50, 101)
+    """
+
+    log.info(
+        "Configuring double-tagged VLAN (inner=%s, outer=%s) on "
+        "%s.%s on %s", inner_id, outer_id, interface, sub_id, device.name
+    )
+
+    config = [
+        f'interface {interface}',
+        f'subinterface {sub_id}',
+        f'vlan match double-tagged inner-vlan-id {inner_id} '
+        f'outer-vlan-id {outer_id}',
+        '!',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure double-tagged VLAN on {interface}.{sub_id} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_interface_subinterface_vlan_double_tagged(
+    device, interface, sub_id
+):
+    """Remove double-tagged VLAN match from a subinterface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        sub_id (int): Subinterface ID.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> unconfigure_interface_subinterface_vlan_double_tagged(
+        ...     device, 'swp5', 5001)
+    """
+
+    log.info(
+        "Removing double-tagged VLAN from %s.%s on %s",
+        interface, sub_id, device.name,
+    )
+
+    config = [
+        f'interface {interface}',
+        f'subinterface {sub_id}',
+        'no vlan match double-tagged',
+        '!',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove double-tagged VLAN from {interface}.{sub_id} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+# =====================================================================
+# VLAN Ingress/Egress Mapping
+# =====================================================================
+
+
+def configure_interface_subinterface_vlan_ingress_mapping(
+    device, interface, sub_id, action
+):
+    """Configure VLAN ingress mapping on a subinterface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        sub_id (int): Subinterface ID.
+        action (str): Stack action — POP or POP-POP.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_interface_subinterface_vlan_ingress_mapping(
+        ...     device, 'swp5', 5001, 'POP')
+    """
+
+    log.info(
+        "Configuring VLAN ingress-mapping %s on %s.%s on %s",
+        action, interface, sub_id, device.name,
+    )
+
+    config = [
+        f'interface {interface}',
+        f'subinterface {sub_id}',
+        f'vlan ingress-mapping vlan-stack-action {action}',
+        '!',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure VLAN ingress-mapping on "
+            f"{interface}.{sub_id} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_interface_subinterface_vlan_ingress_mapping(
+    device, interface, sub_id
+):
+    """Remove VLAN ingress mapping from a subinterface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        sub_id (int): Subinterface ID.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+
+    log.info(
+        "Removing VLAN ingress-mapping from %s.%s on %s",
+        interface, sub_id, device.name,
+    )
+
+    config = [
+        f'interface {interface}',
+        f'subinterface {sub_id}',
+        'no vlan ingress-mapping',
+        '!',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove VLAN ingress-mapping from "
+            f"{interface}.{sub_id} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_interface_subinterface_vlan_egress_mapping(
+    device, interface, sub_id, action, vlan_id=None, inner_vlan_id=None
+):
+    """Configure VLAN egress mapping on a subinterface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        sub_id (int): Subinterface ID.
+        action (str): Stack action — PUSH, PUSH-PUSH, SWAP, SWAP-SWAP.
+        vlan_id (int, optional): Outer VLAN ID for PUSH/SWAP.
+        inner_vlan_id (int, optional): Inner VLAN ID for PUSH-PUSH/SWAP-SWAP.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_interface_subinterface_vlan_egress_mapping(
+        ...     device, 'swp5', 5001, 'PUSH-PUSH',
+        ...     vlan_id=101, inner_vlan_id=50)
+    """
+
+    log.info(
+        "Configuring VLAN egress-mapping %s on %s.%s on %s",
+        action, interface, sub_id, device.name,
+    )
+
+    config = [
+        f'interface {interface}',
+        f'subinterface {sub_id}',
+        f'vlan egress-mapping vlan-stack-action {action}',
+    ]
+
+    if vlan_id is not None:
+        config.append(f'vlan egress-mapping vlan-id {vlan_id}')
+
+    if inner_vlan_id is not None:
+        config.append(f'vlan egress-mapping inner-vlan-id {inner_vlan_id}')
+
+    config.extend(['!', '!'])
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure VLAN egress-mapping on "
+            f"{interface}.{sub_id} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_interface_subinterface_vlan_egress_mapping(
+    device, interface, sub_id
+):
+    """Remove VLAN egress mapping from a subinterface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        sub_id (int): Subinterface ID.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+
+    log.info(
+        "Removing VLAN egress-mapping from %s.%s on %s",
+        interface, sub_id, device.name,
+    )
+
+    config = [
+        f'interface {interface}',
+        f'subinterface {sub_id}',
+        'no vlan egress-mapping',
+        '!',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove VLAN egress-mapping from "
+            f"{interface}.{sub_id} on {device.name}. Error:\n{e}"
+        )
+
+
+# =====================================================================
+# QoS Service-Policy Binding on Interface
+# =====================================================================
+
+
+def configure_interface_qos_service_policy(
+    device, interface, direction, policy_name
+):
+    """Attach a QoS service-policy to an interface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        direction (str): INGRESS or EGRESS.
+        policy_name (str): QoS policy name.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_interface_qos_service_policy(
+        ...     device, 'swp1', 'INGRESS', 'ingress-pol')
+    """
+
+    log.info(
+        "Attaching QoS service-policy %s %s to %s on %s",
+        direction, policy_name, interface, device.name,
+    )
+
+    config = [
+        f'interface {interface}',
+        f'qos service-policy {direction} name {policy_name}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not attach QoS service-policy to {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_interface_qos_service_policy(
+    device, interface, direction
+):
+    """Remove QoS service-policy from an interface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        direction (str): INGRESS or EGRESS.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+
+    log.info(
+        "Removing QoS service-policy %s from %s on %s",
+        direction, interface, device.name,
+    )
+
+    config = [
+        f'interface {interface}',
+        f'no qos service-policy {direction}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove QoS service-policy from {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+# =====================================================================
+# ACL Binding on Interface
+# =====================================================================
+
+
+def configure_interface_acl_binding(
+    device, interface, acl_type, acl_name, target_attr='ACL_INTF'
+):
+    """Attach an ACL to an interface (ingress).
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        acl_type (str): ACL type — ACL_IPV4, ACL_IPV6, ACL_L2.
+        acl_name (str): ACL set name.
+        target_attr (str, optional): Target attribute. Defaults to 'ACL_INTF'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_interface_acl_binding(
+        ...     device, 'swp1', 'ACL_IPV4', 'v4-acl')
+    """
+
+    log.info(
+        "Attaching ACL %s/%s to %s on %s",
+        acl_type, acl_name, interface, device.name,
+    )
+
+    config = [
+        f'interface {interface}',
+        f'acl-service-policies ingress-acl-sets {target_attr} '
+        f'acl-set {acl_type} set-name {acl_name}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not attach ACL to {interface} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_interface_acl_binding(device, interface):
+    """Remove ACL binding from an interface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+
+    log.info(
+        "Removing ACL binding from %s on %s",
+        interface, device.name,
+    )
+
+    config = [
+        f'interface {interface}',
+        'no acl-service-policies ingress-acl-sets',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ACL from {interface} on "
+            f"{device.name}. Error:\n{e}"
+        )

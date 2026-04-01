@@ -349,3 +349,80 @@ def unconfigure_lag_l2_trunk(device, bond):
             f"Could not remove L2 trunk from {bond} on "
             f"{device.name}. Error:\n{e}"
         )
+
+
+# =====================================================================
+# LACP Interval
+# =====================================================================
+
+def configure_lacp_interval(device, bond, interval='FAST'):
+    """Configure LACP interval on a bond interface.
+
+    Args:
+        device (obj): Device object.
+        bond (str): Bond interface name (e.g., 'bond111').
+        interval (str, optional): LACP interval — FAST or SLOW.
+            Defaults to 'FAST'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure LACP interval.
+
+    Example:
+        >>> configure_lacp_interval(device, 'bond111', 'SLOW')
+    """
+
+    log.info(
+        f"Configuring LACP interval {interval} on {bond} on {device.name}"
+    )
+
+    config = [
+        f'lacp interface {bond}',
+        f'interval {interval}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure LACP interval on {bond} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_lacp_interval(device, bond):
+    """Remove LACP interval configuration from a bond.
+
+    Args:
+        device (obj): Device object.
+        bond (str): Bond interface name.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove LACP interval.
+
+    Example:
+        >>> unconfigure_lacp_interval(device, 'bond111')
+    """
+
+    log.info(
+        f"Removing LACP interval from {bond} on {device.name}"
+    )
+
+    config = [
+        f'no lacp interface {bond}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove LACP interval from {bond} on "
+            f"{device.name}. Error:\n{e}"
+        )
