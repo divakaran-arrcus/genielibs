@@ -20,6 +20,7 @@ from genie.libs.sdk.apis.arcos.isis.get import (
     get_isis_system_id,
     is_isis_adjacency_present,
     is_isis_flex_algo_route_present,
+    is_isis_flex_algo_fast_reroute_present,
     get_isis_flex_algo_definitions,
 )
 
@@ -409,6 +410,166 @@ def verify_isis_flex_algo_definition_present(
         )
 
         if present:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+def verify_isis_flex_algo_definition_not_present(
+    device,
+    algo_id: int,
+    instance: str = "default",
+    network_instance: str = "default",
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify that an ISIS flex-algo definition does NOT exist.
+
+    Args:
+        device: pyATS device object.
+        algo_id: Flexible-algorithm ID (128-255).
+        instance: ISIS protocol instance name.
+        network_instance: Network instance name.
+        max_time: Maximum time to wait (seconds).
+        check_interval: Poll interval (seconds).
+
+    Returns:
+        True if definition is absent within timeout, False otherwise.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            definitions = get_isis_flex_algo_definitions(
+                device, instance=instance, network_instance=network_instance
+            )
+            present = str(algo_id) in definitions
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error(
+                "get_isis_flex_algo_definitions failed for algo %s: %s", algo_id, exc
+            )
+            present = True  # assume present on error
+
+        log.debug(
+            "verify_isis_flex_algo_definition_not_present(%s): present=%s",
+            algo_id,
+            present,
+        )
+
+        if not present:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+def verify_isis_flex_algo_fast_reroute_present(
+    device,
+    prefix: str,
+    algo: int,
+    afi: str = "IPV4",
+    instance: str = "default",
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify that a flex-algo fast-reroute entry exists for a prefix.
+
+    This uses :func:`is_isis_flex_algo_fast_reroute_present` to poll
+    the device.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix (e.g., '3.3.3.3/32').
+        algo: Flexible-algorithm ID (e.g., 128).
+        afi: Address family ('IPV4' or 'IPV6').
+        instance: ISIS instance name.
+        max_time: Maximum time to wait (seconds).
+        check_interval: Poll interval (seconds).
+
+    Returns:
+        True if the FRR entry appears within the timeout,
+        False otherwise.
+    """
+
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            present = is_isis_flex_algo_fast_reroute_present(
+                device, prefix=prefix, algo=algo,
+                afi=afi, instance=instance,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error(
+                "is_isis_flex_algo_fast_reroute_present failed for "
+                "%s algo %s: %s", prefix, algo, exc,
+            )
+            present = False
+
+        log.debug(
+            "verify_isis_flex_algo_fast_reroute_present(%s, algo=%s): "
+            "present=%s",
+            prefix, algo, present,
+        )
+
+        if present:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+def verify_isis_flex_algo_fast_reroute_not_present(
+    device,
+    prefix: str,
+    algo: int,
+    afi: str = "IPV4",
+    instance: str = "default",
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify that a flex-algo fast-reroute entry does NOT exist for a prefix.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix (e.g., '3.3.3.3/32').
+        algo: Flexible-algorithm ID (e.g., 128).
+        afi: Address family ('IPV4' or 'IPV6').
+        instance: ISIS instance name.
+        max_time: Maximum time to wait (seconds).
+        check_interval: Poll interval (seconds).
+
+    Returns:
+        True if the FRR entry is absent within the timeout,
+        False otherwise.
+    """
+
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            present = is_isis_flex_algo_fast_reroute_present(
+                device, prefix=prefix, algo=algo,
+                afi=afi, instance=instance,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error(
+                "is_isis_flex_algo_fast_reroute_present failed for "
+                "%s algo %s: %s", prefix, algo, exc,
+            )
+            present = True  # assume present on error
+
+        log.debug(
+            "verify_isis_flex_algo_fast_reroute_not_present(%s, algo=%s): "
+            "present=%s",
+            prefix, algo, present,
+        )
+
+        if not present:
             return True
 
         timeout.sleep()

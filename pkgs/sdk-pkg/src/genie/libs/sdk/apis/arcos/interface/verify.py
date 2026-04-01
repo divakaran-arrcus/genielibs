@@ -15,6 +15,8 @@ from typing import Optional
 from genie.utils.timeout import Timeout
 
 from genie.libs.sdk.apis.arcos.interface.get import (
+    get_interface_description,
+    get_interface_ipv4_address,
     get_interface_mtu,
     get_interface_status,
 )
@@ -155,6 +157,96 @@ def verify_interface_mtu(
         )
 
         if mtu == expected_mtu:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+def verify_interface_ipv4_address(
+    device,
+    interface: str,
+    expected_ip: str,
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify ArcOS interface has the expected IPv4 address.
+
+    Args:
+        device: pyATS device object.
+        interface: Interface name.
+        expected_ip: Expected IPv4 address (e.g., '1.1.1.1').
+        max_time: Maximum time to wait (seconds).
+        check_interval: Poll interval (seconds).
+
+    Returns:
+        True if the IPv4 address matches within timeout, False otherwise.
+    """
+
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            ip = get_interface_ipv4_address(device, interface)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error(
+                "get_interface_ipv4_address failed for %s: %s",
+                interface, exc,
+            )
+            ip = None
+
+        log.debug(
+            "verify_interface_ipv4_address(%s): current=%s, expected=%s",
+            interface, ip, expected_ip,
+        )
+
+        if ip == expected_ip:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+def verify_interface_description(
+    device,
+    interface: str,
+    expected_description: str,
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify ArcOS interface description matches expected value.
+
+    Args:
+        device: pyATS device object.
+        interface: Interface name.
+        expected_description: Expected description string.
+        max_time: Maximum time to wait (seconds).
+        check_interval: Poll interval (seconds).
+
+    Returns:
+        True if the description matches within timeout, False otherwise.
+    """
+
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            desc = get_interface_description(device, interface)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error(
+                "get_interface_description failed for %s: %s",
+                interface, exc,
+            )
+            desc = None
+
+        log.debug(
+            "verify_interface_description(%s): current=%s, expected=%s",
+            interface, desc, expected_description,
+        )
+
+        if desc == expected_description:
             return True
 
         timeout.sleep()
