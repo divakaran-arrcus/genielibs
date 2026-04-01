@@ -60,6 +60,31 @@ class Bgp(ABC):
             doc='Ignore next-hop IGP metric in route selection')
 
         # ========================================
+        # VRF ATTRIBUTES
+        # ========================================
+
+        route_distinguisher = managedattribute(
+            name='route_distinguisher',
+            default=None,
+            type=(None, managedattribute.test_istype(str)),
+            doc='BGP route-distinguisher (e.g., "1.0.0.0:2001")')
+
+        route_targets = managedattribute(
+            name='route_targets',
+            default=None,
+            type=(None, managedattribute.test_istype(list)),
+            doc='List of direct route-targets (L2VPN). Each item is a dict '
+                'with keys: rt (str), rt_type (str: "both", "import", "export")')
+
+        rt_afi_safis = managedattribute(
+            name='rt_afi_safis',
+            default=None,
+            type=(None, managedattribute.test_istype(dict)),
+            doc='Dict of rt-afi-safi configs keyed by AFI name '
+                '(e.g., "L3VPN_IPV4_UNICAST"). Each value is a list of dicts '
+                'with keys: rt (str), rt_type (str: "both", "import", "export")')
+
+        # ========================================
         # GLOBAL AFI-SAFI (dict keyed by AFI name)
         # ========================================
 
@@ -169,6 +194,55 @@ class Bgp(ABC):
                                 'global route-selection-options '
                                 f'ignore-next-hop-igp-metric {val}'
                             )
+
+                        # ========================================
+                        # VRF: ROUTE-DISTINGUISHER
+                        # ========================================
+
+                        rd = attributes.value('route_distinguisher')
+                        if rd is not None:
+                            configurations.append_line(
+                                f'global route-distinguisher {rd}'
+                            )
+
+                        # ========================================
+                        # VRF: DIRECT ROUTE-TARGETS (L2VPN)
+                        # ========================================
+
+                        rts = attributes.value('route_targets')
+                        if rts and isinstance(rts, list):
+                            for rt_entry in rts:
+                                rt_val = rt_entry.get('rt')
+                                rt_type = rt_entry.get('rt_type', 'both')
+                                if rt_val:
+                                    configurations.append_line(
+                                        f'route-target {rt_val} {rt_type}'
+                                    )
+
+                        # ========================================
+                        # VRF: RT-AFI-SAFI ROUTE-TARGETS (L3VPN)
+                        # ========================================
+
+                        rt_afis = attributes.value('rt_afi_safis')
+                        if rt_afis and isinstance(rt_afis, dict):
+                            for afi_name in sorted(rt_afis.keys()):
+                                rt_list = rt_afis[afi_name]
+                                if not rt_list:
+                                    continue
+                                with configurations.submode_context(
+                                    f'rt-afi-safi {afi_name}'
+                                ):
+                                    for rt_entry in rt_list:
+                                        rt_val = rt_entry.get('rt')
+                                        rt_type = rt_entry.get(
+                                            'rt_type', 'both'
+                                        )
+                                        if rt_val:
+                                            configurations.append_line(
+                                                f'route-target {rt_val} '
+                                                f'{rt_type}'
+                                            )
+                                configurations.append_line('!')
 
                         # ========================================
                         # GLOBAL AFI-SAFI BLOCKS

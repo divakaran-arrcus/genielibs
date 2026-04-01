@@ -132,6 +132,250 @@ def rollback_configuration(
     log.info("rollback_configuration: completed successfully on %s", device.name)
 
 
+# ── System Settings APIs ─────────────────────────────────────────────────
+
+
+def configure_system_hostname(device, hostname):
+    """Set system hostname.
+
+    Args:
+        device (obj): Device object.
+        hostname (str): Hostname.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_system_hostname(device, 'LeafX')
+    """
+    log.info(f"Setting hostname to {hostname} on {device.name}")
+    try:
+        device.configure([f'system hostname {hostname}', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not set hostname on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_system_hostname(device):
+    """Remove system hostname.
+
+    Args:
+        device (obj): Device object.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(f"Removing hostname from {device.name}")
+    try:
+        device.configure(['no system hostname', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove hostname from {device.name}. Error:\n{e}"
+        )
+
+
+def configure_system_ntp_server(device, address, iburst=None, prefer=None):
+    """Configure an NTP server.
+
+    Args:
+        device (obj): Device object.
+        address (str): NTP server address.
+        iburst (bool, optional): Enable iburst.
+        prefer (bool, optional): Prefer this server.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_system_ntp_server(device, '10.1.1.1', iburst=True, prefer=True)
+    """
+    log.info(f"Configuring NTP server {address} on {device.name}")
+    config = [f'system ntp server {address}']
+    if iburst is not None:
+        config.append(f'iburst {"true" if iburst else "false"}')
+    if prefer is not None:
+        config.append(f'prefer {"true" if prefer else "false"}')
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure NTP server {address} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_system_ntp_server(device, address):
+    """Remove an NTP server.
+
+    Args:
+        device (obj): Device object.
+        address (str): NTP server address.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(f"Removing NTP server {address} from {device.name}")
+    try:
+        device.configure([f'no system ntp server {address}', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove NTP server {address} from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_system_dns_server(device, address):
+    """Configure a DNS server.
+
+    Args:
+        device (obj): Device object.
+        address (str): DNS server address.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_system_dns_server(device, '8.8.8.8')
+    """
+    log.info(f"Configuring DNS server {address} on {device.name}")
+    try:
+        device.configure([f'system dns server {address}', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure DNS server {address} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_system_dns_server(device, address):
+    """Remove a DNS server.
+
+    Args:
+        device (obj): Device object.
+        address (str): DNS server address.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(f"Removing DNS server {address} from {device.name}")
+    try:
+        device.configure([f'no system dns server {address}', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove DNS server {address} from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_system_logging_format(device, fmt):
+    """Set system logging format.
+
+    Args:
+        device (obj): Device object.
+        fmt (str): Logging format (e.g., 'SYSLOG_RFC_5424').
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(f"Setting logging format to {fmt} on {device.name}")
+    try:
+        device.configure([f'system logging logging-format {fmt}', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not set logging format on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_system_logging_format(device):
+    """Remove system logging format.
+
+    Args:
+        device (obj): Device object.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(f"Removing logging format from {device.name}")
+    try:
+        device.configure(['no system logging logging-format', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove logging format from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_system_login_banner(device, banner):
+    """Set login banner.
+
+    Args:
+        device (obj): Device object.
+        banner (str): Banner text.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(f"Setting login banner on {device.name}")
+    try:
+        device.configure([f'system login-banner "{banner}"', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not set login banner on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_system_login_banner(device):
+    """Remove login banner.
+
+    Args:
+        device (obj): Device object.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(f"Removing login banner from {device.name}")
+    try:
+        device.configure(['no system login-banner', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove login banner from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
 # ── Private helpers ────────────────────────────────────────────────────────────
 
 
