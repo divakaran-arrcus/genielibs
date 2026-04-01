@@ -1025,7 +1025,9 @@ def get_isis_flex_algo_definitions(
         return {}
 
     isis = _safe_get_isis(parsed, ni=network_instance, instance=instance)
-    global_data = isis.get("global", {})
+    # ShowIsisConfig puts data under config.global.flexible-algorithms
+    config_data = isis.get("config", isis)
+    global_data = config_data.get("global", {})
     return global_data.get("flexible-algorithms", {})
 
 
