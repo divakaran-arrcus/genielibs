@@ -376,6 +376,54 @@ def unconfigure_system_login_banner(device):
         )
 
 
+# ── CLI Aliases ───────────────────────────────────────────────────────────────
+
+
+def configure_cli_alias(device, alias_name, expansion):
+    """Create a CLI alias.
+
+    Args:
+        device (obj): Device object.
+        alias_name (str): Alias name (e.g., 'rr').
+        expansion (str): Command expansion (e.g., 'show ip route').
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_cli_alias(device, 'rr', 'show ip route')
+    """
+    log.info(f"Creating CLI alias {alias_name} on {device.name}")
+    try:
+        device.configure([
+            f'alias {alias_name} expansion "{expansion}"',
+            '!',
+        ])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not create alias on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_cli_alias(device, alias_name):
+    """Remove a CLI alias.
+
+    Args:
+        device (obj): Device object.
+        alias_name (str): Alias name.
+    """
+    log.info(f"Removing CLI alias {alias_name} from {device.name}")
+    try:
+        device.configure([f'no alias {alias_name}', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove alias from {device.name}. Error:\n{e}"
+        )
+
+
 # ── Private helpers ────────────────────────────────────────────────────────────
 
 
