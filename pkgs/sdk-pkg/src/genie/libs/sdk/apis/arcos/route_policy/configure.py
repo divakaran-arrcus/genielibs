@@ -293,3 +293,240 @@ def unconfigure_routing_policy(device, policy_name):
             f"Could not remove routing-policy {policy_name} "
             f"from {device.name}. Error:\n{e}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Ext-Community Set APIs
+# ---------------------------------------------------------------------------
+
+
+def configure_ext_community_set(device, name, members):
+    """Configure a BGP ext-community-set.
+
+    Args:
+        device (obj): Device object.
+        name (str): Ext-community-set name.
+        members (list): List of ext-community member strings
+            (e.g., ['route-target:2001:2001', 'route-origin:22:.*']).
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ext-community-set.
+
+    Example:
+        >>> configure_ext_community_set(device, 'RT-SET-1',
+        ...     ['route-target:2001:2001'])
+    """
+
+    log.info(
+        f"Configuring ext-community-set {name} on {device.name}"
+    )
+
+    if isinstance(members, (list, tuple)):
+        members_str = ' '.join(str(m) for m in members)
+    else:
+        members_str = str(members)
+
+    config = [
+        f'routing-policy defined-sets bgp-defined-sets '
+        f'ext-community-set {name}',
+        f'ext-community-member [ {members_str} ]',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ext-community-set {name} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_ext_community_set(device, name):
+    """Remove a BGP ext-community-set.
+
+    Args:
+        device (obj): Device object.
+        name (str): Ext-community-set name.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove ext-community-set.
+
+    Example:
+        >>> unconfigure_ext_community_set(device, 'RT-SET-1')
+    """
+
+    log.info(f"Removing ext-community-set {name} from {device.name}")
+
+    config = [
+        f'no routing-policy defined-sets bgp-defined-sets '
+        f'ext-community-set {name}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ext-community-set {name} from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Advanced Policy Statement APIs (BGP conditions + actions)
+# ---------------------------------------------------------------------------
+
+
+def configure_routing_policy_bgp_actions(device, policy_name, statement_name,
+                                          set_local_pref=None,
+                                          set_med=None,
+                                          set_next_hop=None,
+                                          set_ext_community_method=None,
+                                          set_ext_community_options=None,
+                                          set_ext_community_inline=None,
+                                          set_ext_community_ref=None):
+    """Configure BGP actions on a routing-policy statement.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy definition name.
+        statement_name (str): Statement name/number.
+        set_local_pref (int, optional): Set local-preference value.
+        set_med (int, optional): Set MED value.
+        set_next_hop (str, optional): Set next-hop (IP or 'SELF').
+        set_ext_community_method (str, optional): INLINE or REFERENCE.
+        set_ext_community_options (str, optional): ADD, REMOVE, or REPLACE.
+        set_ext_community_inline (list, optional): Inline ext-communities.
+        set_ext_community_ref (str, optional): Reference ext-community-set name.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP actions.
+
+    Example:
+        >>> configure_routing_policy_bgp_actions(device, 'MY-POLICY', '10',
+        ...     set_local_pref=220)
+    """
+
+    log.info(
+        f"Configuring BGP actions on {policy_name}/{statement_name} "
+        f"on {device.name}"
+    )
+
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+    ]
+
+    if set_local_pref is not None:
+        config.append(f'actions bgp-actions set-local-pref {set_local_pref}')
+
+    if set_med is not None:
+        config.append(f'actions bgp-actions set-med {set_med}')
+
+    if set_next_hop is not None:
+        config.append(f'actions bgp-actions set-next-hop {set_next_hop}')
+
+    if set_ext_community_method is not None:
+        config.append(
+            f'actions bgp-actions set-ext-community method '
+            f'{set_ext_community_method}'
+        )
+
+    if set_ext_community_options is not None:
+        config.append(
+            f'actions bgp-actions set-ext-community options '
+            f'{set_ext_community_options}'
+        )
+
+    if set_ext_community_inline is not None:
+        if isinstance(set_ext_community_inline, (list, tuple)):
+            vals = ' '.join(str(v) for v in set_ext_community_inline)
+        else:
+            vals = str(set_ext_community_inline)
+        config.append(
+            f'actions bgp-actions set-ext-community inline '
+            f'ext-communities [ {vals} ]'
+        )
+
+    if set_ext_community_ref is not None:
+        config.append(
+            f'actions bgp-actions set-ext-community reference '
+            f'ext-community-set-ref {set_ext_community_ref}'
+        )
+
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP actions on {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_routing_policy_bgp_conditions(device, policy_name,
+                                             statement_name,
+                                             match_ext_community_set=None,
+                                             match_set_options=None):
+    """Configure BGP conditions on a routing-policy statement.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy definition name.
+        statement_name (str): Statement name/number.
+        match_ext_community_set (str, optional): Ext-community-set name to match.
+        match_set_options (str, optional): Match options — ANY, ALL, INVERT.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP conditions.
+
+    Example:
+        >>> configure_routing_policy_bgp_conditions(device, 'MY-POLICY', '10',
+        ...     match_ext_community_set='RT-SET-1', match_set_options='ANY')
+    """
+
+    log.info(
+        f"Configuring BGP conditions on {policy_name}/{statement_name} "
+        f"on {device.name}"
+    )
+
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+    ]
+
+    if match_ext_community_set is not None:
+        config.append(
+            f'conditions bgp-conditions match-ext-community-set '
+            f'ext-community-set {match_ext_community_set}'
+        )
+
+    if match_set_options is not None:
+        config.append(
+            f'conditions bgp-conditions match-ext-community-set '
+            f'match-set-options {match_set_options}'
+        )
+
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP conditions on {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )
