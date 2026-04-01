@@ -393,14 +393,15 @@ def unconfigure_mpls_reserved_label_block(device, block_id,
         )
 
 
-def configure_srms_mapping(device, mapping_id, local_id,
+def configure_srms_mapping(device, mapping_id,
                            network_instance='default'):
     """Configure an SRMS (Segment Routing Mapping Server) mapping entry.
 
+    The mapping_id serves as both the name and local-id for the mapping.
+
     Args:
         device (obj): Device object.
-        mapping_id (str): Mapping identifier.
-        local_id (str): Local identifier for the mapping.
+        mapping_id (str): Mapping identifier (used as local-id on device).
         network_instance (str, optional): Network instance name.
             Defaults to 'default'.
 
@@ -411,11 +412,7 @@ def configure_srms_mapping(device, mapping_id, local_id,
         SubCommandFailure: Failed to configure SRMS mapping.
 
     Example:
-        >>> configure_srms_mapping(
-        ...     device=device,
-        ...     mapping_id='map1',
-        ...     local_id='100',
-        ... )
+        >>> configure_srms_mapping(device=device, mapping_id='map1')
     """
     ni = network_instance
     log.info(
@@ -426,7 +423,6 @@ def configure_srms_mapping(device, mapping_id, local_id,
     config = [
         f'network-instance {ni}',
         f'segment-routing srms mapping {mapping_id}',
-        f'local-id {local_id}',
         '!',
     ]
 
