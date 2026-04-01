@@ -530,3 +530,323 @@ def configure_routing_policy_bgp_conditions(device, policy_name,
             f"Could not configure BGP conditions on {policy_name}/"
             f"{statement_name} on {device.name}. Error:\n{e}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Community Set APIs
+# ---------------------------------------------------------------------------
+
+
+def configure_community_set(device, name, members):
+    """Configure a BGP community-set.
+
+    Args:
+        device (obj): Device object.
+        name (str): Community-set name.
+        members (list): Community member strings (e.g., ['65001:100', '65001:200']).
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure community-set.
+
+    Example:
+        >>> configure_community_set(device, 'COMM-SET-1', ['65001:100'])
+    """
+    log.info(f"Configuring community-set {name} on {device.name}")
+
+    if isinstance(members, (list, tuple)):
+        members_str = ' '.join(str(m) for m in members)
+    else:
+        members_str = str(members)
+
+    config = [
+        f'routing-policy defined-sets bgp-defined-sets community-set {name}',
+        f'community-member [ {members_str} ]',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure community-set {name} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_community_set(device, name):
+    """Remove a BGP community-set.
+
+    Args:
+        device (obj): Device object.
+        name (str): Community-set name.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove community-set.
+    """
+    log.info(f"Removing community-set {name} from {device.name}")
+    config = [
+        f'no routing-policy defined-sets bgp-defined-sets community-set {name}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove community-set {name} from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_as_path_set(device, name, members):
+    """Configure a BGP as-path-set.
+
+    Args:
+        device (obj): Device object.
+        name (str): AS-path-set name.
+        members (list): AS-path regex strings (e.g., ['^65001_', '.*65002.*']).
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure as-path-set.
+
+    Example:
+        >>> configure_as_path_set(device, 'AS-SET-1', ['^65001_'])
+    """
+    log.info(f"Configuring as-path-set {name} on {device.name}")
+
+    if isinstance(members, (list, tuple)):
+        members_str = ' '.join(str(m) for m in members)
+    else:
+        members_str = str(members)
+
+    config = [
+        f'routing-policy defined-sets bgp-defined-sets as-path-set {name}',
+        f'as-path-set-member [ {members_str} ]',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure as-path-set {name} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_as_path_set(device, name):
+    """Remove a BGP as-path-set.
+
+    Args:
+        device (obj): Device object.
+        name (str): AS-path-set name.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove as-path-set.
+    """
+    log.info(f"Removing as-path-set {name} from {device.name}")
+    config = [
+        f'no routing-policy defined-sets bgp-defined-sets as-path-set {name}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove as-path-set {name} from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Additional BGP Actions
+# ---------------------------------------------------------------------------
+
+
+def configure_routing_policy_set_community(device, policy_name, statement_name,
+                                            method='INLINE', options='ADD',
+                                            inline_communities=None,
+                                            reference_set=None):
+    """Configure set-community BGP action on a policy statement.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy definition name.
+        statement_name (str): Statement name/number.
+        method (str): INLINE or REFERENCE.
+        options (str): ADD, REMOVE, or REPLACE.
+        inline_communities (list, optional): Communities for INLINE method.
+        reference_set (str, optional): Community-set name for REFERENCE method.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure set-community.
+    """
+    log.info(
+        f"Configuring set-community on {policy_name}/{statement_name} "
+        f"on {device.name}"
+    )
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'actions bgp-actions set-community method {method}',
+        f'actions bgp-actions set-community options {options}',
+    ]
+
+    if method == 'INLINE' and inline_communities:
+        if isinstance(inline_communities, (list, tuple)):
+            vals = ' '.join(str(v) for v in inline_communities)
+        else:
+            vals = str(inline_communities)
+        config.append(
+            f'actions bgp-actions set-community inline '
+            f'communities [ {vals} ]'
+        )
+
+    if method == 'REFERENCE' and reference_set:
+        config.append(
+            f'actions bgp-actions set-community reference '
+            f'community-set-ref {reference_set}'
+        )
+
+    config.append('!')
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure set-community on {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_routing_policy_set_as_path_prepend(device, policy_name,
+                                                   statement_name, repeat_n):
+    """Configure AS-path prepend BGP action.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy definition name.
+        statement_name (str): Statement name/number.
+        repeat_n (int): Number of times to prepend local AS.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure AS-path prepend.
+    """
+    log.info(
+        f"Configuring as-path-prepend repeat-n {repeat_n} on "
+        f"{policy_name}/{statement_name} on {device.name}"
+    )
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'actions bgp-actions set-as-path-prepend repeat-n {repeat_n}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure as-path-prepend on {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Additional BGP Conditions
+# ---------------------------------------------------------------------------
+
+
+def configure_routing_policy_match_community_set(device, policy_name,
+                                                   statement_name,
+                                                   community_set,
+                                                   match_set_options='ANY'):
+    """Configure match-community-set BGP condition.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy definition name.
+        statement_name (str): Statement name/number.
+        community_set (str): Community-set name to match.
+        match_set_options (str): ANY, ALL, or INVERT.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure match-community-set.
+    """
+    log.info(
+        f"Configuring match-community-set {community_set} on "
+        f"{policy_name}/{statement_name} on {device.name}"
+    )
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'conditions bgp-conditions match-community-set '
+        f'community-set {community_set}',
+        f'conditions bgp-conditions match-community-set '
+        f'match-set-options {match_set_options}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure match-community-set on {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_routing_policy_match_as_path_set(device, policy_name,
+                                                 statement_name,
+                                                 as_path_set,
+                                                 match_set_options='ANY'):
+    """Configure match-as-path-set BGP condition.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Policy definition name.
+        statement_name (str): Statement name/number.
+        as_path_set (str): AS-path-set name to match.
+        match_set_options (str): ANY, ALL, or INVERT.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure match-as-path-set.
+    """
+    log.info(
+        f"Configuring match-as-path-set {as_path_set} on "
+        f"{policy_name}/{statement_name} on {device.name}"
+    )
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'conditions bgp-conditions match-as-path-set '
+        f'as-path-set {as_path_set}',
+        f'conditions bgp-conditions match-as-path-set '
+        f'match-set-options {match_set_options}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure match-as-path-set on {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )

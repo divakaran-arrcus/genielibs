@@ -2494,3 +2494,278 @@ def unconfigure_bgp_peer_group_export_policy(device, peer_group, afi_safi,
             f"Could not remove BGP peer-group {peer_group} export-policy for {afi_safi} from "
             f"{device.name}. Error:\n{e}"
         )
+
+
+# ===========================================================================
+# BGP VRF Configure APIs (route-distinguisher, route-target, rt-afi-safi)
+# ===========================================================================
+
+def configure_bgp_route_distinguisher(device, rd, network_instance='default',
+                                        protocol_instance='default'):
+    """Configure BGP route-distinguisher for a network instance.
+
+    Args:
+        device (obj): Device object
+        rd (str): Route distinguisher (e.g., '1.0.0.0:2001')
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP route-distinguisher
+
+    Example:
+        >>> configure_bgp_route_distinguisher(device, '1.0.0.0:2001',
+        ...     network_instance='ECMP-L3VPN-01')
+    """
+    log.info(
+        f"Configuring BGP route-distinguisher {rd} on {device.name} "
+        f"(network-instance: {network_instance})"
+    )
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'global route-distinguisher {rd}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP route-distinguisher {rd} on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_route_distinguisher(device, network_instance='default',
+                                          protocol_instance='default'):
+    """Remove BGP route-distinguisher from a network instance.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove BGP route-distinguisher
+
+    Example:
+        >>> unconfigure_bgp_route_distinguisher(device,
+        ...     network_instance='ECMP-L3VPN-01')
+    """
+    log.info(
+        f"Removing BGP route-distinguisher from {device.name} "
+        f"(network-instance: {network_instance})"
+    )
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        'no global route-distinguisher',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP route-distinguisher from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_route_target(device, rt, rt_type='both',
+                                 network_instance='default',
+                                 protocol_instance='default'):
+    """Configure BGP route-target on a network instance (L2VPN direct).
+
+    Used for L2VPN/EVPN network instances where route-targets are
+    configured directly under the BGP protocol instance.
+
+    Args:
+        device (obj): Device object
+        rt (str): Route target value (e.g., '2001:2001')
+        rt_type (str, optional): Route target type — 'both', 'import',
+            or 'export'. Defaults to 'both'.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP route-target
+
+    Example:
+        >>> configure_bgp_route_target(device, '2001:2001', rt_type='both',
+        ...     network_instance='Leaf1-Leaf2-EPLAN-1')
+    """
+    log.info(
+        f"Configuring BGP route-target {rt} {rt_type} on {device.name} "
+        f"(network-instance: {network_instance})"
+    )
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'route-target {rt} {rt_type}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP route-target {rt} on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_route_target(device, rt, rt_type='both',
+                                   network_instance='default',
+                                   protocol_instance='default'):
+    """Remove BGP route-target from a network instance.
+
+    Args:
+        device (obj): Device object
+        rt (str): Route target value (e.g., '2001:2001')
+        rt_type (str, optional): Route target type — 'both', 'import',
+            or 'export'. Defaults to 'both'.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove BGP route-target
+
+    Example:
+        >>> unconfigure_bgp_route_target(device, '2001:2001',
+        ...     network_instance='Leaf1-Leaf2-EPLAN-1')
+    """
+    log.info(
+        f"Removing BGP route-target {rt} {rt_type} from {device.name} "
+        f"(network-instance: {network_instance})"
+    )
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'no route-target {rt} {rt_type}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP route-target {rt} from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_rt_afi_safi_route_target(device, afi_safi, rt,
+                                             rt_type='both',
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Configure BGP route-target under an rt-afi-safi (L3VPN).
+
+    Used for L3VPN network instances where route-targets are configured
+    under ``rt-afi-safi <AFI_SAFI>`` sub-context.
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): AFI/SAFI name (e.g., 'L3VPN_IPV4_UNICAST',
+            'L3VPN_IPV6_UNICAST')
+        rt (str): Route target value (e.g., '201:201')
+        rt_type (str, optional): Route target type — 'both', 'import',
+            or 'export'. Defaults to 'both'.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP rt-afi-safi route-target
+
+    Example:
+        >>> configure_bgp_rt_afi_safi_route_target(device,
+        ...     'L3VPN_IPV4_UNICAST', '201:201', rt_type='both',
+        ...     network_instance='ECMP-L3VPN-01')
+    """
+    log.info(
+        f"Configuring BGP rt-afi-safi {afi_safi} route-target {rt} {rt_type} "
+        f"on {device.name} (network-instance: {network_instance})"
+    )
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'rt-afi-safi {afi_safi}',
+        f'route-target {rt} {rt_type}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP rt-afi-safi {afi_safi} route-target {rt} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_rt_afi_safi_route_target(device, afi_safi, rt,
+                                               rt_type='both',
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Remove BGP route-target from an rt-afi-safi (L3VPN).
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): AFI/SAFI name (e.g., 'L3VPN_IPV4_UNICAST')
+        rt (str): Route target value (e.g., '201:201')
+        rt_type (str, optional): Route target type. Defaults to 'both'.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove BGP rt-afi-safi route-target
+
+    Example:
+        >>> unconfigure_bgp_rt_afi_safi_route_target(device,
+        ...     'L3VPN_IPV4_UNICAST', '201:201',
+        ...     network_instance='ECMP-L3VPN-01')
+    """
+    log.info(
+        f"Removing BGP rt-afi-safi {afi_safi} route-target {rt} {rt_type} "
+        f"from {device.name} (network-instance: {network_instance})"
+    )
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'rt-afi-safi {afi_safi}',
+        f'no route-target {rt} {rt_type}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP rt-afi-safi {afi_safi} route-target {rt} "
+            f"from {device.name}. Error:\n{e}"
+        )
