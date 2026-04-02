@@ -1277,3 +1277,129 @@ def unconfigure_interface_acl_binding(device, interface):
             f"Could not remove ACL from {interface} on "
             f"{device.name}. Error:\n{e}"
         )
+
+
+def configure_interface_priority_vlan(device, interface, sub_id=0):
+    """Configure priority-vlan on a subinterface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        sub_id (int): Subinterface index (default 0).
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(
+        "Configuring priority-vlan on %s subinterface %s on %s",
+        interface, sub_id, device.name,
+    )
+    config = [
+        f'interface {interface}',
+        f'subinterface {sub_id}',
+        'priority-vlan true',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure priority-vlan on {interface} "
+            f"sub {sub_id} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_interface_priority_vlan(device, interface, sub_id=0):
+    """Remove priority-vlan from a subinterface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        sub_id (int): Subinterface index (default 0).
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(
+        "Removing priority-vlan from %s subinterface %s on %s",
+        interface, sub_id, device.name,
+    )
+    config = [
+        f'interface {interface}',
+        f'subinterface {sub_id}',
+        'no priority-vlan',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove priority-vlan from {interface} "
+            f"sub {sub_id} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_interface_subinterface_ipv4_enabled(device, interface,
+                                                   sub_id=0, enabled=True):
+    """Configure IPv4 enabled flag on a subinterface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        sub_id (int): Subinterface index (default 0).
+        enabled (bool): IPv4 enabled (default True).
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    flag = 'true' if enabled else 'false'
+    log.info(
+        "Setting ipv4 enabled=%s on %s sub %s on %s",
+        flag, interface, sub_id, device.name,
+    )
+    config = [
+        f'interface {interface}',
+        f'subinterface {sub_id}',
+        f'ipv4 enabled {flag}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not set ipv4 enabled on {interface} "
+            f"sub {sub_id} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_interface_subinterface_ipv6_enabled(device, interface,
+                                                   sub_id=0, enabled=True):
+    """Configure IPv6 enabled flag on a subinterface.
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        sub_id (int): Subinterface index (default 0).
+        enabled (bool): IPv6 enabled (default True).
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    flag = 'true' if enabled else 'false'
+    log.info(
+        "Setting ipv6 enabled=%s on %s sub %s on %s",
+        flag, interface, sub_id, device.name,
+    )
+    config = [
+        f'interface {interface}',
+        f'subinterface {sub_id}',
+        f'ipv6 enabled {flag}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not set ipv6 enabled on {interface} "
+            f"sub {sub_id} on {device.name}. Error:\n{e}"
+        )
