@@ -2769,3 +2769,164 @@ def unconfigure_bgp_rt_afi_safi_route_target(device, afi_safi, rt,
             f"Could not remove BGP rt-afi-safi {afi_safi} route-target {rt} "
             f"from {device.name}. Error:\n{e}"
         )
+
+
+# =====================================================================
+# SRv6 / L3VPN-SRv6 configuration
+# =====================================================================
+
+def configure_bgp_srv6_locator(device, locator_name,
+                                network_instance='default',
+                                protocol_instance='default'):
+    """Configure BGP SRv6 locator reference.
+
+    Args:
+        device: Device object.
+        locator_name: SRv6 locator name.
+        network_instance: Network instance name.
+        protocol_instance: BGP protocol instance.
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(
+        f"Configuring BGP SRv6 locator {locator_name} on {device.name}"
+    )
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'global srv6 locator {locator_name}',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP SRv6 locator on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_srv6_locator(device, network_instance='default',
+                                   protocol_instance='default'):
+    """Remove BGP SRv6 locator reference."""
+    log.info(f"Removing BGP SRv6 locator from {device.name}")
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [bgp_context, 'no global srv6 locator', '!']
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP SRv6 locator from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_sid_allocation_mode(device, mode,
+                                       network_instance='default',
+                                       protocol_instance='default'):
+    """Configure BGP SID allocation mode for SRv6 VRF.
+
+    Args:
+        device: Device object.
+        mode: INSTANCE_SID or PER_NEXTHOP.
+        network_instance: VRF network instance name.
+        protocol_instance: BGP protocol instance.
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(
+        f"Configuring BGP SID allocation mode {mode} on {device.name} "
+        f"(network-instance: {network_instance})"
+    )
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [bgp_context, f'global sid-allocation-mode {mode}', '!']
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP SID allocation mode on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_sid_allocation_mode(device, network_instance='default',
+                                          protocol_instance='default'):
+    """Remove BGP SID allocation mode."""
+    log.info(f"Removing BGP SID allocation mode from {device.name}")
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [bgp_context, 'no global sid-allocation-mode', '!']
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP SID allocation mode from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_peer_group_extended_nexthop(device, peer_group,
+                                                afi_safi, enabled=True,
+                                                network_instance='default',
+                                                protocol_instance='default'):
+    """Configure extended-nexthop on a BGP peer-group AFI-SAFI.
+
+    Required for L3VPN_IPV4_UNICAST over IPv6 peers (RFC 5549).
+
+    Args:
+        device: Device object.
+        peer_group: Peer group name.
+        afi_safi: AFI-SAFI name (e.g., L3VPN_IPV4_UNICAST).
+        enabled: Enable extended-nexthop (default True).
+        network_instance: Network instance name.
+        protocol_instance: BGP protocol instance.
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+    """
+    log.info(
+        f"Configuring extended-nexthop on peer-group {peer_group} "
+        f"AFI-SAFI {afi_safi} on {device.name}"
+    )
+    enabled_str = 'true' if enabled else 'false'
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'peer-group {peer_group}',
+        f'afi-safi {afi_safi}',
+        f'extended-nexthop enable {enabled_str}',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure extended-nexthop on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_peer_group_extended_nexthop(device, peer_group,
+                                                   afi_safi,
+                                                   network_instance='default',
+                                                   protocol_instance='default'):
+    """Remove extended-nexthop from a BGP peer-group AFI-SAFI."""
+    log.info(
+        f"Removing extended-nexthop from peer-group {peer_group} on {device.name}"
+    )
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'peer-group {peer_group}',
+        f'afi-safi {afi_safi}',
+        'no extended-nexthop',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove extended-nexthop from {device.name}. "
+            f"Error:\n{e}"
+        )
