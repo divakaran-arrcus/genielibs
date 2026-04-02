@@ -2930,3 +2930,239 @@ def unconfigure_bgp_peer_group_extended_nexthop(device, peer_group,
             f"Could not remove extended-nexthop from {device.name}. "
             f"Error:\n{e}"
         )
+
+
+# =====================================================================
+# BGP Best Path Selection
+# =====================================================================
+
+def configure_bgp_multipath_as_path_relax(device, enabled=True,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Configure BGP multipath as-path-relax."""
+    log.info(f"Configuring BGP multipath as-path-relax on {device.name}")
+    flag = 'true' if enabled else 'false'
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [bgp_context, f'global route-selection-options multipath as-path-relax {flag}', '!']
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP multipath as-path-relax failed on {device.name}: {e}")
+
+
+def configure_bgp_med_missing_as_worst(device, enabled=True,
+                                        network_instance='default',
+                                        protocol_instance='default'):
+    """Configure BGP med-missing-as-worst."""
+    log.info(f"Configuring BGP med-missing-as-worst on {device.name}")
+    flag = 'true' if enabled else 'false'
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [bgp_context, f'global route-selection-options med-missing-as-worst {flag}', '!']
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP med-missing-as-worst failed on {device.name}: {e}")
+
+
+def configure_bgp_multipath_evpn_etree_ead_relax(device, enabled=True,
+                                                   network_instance='default',
+                                                   protocol_instance='default'):
+    """Configure BGP multipath-evpn-etree-ead-relax."""
+    log.info(f"Configuring BGP multipath-evpn-etree-ead-relax on {device.name}")
+    flag = 'true' if enabled else 'false'
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [bgp_context, f'global route-selection-options multipath-evpn-etree-ead-relax {flag}', '!']
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP multipath-evpn-etree-ead-relax failed on {device.name}: {e}")
+
+
+# =====================================================================
+# BGP eRPL (External Routing Policy Language)
+# =====================================================================
+
+def configure_bgp_erpl_server(device, server_name, address, port,
+                               preference=None,
+                               network_instance='default',
+                               protocol_instance='default'):
+    """Configure BGP eRPL server.
+
+    Args:
+        device: Device object.
+        server_name: eRPL server name.
+        address: Server IP address.
+        port: Server port number.
+        preference: Server preference value.
+    """
+    log.info(f"Configuring BGP eRPL server {server_name} on {device.name}")
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'erpl server {server_name}',
+        f'address {address}',
+        f'port {port}',
+    ]
+    if preference is not None:
+        config.append(f'preference {preference}')
+    config.append('!')
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP eRPL server failed on {device.name}: {e}")
+
+
+def unconfigure_bgp_erpl_server(device, server_name,
+                                  network_instance='default',
+                                  protocol_instance='default'):
+    """Remove BGP eRPL server."""
+    log.info(f"Removing BGP eRPL server {server_name} from {device.name}")
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [bgp_context, f'no erpl server {server_name}', '!']
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP eRPL server removal failed on {device.name}: {e}")
+
+
+def configure_bgp_erpl_connection_wait_time(device, seconds,
+                                              network_instance='default',
+                                              protocol_instance='default'):
+    """Configure BGP eRPL connection wait time."""
+    log.info(f"Configuring BGP eRPL connection-wait-time {seconds}s on {device.name}")
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [bgp_context, f'erpl connection-wait-time {seconds}', '!']
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP eRPL connection-wait-time failed on {device.name}: {e}")
+
+
+def configure_bgp_neighbor_apply_erpl(device, neighbor, afi_safi,
+                                        import_policy,
+                                        network_instance='default',
+                                        protocol_instance='default'):
+    """Configure eRPL import policy on a BGP neighbor AFI-SAFI.
+
+    Args:
+        device: Device object.
+        neighbor: Neighbor address.
+        afi_safi: AFI-SAFI name.
+        import_policy: eRPL policy name (server-side).
+    """
+    log.info(f"Configuring eRPL import-policy on neighbor {neighbor} on {device.name}")
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'neighbor {neighbor}',
+        f'afi-safi {afi_safi}',
+        f'apply-erpl import-policy {import_policy}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP eRPL import-policy failed on {device.name}: {e}")
+
+
+def unconfigure_bgp_neighbor_apply_erpl(device, neighbor, afi_safi,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Remove eRPL import policy from a BGP neighbor AFI-SAFI."""
+    log.info(f"Removing eRPL import-policy from neighbor {neighbor} on {device.name}")
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'neighbor {neighbor}',
+        f'afi-safi {afi_safi}',
+        'no apply-erpl import-policy',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP eRPL removal failed on {device.name}: {e}")
+
+
+# =====================================================================
+# BGP PIC (Prefix Independent Convergence)
+# =====================================================================
+
+def configure_bgp_install_backup(device, afi_safi, enabled=True,
+                                  network_instance='default',
+                                  protocol_instance='default'):
+    """Configure add-paths install-backup for BGP PIC.
+
+    Args:
+        device: Device object.
+        afi_safi: AFI-SAFI name.
+        enabled: Enable backup path installation (default True).
+    """
+    log.info(f"Configuring BGP install-backup for {afi_safi} on {device.name}")
+    flag = 'true' if enabled else 'false'
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'global afi-safi {afi_safi}',
+        f'add-paths install-backup {flag}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP install-backup failed on {device.name}: {e}")
+
+
+def unconfigure_bgp_install_backup(device, afi_safi,
+                                    network_instance='default',
+                                    protocol_instance='default'):
+    """Remove add-paths install-backup."""
+    log.info(f"Removing BGP install-backup for {afi_safi} on {device.name}")
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'global afi-safi {afi_safi}',
+        'no add-paths install-backup',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP install-backup removal failed on {device.name}: {e}")
+
+
+def configure_bgp_advertise_best_external(device, afi_safi, enabled=True,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Configure advertise-best-external for BGP PIC."""
+    log.info(f"Configuring BGP advertise-best-external for {afi_safi} on {device.name}")
+    flag = 'true' if enabled else 'false'
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'global afi-safi {afi_safi}',
+        f'advertise-best-external {flag}',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP advertise-best-external failed on {device.name}: {e}")
+
+
+def unconfigure_bgp_advertise_best_external(device, afi_safi,
+                                              network_instance='default',
+                                              protocol_instance='default'):
+    """Remove advertise-best-external."""
+    log.info(f"Removing BGP advertise-best-external for {afi_safi} on {device.name}")
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'global afi-safi {afi_safi}',
+        'no advertise-best-external',
+        '!',
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(f"BGP advertise-best-external removal failed on {device.name}: {e}")
