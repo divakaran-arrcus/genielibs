@@ -9,6 +9,7 @@ Parsers used:
     - ShowBgpGlobalAfiSafi — per-AFI totals (paths, prefixes, received/sent)
     - ShowBgpNeighbor — session state, peer-as, transport, messages, AFI-SAFIs
     - ShowBgpRibRoute — loc-RIB routes with path attributes
+    - ShowBgpConfig — running-config (peer-groups, BFD, policies, networks)
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from genie.libs.parser.arcos.show_bgp import (
     ShowBgpGlobalAfiSafi,
     ShowBgpNeighbor,
     ShowBgpRibRoute,
+    ShowBgpConfig,
 )
 
 
@@ -215,6 +217,91 @@ class Bgp(SuperBgp):
                 if prefixes:
                     af_entry["prefixes"] = prefixes
 
+        # --- Section 6: Running config (peer-groups, BFD, policies, networks) ---
+        run_cfg = self._parse_config(vrf, instance)
+        if run_cfg:
+            cfg = run_cfg.get("config", {})
+
+            # Per-AF config: networks, ibgp-maximum-paths, policies
+            cfg_afis = cfg.get("afi-safis", {})
+            if cfg_afis:
+                for af_name, af_cfg in cfg_afis.items():
+                    af_key = _map_afi_name(af_name)
+                    af_entry = vrf_dict.setdefault(
+                        "address_family", {}
+                    ).setdefault(af_key, {})
+
+                    mp = af_cfg.get("ibgp-maximum-paths")
+                    if mp is not None:
+                        af_entry["maximum_paths_ibgp"] = int(mp)
+
+                    nets = af_cfg.get("networks")
+                    if nets:
+                        af_entry["networks"] = nets
+
+                    imp = af_cfg.get("import-policy")
+                    if imp:
+                        af_entry["route_map_name_in"] = imp[0] if imp else None
+
+                    exp = af_cfg.get("export-policy")
+                    if exp:
+                        af_entry["route_map_name_out"] = exp[0] if exp else None
+
+            # Peer-groups → maps to XE peer_session equivalent
+            cfg_pgs = run_cfg.get("peer-groups", {})
+            if cfg_pgs:
+                for pg_name, pg_data in cfg_pgs.items():
+                    pg_entry: Dict[str, Any] = {}
+
+                    pg_as = pg_data.get("peer-as")
+                    if pg_as is not None:
+                        pg_entry["remote_as"] = int(pg_as)
+
+                    pg_transport = pg_data.get("transport-local-address")
+                    if pg_transport:
+                        pg_entry["update_source"] = pg_transport
+
+                    pg_bfd = pg_data.get("bfd-enable")
+                    if pg_bfd is not None:
+                        pg_entry["fall_over_bfd"] = pg_bfd
+
+                    if pg_entry:
+                        inst_dict.setdefault("peer_session", {})[
+                            pg_name
+                        ] = pg_entry
+
+            # Merge BFD + policies from config into neighbor entries
+            cfg_nbrs = run_cfg.get("neighbors", {})
+            if cfg_nbrs and "neighbor" in vrf_dict:
+                for addr, cfg_nbr in cfg_nbrs.items():
+                    if addr not in vrf_dict["neighbor"]:
+                        continue
+                    nbr_entry = vrf_dict["neighbor"][addr]
+
+                    bfd = cfg_nbr.get("bfd-enable")
+                    if bfd is not None:
+                        nbr_entry["fall_over_bfd"] = bfd
+
+                    # Per-neighbor AFI-SAFI policies from config
+                    nbr_cfg_afis = cfg_nbr.get("afi-safis", {})
+                    if nbr_cfg_afis:
+                        for af_name, af_cfg in nbr_cfg_afis.items():
+                            af_key = _map_afi_name(af_name)
+                            nbr_af = nbr_entry.setdefault(
+                                "address_family", {}
+                            ).setdefault(af_key, {})
+
+                            imp = af_cfg.get("import-policy")
+                            if imp:
+                                nbr_af["route_map_name_in"] = (
+                                    imp[0] if imp else None
+                                )
+                            exp = af_cfg.get("export-policy")
+                            if exp:
+                                nbr_af["route_map_name_out"] = (
+                                    exp[0] if exp else None
+                                )
+
         # --- Assemble full hierarchy ---
         if vrf_dict:
             inst_dict.setdefault("vrf", {})[vrf] = vrf_dict
@@ -269,6 +356,23 @@ class Bgp(SuperBgp):
                 afi_safi=afi_safi,
             )
             return result.get("routes", {})
+        except Exception:
+            return {}
+
+    def _parse_config(
+        self, ni: str, pi: str,
+    ) -> Dict[str, Any]:
+        """Parse BGP running config.
+
+        Returns the bgp[instance] dict from ShowBgpConfig, containing
+        config, neighbors, and peer-groups.
+        """
+        try:
+            parser = ShowBgpConfig(device=self.device)
+            result = parser.parse(network_instance=ni)
+            ni_data = result.get("network-instance", {}).get(ni, {})
+            bgp_data = ni_data.get("bgp", {})
+            return bgp_data.get(pi, {})
         except Exception:
             return {}
 
