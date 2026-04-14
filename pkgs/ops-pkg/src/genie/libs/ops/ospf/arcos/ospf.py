@@ -36,6 +36,7 @@ from genie.libs.parser.arcos.show_ospf import (
     ShowOspfInterface,
     ShowOspfSpfThrottle,
     ShowOspfLsdb,
+    ShowOspfRunningConfig,
 )
 from genie.libs.parser.arcos.show_network_instance import ShowNetworkInstance
 from genie.libs.parser.arcos.show_ospfv3 import (
@@ -102,7 +103,30 @@ class Ospf(SuperOspf):
                     "throttle", {}
                 )["spf"] = spf_timers
 
-        # --- Section 3: Redistribution from table-connections ---
+        # --- Section 3: Running config (route-preference, interface timers) ---
+        run_cfg = self._parse_running_config()
+        if run_cfg:
+            rp = run_cfg.get("global", {}).get("route-preference", {})
+            if rp:
+                pref_dict: Dict[str, Any] = {}
+                intra = rp.get("intra-area")
+                if intra is not None:
+                    pref_dict.setdefault("single_value", {})["all"] = intra
+                    pref_dict.setdefault("multi_values", {}).setdefault(
+                        "granularity", {}
+                    ).setdefault("detail", {})["intra_area"] = intra
+                inter = rp.get("inter-area")
+                if inter is not None:
+                    pref_dict.setdefault("multi_values", {}).setdefault(
+                        "granularity", {}
+                    ).setdefault("detail", {})["inter_area"] = inter
+                ext = rp.get("external")
+                if ext is not None:
+                    pref_dict.setdefault("multi_values", {})["external"] = ext
+                if pref_dict:
+                    inst_dict["preference"] = pref_dict
+
+        # --- Section 4: Redistribution from table-connections ---
         redistribution = self._parse_redistribution(vrf)
         if redistribution:
             inst_dict["redistribution"] = redistribution
@@ -169,6 +193,20 @@ class Ospf(SuperOspf):
                     enable = i_data.get("interface-up")
                     if enable is not None:
                         intf_entry["enable"] = enable
+
+                    # Merge timers from running-config (not in operational state)
+                    if run_cfg:
+                        rc_areas = run_cfg.get("areas", {})
+                        rc_intfs = rc_areas.get(area_id, {}).get(
+                            "interfaces", {}
+                        )
+                        rc_intf = rc_intfs.get(intf_name, {})
+                        hi = rc_intf.get("hello-interval")
+                        if hi is not None:
+                            intf_entry["hello_interval"] = hi
+                        di = rc_intf.get("dead-interval")
+                        if di is not None:
+                            intf_entry["dead_interval"] = di
 
                     # Neighbors on this interface
                     intf_nbrs = nbr_state.get(area_id, {}).get(
@@ -303,6 +341,35 @@ class Ospf(SuperOspf):
 
         if areas_dict:
             inst_dict["areas"] = areas_dict
+
+        # --- Merge running-config-only areas/interfaces ---
+        if run_cfg:
+            for rc_aid, rc_adata in run_cfg.get("areas", {}).items():
+                area_entry = areas_dict.setdefault(rc_aid, {"area_id": rc_aid})
+
+                # Area type from running-config if not already set
+                if "area_type" not in area_entry:
+                    rc_type = rc_adata.get("area-type")
+                    if rc_type:
+                        area_entry["area_type"] = _map_area_type(rc_type)
+
+                rc_intfs = rc_adata.get("interfaces", {})
+                if rc_intfs:
+                    intfs_dict = area_entry.setdefault("interfaces", {})
+                    for intf_name, rc_idata in rc_intfs.items():
+                        intf_entry = intfs_dict.setdefault(
+                            intf_name, {"name": intf_name}
+                        )
+                        # Add timers if not already present
+                        hi = rc_idata.get("hello-interval")
+                        if hi is not None and "hello_interval" not in intf_entry:
+                            intf_entry["hello_interval"] = hi
+                        di = rc_idata.get("dead-interval")
+                        if di is not None and "dead_interval" not in intf_entry:
+                            intf_entry["dead_interval"] = di
+                        nt = rc_idata.get("network-type")
+                        if nt and "interface_type" not in intf_entry:
+                            intf_entry["interface_type"] = _map_network_type(nt)
 
         # --- OSPFv3 (address_family: ipv6) ---
         v3_inst_dict = self._build_ospfv3_instance(vrf)
@@ -477,6 +544,13 @@ class Ospf(SuperOspf):
             )[rid] = nbr
 
         return organized
+
+    def _parse_running_config(self) -> Dict[str, Any]:
+        try:
+            parser = ShowOspfRunningConfig(device=self.device)
+            return parser.parse()
+        except Exception:
+            return {}
 
     def _parse_redistribution(
         self, ni: str = "default",
