@@ -281,3 +281,103 @@ def is_srms_mapping_present(device, mapping_id: str,
         True if the mapping is present, False otherwise.
     """
     return get_srms_mapping(device, mapping_id, ni=ni) is not None
+
+
+# ---------------------------------------------------------------------------
+# SRv6 locator scalar getters
+# ---------------------------------------------------------------------------
+
+def get_srv6_locator_prefix(device, locator_name: str,
+                            ni: str = 'default') -> Optional[str]:
+    """Get the IPv6 prefix of an SRv6 locator.
+
+    Args:
+        device: pyATS device object.
+        locator_name: Name of the locator.
+        ni: Network instance name (default: 'default').
+
+    Returns:
+        Prefix string (e.g. ``'fcbb:bb00:1::/48'``), or ``None`` if the
+        locator is not found.
+    """
+    loc = get_srv6_locator(device, locator_name, ni=ni)
+    if not loc:
+        return None
+    return loc.get("prefix")
+
+
+def get_srv6_locator_algorithm(device, locator_name: str,
+                               ni: str = 'default') -> Optional[int]:
+    """Get the algorithm identifier of an SRv6 locator.
+
+    Args:
+        device: pyATS device object.
+        locator_name: Name of the locator.
+        ni: Network instance name (default: 'default').
+
+    Returns:
+        Algorithm integer (e.g. ``128``), or ``None`` if the locator is
+        not found or algorithm is not set.
+    """
+    loc = get_srv6_locator(device, locator_name, ni=ni)
+    if not loc:
+        return None
+    return loc.get("algorithm")
+
+
+def get_srv6_locator_micro_segment_enabled(
+    device, locator_name: str, ni: str = 'default',
+) -> Optional[bool]:
+    """Check if micro-segment-behavior-unode is enabled on a locator.
+
+    Args:
+        device: pyATS device object.
+        locator_name: Name of the locator.
+        ni: Network instance name (default: 'default').
+
+    Returns:
+        ``True`` if micro-segment is enabled, ``False`` if disabled, or
+        ``None`` if the locator is not found.
+    """
+    loc = get_srv6_locator(device, locator_name, ni=ni)
+    if not loc:
+        return None
+    return loc.get("micro-segment-behavior-unode")
+
+
+def get_srv6_locator_node_length(device, locator_name: str,
+                                 ni: str = 'default') -> Optional[int]:
+    """Get the locator-node-length of an SRv6 locator.
+
+    Args:
+        device: pyATS device object.
+        locator_name: Name of the locator.
+        ni: Network instance name (default: 'default').
+
+    Returns:
+        Node length integer (e.g. ``16``), or ``None`` if the locator is
+        not found.
+    """
+    loc = get_srv6_locator(device, locator_name, ni=ni)
+    if not loc:
+        return None
+    return loc.get("locator-node-length")
+
+
+def get_srv6_locator_function_length(device, locator_name: str,
+                                     ni: str = 'default') -> Optional[int]:
+    """Get the function-length of an SRv6 locator.
+
+    Args:
+        device: pyATS device object.
+        locator_name: Name of the locator.
+        ni: Network instance name (default: 'default').
+
+    Returns:
+        Function length integer (e.g. ``16``), or ``None`` if the locator
+        is not found or function-length is not set.
+    """
+    loc = get_srv6_locator(device, locator_name, ni=ni)
+    if not loc:
+        return None
+    return loc.get("function-length")

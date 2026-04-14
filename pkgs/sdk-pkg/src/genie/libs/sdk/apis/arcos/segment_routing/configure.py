@@ -671,3 +671,182 @@ def unconfigure_srms_mapping_ipv6_prefix(device, mapping_id, prefix,
             f"Could not remove SRMS mapping {mapping_id} IPv6 prefix "
             f"{prefix} on {device.name}. Error:\n{e}"
         )
+
+
+# ---------------------------------------------------------------------------
+# SRv6 Encapsulation — ip-ttl-propagation
+# ---------------------------------------------------------------------------
+
+def configure_srv6_encap_ip_ttl_propagation(device, enabled=True,
+                                            network_instance='default'):
+    """Configure SRv6 encapsulation ip-ttl-propagation.
+
+    When enabled, the hop-limit/TTL value of the inner packet is copied
+    into the hop-limit field of the encapsulating IPv6 header.
+    ip-ttl-propagation takes precedence over hop-limit — enabling it
+    removes any existing hop-limit configuration.
+
+    Args:
+        device (obj): Device object.
+        enabled (bool, optional): Enable or disable ip-ttl-propagation.
+            Defaults to True.
+        network_instance (str, optional): Network instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure SRv6 encapsulation
+            ip-ttl-propagation.
+
+    Example:
+        >>> configure_srv6_encap_ip_ttl_propagation(device=device)
+    """
+    ni = network_instance
+    value = "true" if enabled else "false"
+    log.info(
+        "Configuring SRv6 encapsulation ip-ttl-propagation %s on %s "
+        "(network-instance: %s)", value, device.name, ni
+    )
+
+    config = [
+        f'network-instance {ni}',
+        f'srv6 encapsulation ip-ttl-propagation {value}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure SRv6 encapsulation ip-ttl-propagation "
+            f"{value} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_srv6_encap_ip_ttl_propagation(device,
+                                              network_instance='default'):
+    """Remove SRv6 encapsulation ip-ttl-propagation configuration.
+
+    Args:
+        device (obj): Device object.
+        network_instance (str, optional): Network instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove SRv6 encapsulation
+            ip-ttl-propagation.
+
+    Example:
+        >>> unconfigure_srv6_encap_ip_ttl_propagation(device=device)
+    """
+    ni = network_instance
+    log.info(
+        "Removing SRv6 encapsulation ip-ttl-propagation on %s "
+        "(network-instance: %s)", device.name, ni
+    )
+
+    config = [
+        f'network-instance {ni}',
+        'no srv6 encapsulation ip-ttl-propagation',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove SRv6 encapsulation ip-ttl-propagation on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# SRv6 Encapsulation — hop-limit
+# ---------------------------------------------------------------------------
+
+def configure_srv6_encap_hop_limit(device, hop_limit,
+                                   network_instance='default'):
+    """Configure SRv6 encapsulation hop-limit.
+
+    Sets the hop-limit field of the encapsulating IPv6 header.
+    ip-ttl-propagation must be false (or unconfigured) before setting
+    hop-limit.
+
+    Args:
+        device (obj): Device object.
+        hop_limit (int): Hop-limit value (1-255).
+        network_instance (str, optional): Network instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure SRv6 encapsulation
+            hop-limit.
+
+    Example:
+        >>> configure_srv6_encap_hop_limit(device=device, hop_limit=15)
+    """
+    ni = network_instance
+    log.info(
+        "Configuring SRv6 encapsulation hop-limit %s on %s "
+        "(network-instance: %s)", hop_limit, device.name, ni
+    )
+
+    config = [
+        f'network-instance {ni}',
+        f'srv6 encapsulation hop-limit {hop_limit}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure SRv6 encapsulation hop-limit "
+            f"{hop_limit} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_srv6_encap_hop_limit(device, network_instance='default'):
+    """Remove SRv6 encapsulation hop-limit configuration.
+
+    Args:
+        device (obj): Device object.
+        network_instance (str, optional): Network instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove SRv6 encapsulation hop-limit.
+
+    Example:
+        >>> unconfigure_srv6_encap_hop_limit(device=device)
+    """
+    ni = network_instance
+    log.info(
+        "Removing SRv6 encapsulation hop-limit on %s "
+        "(network-instance: %s)", device.name, ni
+    )
+
+    config = [
+        f'network-instance {ni}',
+        'no srv6 encapsulation hop-limit',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove SRv6 encapsulation hop-limit on "
+            f"{device.name}. Error:\n{e}"
+        )

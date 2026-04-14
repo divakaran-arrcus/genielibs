@@ -102,46 +102,65 @@ class TestRoutePolicyArcos(TestCase):
 
         cfg_str = str(cfgs[dev.name]).strip().splitlines()
 
-        # Expect prefix-set and next-hop-set rendered
+        # Expect prefix-set and next-hop-set rendered (flat command style)
+        cfg_joined = "\n".join(cfg_str)
         self.assertIn(
-            "routing-policy defined-sets prefix-set __IPV4_MARTIAN_PREFIX_SET__",
-            cfg_str,
+            "routing-policy defined-sets prefix-set __IPV4_MARTIAN_PREFIX_SET__ prefix 0.0.0.0/8 8..32",
+            cfg_joined,
         )
-        self.assertIn(" prefix 0.0.0.0/8 8..32", cfg_str)
-        self.assertIn(" prefix 127.0.0.0/8 8..32", cfg_str)
-        self.assertIn("routing-policy defined-sets next-hop-set next-hop-set-all", cfg_str)
-        self.assertIn(" address [ SELF 10.1.1.1 10:1:1::1 ]", cfg_str)
+        self.assertIn(
+            "routing-policy defined-sets prefix-set __IPV4_MARTIAN_PREFIX_SET__ prefix 127.0.0.0/8 8..32",
+            cfg_joined,
+        )
+        self.assertIn(
+            "routing-policy defined-sets next-hop-set next-hop-set-all address [ SELF 10.1.1.1 10:1:1::1 ]",
+            cfg_joined,
+        )
 
-        # Expect policy pass-martians with match-prefix-set and accept-route
-        self.assertIn("routing-policy policy-definition pass-martians", cfg_str)
-        self.assertIn(" statement 10", cfg_str)
+        # Expect policy pass-martians with match-prefix-set and accept-route (flat commands)
         self.assertIn(
-            "  conditions match-prefix-set prefix-set __IPV4_MARTIAN_PREFIX_SET__",
-            cfg_str,
+            "routing-policy policy-definition pass-martians statement 10 conditions match-prefix-set prefix-set __IPV4_MARTIAN_PREFIX_SET__",
+            cfg_joined,
         )
         self.assertIn(
-            "  conditions match-prefix-set match-set-options ANY",
-            cfg_str,
+            "routing-policy policy-definition pass-martians statement 10 conditions match-prefix-set match-set-options ANY",
+            cfg_joined,
         )
-        self.assertIn("  actions accept-route", cfg_str)
+        self.assertIn(
+            "routing-policy policy-definition pass-martians statement 10 actions accept-route",
+            cfg_joined,
+        )
 
         # Expect policy tag-and-level with match-tag-set, match-next-hop-set,
         # and igp-actions set-tag/set-level plus reject-route.
-        self.assertIn("routing-policy policy-definition tag-and-level", cfg_str)
-        self.assertIn(" statement 20", cfg_str)
-        self.assertIn("  conditions match-tag-set tag-set pqr", cfg_str)
-        self.assertIn("  conditions match-tag-set match-set-options ANY", cfg_str)
         self.assertIn(
-            "  conditions match-next-hop-set next-hop-set next-hop-set-all",
-            cfg_str,
+            "routing-policy policy-definition tag-and-level statement 20 conditions match-tag-set tag-set pqr",
+            cfg_joined,
         )
         self.assertIn(
-            "  conditions match-next-hop-set match-set-options ALL",
-            cfg_str,
+            "routing-policy policy-definition tag-and-level statement 20 conditions match-tag-set match-set-options ANY",
+            cfg_joined,
         )
-        self.assertIn("  actions igp-actions set-tag 111", cfg_str)
-        self.assertIn("  actions igp-actions isis-actions set-level 2", cfg_str)
-        self.assertIn("  actions reject-route", cfg_str)
+        self.assertIn(
+            "routing-policy policy-definition tag-and-level statement 20 conditions match-next-hop-set next-hop-set next-hop-set-all",
+            cfg_joined,
+        )
+        self.assertIn(
+            "routing-policy policy-definition tag-and-level statement 20 conditions match-next-hop-set match-set-options ALL",
+            cfg_joined,
+        )
+        self.assertIn(
+            "routing-policy policy-definition tag-and-level statement 20 actions igp-actions set-tag 111",
+            cfg_joined,
+        )
+        self.assertIn(
+            "routing-policy policy-definition tag-and-level statement 20 actions igp-actions isis-actions set-level 2",
+            cfg_joined,
+        )
+        self.assertIn(
+            "routing-policy policy-definition tag-and-level statement 20 actions reject-route",
+            cfg_joined,
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -52,18 +52,40 @@ def unconfigure_ospf_area(device, area_id):
 def configure_ospf_interface(device, area_id, interface, network_type=None,
                               passive=None, hello_interval=None,
                               dead_interval=None):
-    """Configure OSPF interface in an area."""
+    """Configure OSPF interface in an area.
+
+    On arcOS, loopback interfaces are passive by default.
+    The ``passive`` parameter is accepted but only applied for
+    non-loopback interfaces when explicitly set to False.
+
+    The CLI hierarchy is::
+
+        network-instance default protocol OSPF default
+         area <area_id>
+          interface <interface>
+           network-type <type>     (optional)
+           timers hello-interval   (optional)
+           timers dead-interval    (optional)
+          !
+    """
     log.info(f"Configuring OSPF interface {interface} in area {area_id} on {device.name}")
-    config = [f'{_CTX} area {area_id} interface {interface}']
+
+    # Build hierarchical config — area context first, then interface submode
+    config = [
+        _CTX,
+        f'area {area_id}',
+        f'interface {interface}',
+    ]
+
     if network_type:
         config.append(f'network-type {network_type}')
-    if passive is not None:
-        config.append(f'passive {"true" if passive else "false"}')
     if hello_interval is not None:
         config.append(f'timers hello-interval {hello_interval}')
     if dead_interval is not None:
         config.append(f'timers dead-interval {dead_interval}')
+
     config.append('!')
+
     try:
         device.configure(config)
     except SubCommandFailure as e:

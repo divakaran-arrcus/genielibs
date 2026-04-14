@@ -202,7 +202,7 @@ def get_isis_adjacency_state(
             adjacencies = level_data.get("adjacency", {})
             if adjacency in adjacencies:
                 entry = adjacencies[adjacency]
-                return entry.get("state") or entry.get("adjacency-state")
+                return entry.get("state") or entry.get("adjacency_state")
     
     return None
 
