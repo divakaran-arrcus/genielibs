@@ -1,0 +1,112 @@
+"""Unit tests for ArcOS NTP Ops model."""
+
+import unittest
+from unittest.mock import Mock, patch
+
+from genie.libs.ops.ntp.arcos.ntp import Ntp
+
+MOD = "genie.libs.ops.ntp.arcos.ntp"
+
+PARSED_OUTPUT = {
+    "network-instance": "default",
+    "associations": {
+        "216.229.0.49": {
+            "address": "216.229.0.49",
+            "stratum": 2,
+            "root-delay": 22,
+            "root-dispersion": "27",
+            "offset": "81",
+            "poll-interval": 64,
+            "reach": 377,
+            "time-since-last-response": "60",
+            "association-status": "SYNC_SOURCE",
+        },
+        "66.118.228.14": {
+            "address": "66.118.228.14",
+            "stratum": 2,
+            "root-delay": 12,
+            "root-dispersion": "21",
+            "offset": "81",
+            "poll-interval": 64,
+            "reach": 377,
+            "association-status": "COMBINED",
+        },
+        "67.217.246.204": {
+            "address": "67.217.246.204",
+            "stratum": 3,
+            "root-delay": 165,
+            "offset": "115",
+            "poll-interval": 64,
+            "reach": 377,
+            "association-status": "COMBINED",
+        },
+    },
+}
+
+
+class TestNtpOps(unittest.TestCase):
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = "rtr2"
+        self.device.os = "arcos"
+
+    @patch(f"{MOD}.ShowNtp")
+    def test_learn_basic(self, mock_parser):
+        mock_parser.return_value.parse.return_value = PARSED_OUTPUT
+
+        ops = Ntp(device=self.device)
+        ops.learn()
+
+        self.assertIn("clock_state", ops.info)
+        cs = ops.info["clock_state"]["system_status"]
+        self.assertEqual(cs["associations_address"], "216.229.0.49")
+        self.assertEqual(cs["clock_stratum"], 2)
+
+        # VRF associations
+        vrf = ops.info["vrf"]["default"]
+        assocs = vrf["associations"]["address"]
+        self.assertIn("216.229.0.49", assocs)
+        self.assertIn("66.118.228.14", assocs)
+        self.assertIn("67.217.246.204", assocs)
+
+        # Check sync source peer
+        sync = assocs["216.229.0.49"]["local_mode"]["client"]["isconfigured"][True]
+        self.assertEqual(sync["address"], "216.229.0.49")
+        self.assertEqual(sync["stratum"], 2)
+        self.assertEqual(sync["poll"], 64)
+        self.assertEqual(sync["reach"], 377)
+        self.assertEqual(sync["delay"], "22")
+        self.assertTrue(sync["isconfigured"])
+
+    @patch(f"{MOD}.ShowNtp")
+    def test_learn_empty(self, mock_parser):
+        mock_parser.return_value.parse.side_effect = Exception("No data")
+
+        ops = Ntp(device=self.device)
+        ops.learn()
+
+        self.assertEqual(ops.info, {})
+
+    @patch(f"{MOD}.ShowNtp")
+    def test_learn_no_sync_source(self, mock_parser):
+        """All peers COMBINED, no SYNC_SOURCE — no clock_state."""
+        mock_parser.return_value.parse.return_value = {
+            "associations": {
+                "1.1.1.1": {
+                    "address": "1.1.1.1",
+                    "stratum": 2,
+                    "association-status": "COMBINED",
+                },
+            },
+        }
+
+        ops = Ntp(device=self.device)
+        ops.learn()
+
+        self.assertNotIn("clock_state", ops.info)
+        self.assertIn("vrf", ops.info)
+
+
+if __name__ == "__main__":
+    unittest.main()
