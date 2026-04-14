@@ -4,7 +4,12 @@ Provides a Genie OSPF Ops object for Arrcus devices based on
 OpenConfig JSON parser output. The ``self.info`` structure matches
 the IOS-XE/XR OSPF Ops schema for cross-platform ``learn()``/``diff()``.
 
+Supports both OSPFv2 (address_family: ipv4) and OSPFv3 (address_family: ipv6)
+in a single ops model, matching the XR/XE approach where ``device.learn('ospf')``
+returns both v2 and v3 data.
+
 Parsers used:
+    OSPFv2:
     - ShowOspfGlobal — router-id, ABR/ASBR flags
     - ShowOspfSpfThrottle — SPF timer values
     - ShowOspfArea — area type, stub cost, neighbor/interface counts
@@ -12,6 +17,10 @@ Parsers used:
     - ShowOspfNeighbor — neighbor RID, IP, adjacency state, timestamps
     - ShowOspfLsdb — LSA types, router/summary LSA bodies
     - ShowNetworkInstance — table-connections (redistribution)
+
+    OSPFv3:
+    - ShowOspfv3Global — router-id, ABR/ASBR flags (IPv6)
+    - ShowOspfv3Neighbor — neighbor RID, IP, adjacency state (IPv6)
 """
 
 from __future__ import annotations
@@ -29,25 +38,30 @@ from genie.libs.parser.arcos.show_ospf import (
     ShowOspfLsdb,
 )
 from genie.libs.parser.arcos.show_network_instance import ShowNetworkInstance
+from genie.libs.parser.arcos.show_ospfv3 import (
+    ShowOspfv3Global,
+    ShowOspfv3Neighbor,
+)
 
 
 class Ospf(SuperOspf):
-    """ArcOS OSPF Genie Ops Object.
+    """ArcOS OSPF Genie Ops Object (OSPFv2 + OSPFv3).
 
     ``self.info`` follows the IOS-XE/XR schema::
 
-        info[vrf][<vrf>][address_family][ipv4][instance][<instance>]
-            ├─ router_id
-            ├─ spf_control.throttle.spf.{start,hold,maximum}
-            ├─ redistribution[<protocol>].enabled
-            └─ areas[<area_id>]
-                ├─ area_id, area_type, default_cost
-                ├─ statistics.{spf_runs_count, ...}
-                ├─ database.lsa_types[<type>].lsas[<lsa>].ospfv2.{header,body}
-                ├─ interfaces[<intf>]
-                │   ├─ name, interface_type, passive, cost, enable
-                │   └─ neighbors[<rid>].{neighbor_router_id, address}
-                └─ ...
+        info[vrf][<vrf>][address_family]
+            ├─ [ipv4][instance][<instance>]  ← OSPFv2
+            │   ├─ router_id
+            │   ├─ spf_control.throttle.spf.{start,hold,maximum}
+            │   ├─ redistribution[<protocol>].enabled
+            │   └─ areas[<area_id>]
+            │       ├─ area_id, area_type, default_cost, statistics
+            │       ├─ database.lsa_types[<type>].lsas[<lsa>]
+            │       └─ interfaces[<intf>].neighbors[<rid>]
+            └─ [ipv6][instance][<instance>]  ← OSPFv3
+                ├─ router_id
+                └─ areas[<area_id>]
+                    └─ interfaces[<intf>].neighbors[<rid>]
     """
 
     def learn(self, vrf: str = "default", instance: str = "default",
@@ -290,18 +304,21 @@ class Ospf(SuperOspf):
         if areas_dict:
             inst_dict["areas"] = areas_dict
 
+        # --- OSPFv3 (address_family: ipv6) ---
+        v3_inst_dict = self._build_ospfv3_instance(vrf)
+
         # Assemble the full XR/XE hierarchy
+        af_dict: Dict[str, Any] = {}
         if inst_dict:
+            af_dict["ipv4"] = {"instance": {instance: inst_dict}}
+        if v3_inst_dict:
+            af_dict["ipv6"] = {"instance": {instance: v3_inst_dict}}
+
+        if af_dict:
             self.info = {
                 "vrf": {
                     vrf: {
-                        "address_family": {
-                            "ipv4": {
-                                "instance": {
-                                    instance: inst_dict,
-                                }
-                            }
-                        }
+                        "address_family": af_dict,
                     }
                 }
             }
@@ -373,6 +390,93 @@ class Ospf(SuperOspf):
             return result.get("areas", {})
         except Exception:
             return {}
+
+    # ------------------------------------------------------------------
+    # OSPFv3 builder
+    # ------------------------------------------------------------------
+
+    def _build_ospfv3_instance(self, vrf: str) -> Dict[str, Any]:
+        """Build the OSPFv3 instance dict (address_family: ipv6).
+
+        Returns an instance dict matching the same XR/XE schema as
+        OSPFv2 but populated from ShowOspfv3* parsers.
+        """
+        inst: Dict[str, Any] = {}
+
+        # Global state
+        v3_global = self._parse_v3_global()
+        if v3_global:
+            rid = v3_global.get("router-id")
+            if rid:
+                inst["router_id"] = rid
+
+        # Neighbors (reorganized by area → interface → rid)
+        v3_nbrs = self._parse_v3_neighbors()
+
+        # Build areas from neighbor data
+        if v3_nbrs:
+            areas_dict: Dict[str, Any] = {}
+            for area_id, intfs in v3_nbrs.items():
+                area_entry: Dict[str, Any] = {"area_id": area_id}
+                interfaces_dict: Dict[str, Any] = {}
+
+                for intf_name, nbrs in intfs.items():
+                    intf_entry: Dict[str, Any] = {"name": intf_name}
+                    neighbors_dict: Dict[str, Any] = {}
+                    for nbr_rid, nbr_data in nbrs.items():
+                        nbr_entry: Dict[str, Any] = {
+                            "neighbor_router_id": nbr_rid,
+                        }
+                        addr = nbr_data.get("neighbor-ip-address")
+                        if addr:
+                            nbr_entry["address"] = addr
+                        neighbors_dict[nbr_rid] = nbr_entry
+
+                    if neighbors_dict:
+                        intf_entry["neighbors"] = neighbors_dict
+                    interfaces_dict[intf_name] = intf_entry
+
+                if interfaces_dict:
+                    area_entry["interfaces"] = interfaces_dict
+                areas_dict[area_id] = area_entry
+
+            if areas_dict:
+                inst["areas"] = areas_dict
+
+        return inst
+
+    # ------------------------------------------------------------------
+    # OSPFv3 parser helpers
+    # ------------------------------------------------------------------
+
+    def _parse_v3_global(self) -> Dict[str, Any]:
+        try:
+            parser = ShowOspfv3Global(device=self.device)
+            return parser.parse()
+        except Exception:
+            return {}
+
+    def _parse_v3_neighbors(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        """Parse OSPFv3 neighbors, reorganized by area → interface → rid."""
+        try:
+            parser = ShowOspfv3Neighbor(device=self.device)
+            result = parser.parse()
+            raw = result.get("neighbors", {})
+        except Exception:
+            return {}
+
+        organized: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        for key, nbr in raw.items():
+            area_id = str(nbr.get("area", 0))
+            intf = nbr.get("interface", "")
+            rid = nbr.get("neighbor-router-id", "")
+            if not rid:
+                continue
+            organized.setdefault(area_id, {}).setdefault(
+                intf, {}
+            )[rid] = nbr
+
+        return organized
 
     def _parse_redistribution(
         self, ni: str = "default",
