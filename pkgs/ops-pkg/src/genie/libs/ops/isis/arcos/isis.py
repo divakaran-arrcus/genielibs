@@ -84,12 +84,12 @@ class Isis(SuperIsis):
             intf_entry["name"] = if_name
 
             # Level type (LEVEL_1, LEVEL_2, LEVEL_1_2 -> level-1-only, etc.)
-            circuit_type = if_data.get("circuit-type")
+            circuit_type = if_data.get("circuit_type")
             if circuit_type:
                 intf_entry["level_type"] = self._map_circuit_type(circuit_type)
 
             # Interface type (POINT_TO_POINT, LOOPBACK, etc.)
-            if_type = if_data.get("network-type")
+            if_type = if_data.get("network_type")
             if if_type:
                 intf_entry["interface_type"] = self._map_interface_type(if_type)
 
@@ -100,7 +100,7 @@ class Isis(SuperIsis):
             # Timers
             timers = if_data.get("timers", {}) or {}
             if timers:
-                lsp_pacing = timers.get("lsp-pacing-interval")
+                lsp_pacing = timers.get("lsp_pacing_interval")
                 if lsp_pacing is not None:
                     intf_entry["lsp_pacing_interval"] = lsp_pacing
 
@@ -131,7 +131,7 @@ class Isis(SuperIsis):
                     topo_root["metric"] = metric
 
                 # Packet counters per level
-                pkt_counters = lvl_data.get("packet-counters", {}) or {}
+                pkt_counters = lvl_data.get("packet_counters", {}) or {}
                 if pkt_counters:
                     lvl_root = (
                         intf_entry.setdefault("packet_counters", {})
@@ -169,7 +169,7 @@ class Isis(SuperIsis):
             snpa = intf_data.get("snpa")
 
             # Map level (e.g. LEVEL_2) to XR-style key (level-2)
-            level_raw = neigh.get("level") or neigh.get("adjacency-type")
+            level_raw = neigh.get("level") or neigh.get("adjacency_type")
             level_name = self._map_level_string(level_raw)
             if not level_name:
                 level_name = "level-1-2"
@@ -184,15 +184,15 @@ class Isis(SuperIsis):
             )
 
             # Core adjacency fields
-            state = neigh.get("state") or neigh.get("adjacency-state")
+            state = neigh.get("state") or neigh.get("adjacency_state")
             if state is not None:
                 neighbor_root["state"] = state
 
-            hold = neigh.get("holdtime") or neigh.get("remaining-hold-time")
+            hold = neigh.get("holdtime") or neigh.get("remaining_hold_time")
             if hold is not None:
                 neighbor_root["hold_timer"] = int(hold)
 
-            last_up = neigh.get("up-time")
+            last_up = neigh.get("up_time")
             if last_up is not None:
                 neighbor_root["lastuptime"] = last_up
 

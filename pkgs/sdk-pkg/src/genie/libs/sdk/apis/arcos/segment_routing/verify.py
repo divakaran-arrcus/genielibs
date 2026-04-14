@@ -10,12 +10,17 @@ a boolean result.
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 from genie.utils.timeout import Timeout
 
 from genie.libs.sdk.apis.arcos.segment_routing.get import (
     is_srv6_locator_present,
     is_srms_mapping_present,
+    get_srv6_encap_source_address,
+    get_srv6_locator_count,
+    get_srv6_locator_algorithm,
+    get_srv6_locator_micro_segment_enabled,
 )
 
 log = logging.getLogger(__name__)
@@ -190,6 +195,203 @@ def verify_srms_mapping_not_present(device, mapping_id: str,
         )
 
         if not present:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+# ---------------------------------------------------------------------------
+# SRv6 encapsulation verify
+# ---------------------------------------------------------------------------
+
+def verify_srv6_encap_source_address(device, expected: str,
+                                     ni: str = 'default',
+                                     max_time: int = 60,
+                                     check_interval: int = 10) -> bool:
+    """Verify the SRv6 encapsulation source address matches expected.
+
+    Uses :func:`get_srv6_encap_source_address` to poll the device.
+
+    Args:
+        device: pyATS device object.
+        expected: Expected source IPv6 address string.
+        ni: Network instance name (default: 'default').
+        max_time: Maximum time to wait in seconds.
+        check_interval: Poll interval in seconds.
+
+    Returns:
+        True if the source address matches within the timeout,
+        False otherwise.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            actual: Optional[str] = get_srv6_encap_source_address(
+                device, ni=ni
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("get_srv6_encap_source_address failed: %s", exc)
+            actual = None
+
+        log.debug(
+            "verify_srv6_encap_source_address(): actual=%s, expected=%s",
+            actual, expected
+        )
+
+        if actual is not None and actual == expected:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+# ---------------------------------------------------------------------------
+# SRv6 locator count verify
+# ---------------------------------------------------------------------------
+
+def verify_srv6_locator_count(device, expected_count: int,
+                              ni: str = 'default',
+                              max_time: int = 60,
+                              check_interval: int = 10) -> bool:
+    """Verify the number of SRv6 locators matches expected.
+
+    Uses :func:`get_srv6_locator_count` to poll the device.
+
+    Args:
+        device: pyATS device object.
+        expected_count: Expected number of locators.
+        ni: Network instance name (default: 'default').
+        max_time: Maximum time to wait in seconds.
+        check_interval: Poll interval in seconds.
+
+    Returns:
+        True if the count matches within the timeout, False otherwise.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            actual: int = get_srv6_locator_count(device, ni=ni)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("get_srv6_locator_count failed: %s", exc)
+            actual = -1
+
+        log.debug(
+            "verify_srv6_locator_count(): actual=%s, expected=%s",
+            actual, expected_count
+        )
+
+        if actual == expected_count:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+# ---------------------------------------------------------------------------
+# SRv6 locator algorithm verify
+# ---------------------------------------------------------------------------
+
+def verify_srv6_locator_algorithm(device, locator_name: str,
+                                  expected_algorithm: int,
+                                  ni: str = 'default',
+                                  max_time: int = 60,
+                                  check_interval: int = 10) -> bool:
+    """Verify an SRv6 locator has the expected algorithm value.
+
+    Uses :func:`get_srv6_locator_algorithm` to poll the device.
+
+    Args:
+        device: pyATS device object.
+        locator_name: Name of the locator.
+        expected_algorithm: Expected algorithm integer (e.g. 128).
+        ni: Network instance name (default: 'default').
+        max_time: Maximum time to wait in seconds.
+        check_interval: Poll interval in seconds.
+
+    Returns:
+        True if the algorithm matches within the timeout, False otherwise.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            actual: Optional[int] = get_srv6_locator_algorithm(
+                device, locator_name, ni=ni
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error(
+                "get_srv6_locator_algorithm failed for %s: %s",
+                locator_name, exc
+            )
+            actual = None
+
+        log.debug(
+            "verify_srv6_locator_algorithm(%s): actual=%s, expected=%s",
+            locator_name, actual, expected_algorithm
+        )
+
+        if actual is not None and actual == expected_algorithm:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+# ---------------------------------------------------------------------------
+# SRv6 locator micro-segment verify
+# ---------------------------------------------------------------------------
+
+def verify_srv6_locator_micro_segment_enabled(
+    device, locator_name: str, expected: bool,
+    ni: str = 'default',
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify micro-segment-behavior-unode state on an SRv6 locator.
+
+    Uses :func:`get_srv6_locator_micro_segment_enabled` to poll the
+    device.
+
+    Args:
+        device: pyATS device object.
+        locator_name: Name of the locator.
+        expected: Expected micro-segment state (True/False).
+        ni: Network instance name (default: 'default').
+        max_time: Maximum time to wait in seconds.
+        check_interval: Poll interval in seconds.
+
+    Returns:
+        True if the micro-segment state matches within the timeout,
+        False otherwise.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            actual: Optional[bool] = get_srv6_locator_micro_segment_enabled(
+                device, locator_name, ni=ni
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error(
+                "get_srv6_locator_micro_segment_enabled failed for %s: %s",
+                locator_name, exc
+            )
+            actual = None
+
+        log.debug(
+            "verify_srv6_locator_micro_segment_enabled(%s): "
+            "actual=%s, expected=%s",
+            locator_name, actual, expected
+        )
+
+        if actual is not None and actual == expected:
             return True
 
         timeout.sleep()
