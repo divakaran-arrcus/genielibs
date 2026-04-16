@@ -2537,46 +2537,55 @@ def unconfigure_isis_graceful_restart(device, network_instance='default',
 # ============================================================================
 
 
-def configure_isis_interface_bfd(device, interface, enabled=True,
+def configure_isis_interface_bfd(device, interface, profile=None,
+                                  enabled=True,
                                   network_instance='default',
                                   protocol_instance='default'):
-    """Enable or disable BFD TLV for ISIS on interface.
-    
-    BFD TLV enables BFD negotiation in ISIS hello packets.
-    
+    """Configure BFD on an ISIS interface (BFD TLV + optional BFD profile).
+
+    Enables BFD negotiation in ISIS hello packets via ``bfd bfd-tlv``.
+    When ``profile`` is provided, also associates the BFD profile via
+    ``bfd profile``.  The BFD profile must already exist on the device
+    (created via ``configure_bfd_profile``).
+
     Args:
         device (obj): Device object
-        interface (str): Interface name
+        interface (str): Interface name (e.g., 'swp1')
+        profile (str, optional): BFD profile name. If None, only bfd-tlv
+            is configured. The profile must exist on the device.
         enabled (bool, optional): Enable or disable BFD TLV. Defaults to True.
         network_instance (str, optional): Network instance name. Defaults to 'default'.
         protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
-    
+
     Returns:
         None
-    
+
     Raises:
-        SubCommandFailure: Failed to configure BFD TLV
-    
+        SubCommandFailure: Failed to configure BFD
+
     Example:
         >>> configure_isis_interface_bfd(
         ...     device=device,
         ...     interface='swp1',
+        ...     profile='isis-bfd',
         ...     enabled=True,
-        ...     protocol_instance='default'
         ... )
     """
     log.info(
-        f"{'Enabling' if enabled else 'Disabling'} BFD TLV on interface {interface} "
+        f"Configuring BFD on interface {interface} "
+        f"(enabled={enabled}, profile={profile}) "
         f"on {device.name} (network-instance: {network_instance}, "
         f"protocol-instance: {protocol_instance})"
     )
-    
+
     intf_context = _build_interface_context(interface, network_instance, protocol_instance)
     config = [
         intf_context,
         f'bfd bfd-tlv {str(enabled).lower()}',
-        '!'
     ]
+    if profile:
+        config.append(f'bfd profile {profile}')
+    config.append('!')
     
     try:
         device.configure(config)
@@ -2620,6 +2629,7 @@ def unconfigure_isis_interface_bfd(device, interface, network_instance='default'
     config = [
         intf_context,
         'no bfd bfd-tlv',
+        'no bfd profile',
         '!'
     ]
     
