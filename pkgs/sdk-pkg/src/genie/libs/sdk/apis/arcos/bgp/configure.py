@@ -3166,3 +3166,316 @@ def unconfigure_bgp_advertise_best_external(device, afi_safi,
         device.configure(config)
     except SubCommandFailure as e:
         raise SubCommandFailure(f"BGP advertise-best-external removal failed on {device.name}: {e}")
+
+
+def configure_bgp_neighbor_timers(device, neighbor,
+                                    keepalive_interval=None,
+                                    hold_time=None,
+                                    minimum_advertisement_interval=None,
+                                    network_instance='default',
+                                    protocol_instance='default'):
+    """Configure BGP neighbor timers (keepalive, hold-time, MAI).
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address
+        keepalive_interval (int, optional): Keepalive interval in seconds.
+        hold_time (int, optional): Hold-time in seconds.
+        minimum_advertisement_interval (int, optional): Minimum advertisement
+            interval in seconds.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP neighbor timers
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} timers on {device.name} "
+        f"(keepalive={keepalive_interval}, hold-time={hold_time}, "
+        f"mai={minimum_advertisement_interval})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context]
+
+    # arcOS supports keepalive-interval and hold-time on a single line.
+    # MAI is a separate timers sub-command.
+    if keepalive_interval is not None or hold_time is not None:
+        line = 'timers'
+        if keepalive_interval is not None:
+            line += f' keepalive-interval {keepalive_interval}'
+        if hold_time is not None:
+            line += f' hold-time {hold_time}'
+        config.append(line)
+
+    if minimum_advertisement_interval is not None:
+        config.append(
+            f'timers minimum-advertisement-interval '
+            f'{minimum_advertisement_interval}'
+        )
+
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} timers on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_timers(device, neighbor,
+                                      network_instance='default',
+                                      protocol_instance='default'):
+    """Remove BGP neighbor timer configuration (reset to default).
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove BGP neighbor timer configuration
+    """
+    log.info(f"Removing BGP neighbor {neighbor} timers on {device.name}")
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [
+        nbr_context,
+        'no timers',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} timers on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_graceful_restart(device,
+                                     enabled=None,
+                                     helper_only=None,
+                                     restart_time=None,
+                                     stale_routes_time=None,
+                                     network_instance='default',
+                                     protocol_instance='default'):
+    """Configure BGP global graceful-restart capability.
+
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Enable/disable graceful-restart capability.
+        helper_only (bool, optional): Run in helper-only mode.
+        restart_time (int, optional): Restart time in seconds (default 120).
+        stale_routes_time (int, optional): Stale-routes time in seconds
+            (default 300).
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP graceful-restart
+    """
+    log.info(
+        f"Configuring BGP graceful-restart on {device.name} "
+        f"(enabled={enabled}, helper-only={helper_only}, "
+        f"restart-time={restart_time}, stale-routes-time={stale_routes_time})"
+    )
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [bgp_context]
+
+    if enabled is not None:
+        flag = 'true' if enabled else 'false'
+        config.append(f'global graceful-restart enabled {flag}')
+
+    if helper_only is not None:
+        flag = 'true' if helper_only else 'false'
+        config.append(f'global graceful-restart helper-only {flag}')
+
+    if restart_time is not None:
+        config.append(f'global graceful-restart restart-time {restart_time}')
+
+    if stale_routes_time is not None:
+        config.append(
+            f'global graceful-restart stale-routes-time {stale_routes_time}'
+        )
+
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP graceful-restart on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_graceful_restart(device,
+                                       network_instance='default',
+                                       protocol_instance='default'):
+    """Remove BGP global graceful-restart configuration (reset to default).
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove BGP graceful-restart configuration
+    """
+    log.info(f"Removing BGP graceful-restart configuration on {device.name}")
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        'no global graceful-restart',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP graceful-restart on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def _afi_safi_short_token(afi_safi):
+    """Convert OpenConfig AFI-SAFI name to arcOS sub-token.
+
+    For prefix-limit and similar per-AF sub-blocks, arcOS uses a lowercased
+    hyphenated form (e.g. ``IPV4_UNICAST`` -> ``ipv4-unicast``).
+
+    Args:
+        afi_safi (str): OpenConfig AFI-SAFI name (e.g., 'IPV4_UNICAST').
+
+    Returns:
+        str: arcOS short token (e.g., 'ipv4-unicast').
+    """
+    return str(afi_safi).lower().replace('_', '-')
+
+
+def configure_bgp_neighbor_max_prefix(device, neighbor, afi_safi, max_prefixes,
+                                        warning_threshold_pct=None,
+                                        prevent_teardown=None,
+                                        restart_timer=None,
+                                        network_instance='default',
+                                        protocol_instance='default'):
+    """Configure BGP neighbor maximum-prefix-limit for an AFI-SAFI.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address
+        afi_safi (str): AFI-SAFI name (e.g., 'IPV4_UNICAST', 'IPV6_UNICAST')
+        max_prefixes (int): Maximum number of prefixes to accept.
+        warning_threshold_pct (int, optional): Threshold percent (1-100) at
+            which a syslog warning is emitted before reaching max-prefixes.
+        prevent_teardown (bool, optional): If True, log instead of tearing
+            down the session when max-prefixes is exceeded.
+        restart_timer (int, optional): Seconds after which the session is
+            re-established after teardown. Has no effect if prevent_teardown
+            is True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP neighbor max-prefix-limit
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} {afi_safi} prefix-limit on "
+        f"{device.name} (max={max_prefixes}, warn-pct={warning_threshold_pct}, "
+        f"prevent-teardown={prevent_teardown}, restart-timer={restart_timer})"
+    )
+
+    af_short = _afi_safi_short_token(afi_safi)
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [
+        nbr_context,
+        f'afi-safi {afi_safi}',
+        f'{af_short} prefix-limit max-prefixes {max_prefixes}',
+    ]
+
+    if warning_threshold_pct is not None:
+        config.append(
+            f'{af_short} prefix-limit warning-threshold-pct '
+            f'{warning_threshold_pct}'
+        )
+
+    if prevent_teardown is not None:
+        flag = 'true' if prevent_teardown else 'false'
+        config.append(f'{af_short} prefix-limit prevent-teardown {flag}')
+
+    if restart_timer is not None:
+        config.append(f'{af_short} prefix-limit restart-timer {restart_timer}')
+
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} {afi_safi} "
+            f"prefix-limit on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_max_prefix(device, neighbor, afi_safi,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Remove BGP neighbor maximum-prefix-limit configuration for an AFI-SAFI.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address
+        afi_safi (str): AFI-SAFI name (e.g., 'IPV4_UNICAST', 'IPV6_UNICAST')
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove BGP neighbor max-prefix-limit
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} {afi_safi} prefix-limit on "
+        f"{device.name}"
+    )
+
+    af_short = _afi_safi_short_token(afi_safi)
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [
+        nbr_context,
+        f'afi-safi {afi_safi}',
+        f'no {af_short} prefix-limit',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} {afi_safi} "
+            f"prefix-limit on {device.name}. Error:\n{e}"
+        )
