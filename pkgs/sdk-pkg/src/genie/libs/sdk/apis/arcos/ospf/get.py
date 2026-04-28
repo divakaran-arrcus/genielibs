@@ -228,10 +228,112 @@ def get_ospf_lsdb(device, area="*") -> Dict[str, Any]:
 
 
 def get_ospf_lsdb_lsa_count(device, area: str = "0",
-                             lsa_type: str = "ROUTER_LSA") -> int:
-    """Get count of LSAs of a specific type in an area."""
+                             lsa_type: Optional[str] = None) -> int:
+    """Get count of LSAs in an area, optionally filtered by LSA type.
+
+    Args:
+        device: pyATS device object.
+        area: Area identifier (default "0").
+        lsa_type: Specific LSA type to count (e.g. "ROUTER_LSA",
+            "NETWORK_LSA", "SUMMARY_IP_NETWORK_LSA",
+            "SUMMARY_ROUTER_LSA", "AS_EXTERNAL_LSA"). If None,
+            returns the total count across all LSA types in the area.
+    """
     lsdb = get_ospf_lsdb(device)
     area_data = lsdb.get(str(area), {})
     lsa_types = area_data.get("lsa-types", {})
+
+    if lsa_type is None:
+        # Total across all types in the area
+        return sum(
+            len(td.get("lsas", {})) for td in lsa_types.values()
+        )
+
     type_data = lsa_types.get(lsa_type, {})
     return len(type_data.get("lsas", {}))
+
+
+# ---------------------------------------------------------------------------
+# Batch A — OSPF RIB / route APIs
+# ---------------------------------------------------------------------------
+
+def get_ospf_route(device, prefix: str,
+                   network_instance: str = "default",
+                   protocol_instance: str = "default") -> Optional[Dict[str, Any]]:
+    """Get OSPF route entry for a specific prefix from the OSPF Global RIB.
+
+    Args:
+        device: pyATS device object.
+        prefix: IPv4 prefix (e.g. "4.4.4.4/32", "10.0.0.0/24").
+        network_instance: Network instance name (default "default").
+        protocol_instance: OSPF protocol instance name (default "default").
+
+    Returns:
+        Dict with route info::
+
+            {
+                "prefix": "4.4.4.4/32",
+                "path-type": "intra-area" | "inter-area"
+                             | "external-type-1" | "external-type-2"
+                             | "intra-area-connected",
+                "metric": int,
+                "area": "1",
+                "next-hops": [
+                    {"interface": "swp2", "address": "10.14.2.4"},
+                    ...
+                ],
+            }
+
+        or None if the prefix is not found.
+    """
+    try:
+        from genie.libs.parser.arcos.show_ospf import (  # type: ignore
+            ShowOspfGlobalRib,
+        )
+    except ImportError:
+        log.warning(
+            "get_ospf_route: ShowOspfGlobalRib parser not available — "
+            "returning None. Generate the parser via arcos-parser-gen."
+        )
+        return None
+
+    try:
+        parser = ShowOspfGlobalRib(device=device)
+        result = parser.parse(ni=network_instance, instance=protocol_instance)
+    except SchemaEmptyParserError:
+        return None
+    except Exception as exc:
+        log.error("get_ospf_route(%s) failed: %s", prefix, exc)
+        return None
+
+    routes = result.get("routes", {}) if isinstance(result, dict) else {}
+    return routes.get(prefix)
+
+
+def get_ospf_routes(device,
+                    network_instance: str = "default",
+                    protocol_instance: str = "default") -> Dict[str, Any]:
+    """Get the full OSPF RIB keyed by prefix.
+
+    Returns an empty dict if the parser fails or no routes are present.
+    """
+    try:
+        from genie.libs.parser.arcos.show_ospf import (  # type: ignore
+            ShowOspfGlobalRib,
+        )
+    except ImportError:
+        log.warning(
+            "get_ospf_routes: ShowOspfGlobalRib parser not available"
+        )
+        return {}
+
+    try:
+        parser = ShowOspfGlobalRib(device=device)
+        result = parser.parse(ni=network_instance, instance=protocol_instance)
+    except SchemaEmptyParserError:
+        return {}
+    except Exception as exc:
+        log.error("get_ospf_routes failed: %s", exc)
+        return {}
+
+    return result.get("routes", {}) if isinstance(result, dict) else {}
