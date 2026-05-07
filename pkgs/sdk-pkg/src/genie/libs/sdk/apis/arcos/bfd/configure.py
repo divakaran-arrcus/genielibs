@@ -18,10 +18,10 @@ def configure_bfd_profile(device, profile_name, enabled=None, tx_interval=None,
         device (obj): Device object
         profile_name (str): BFD profile name
         enabled (bool, optional): Enable or disable the profile. Defaults to None.
-        tx_interval (int, optional): Desired minimum TX interval in microseconds.
-            Defaults to None.
-        rx_interval (int, optional): Required minimum receive interval in microseconds.
-            Defaults to None.
+        tx_interval (int, optional): Desired minimum TX interval in milliseconds
+            (arcOS CLI range: 30–1000 ms). Defaults to None.
+        rx_interval (int, optional): Required minimum receive interval in milliseconds
+            (arcOS CLI range: 30–1000 ms). Defaults to None.
         detection_multiplier (int, optional): Detection multiplier. Defaults to None.
         dscp_value (int, optional): DSCP value for BFD packets. Defaults to None.
         v4_hw_offload (bool, optional): Enable/disable IPv4 hardware offload.
@@ -40,8 +40,8 @@ def configure_bfd_profile(device, profile_name, enabled=None, tx_interval=None,
         ...     device=device,
         ...     profile_name='fast',
         ...     enabled=True,
-        ...     tx_interval=100000,
-        ...     rx_interval=100000,
+        ...     tx_interval=300,
+        ...     rx_interval=300,
         ...     detection_multiplier=3
         ... )
     """
@@ -117,7 +117,8 @@ def configure_bfd_profile_tx_interval(device, profile_name, interval):
     Args:
         device (obj): Device object
         profile_name (str): BFD profile name
-        interval (int): Desired minimum TX interval in microseconds
+        interval (int): Desired minimum TX interval in milliseconds
+            (arcOS CLI range: 30–1000 ms)
 
     Returns:
         None
@@ -127,7 +128,7 @@ def configure_bfd_profile_tx_interval(device, profile_name, interval):
 
     Example:
         >>> configure_bfd_profile_tx_interval(
-        ...     device=device, profile_name='fast', interval=100000
+        ...     device=device, profile_name='fast', interval=300
         ... )
     """
     log.info(
@@ -193,7 +194,8 @@ def configure_bfd_profile_rx_interval(device, profile_name, interval):
     Args:
         device (obj): Device object
         profile_name (str): BFD profile name
-        interval (int): Required minimum receive interval in microseconds
+        interval (int): Required minimum receive interval in milliseconds
+            (arcOS CLI range: 30–1000 ms)
 
     Returns:
         None
@@ -203,7 +205,7 @@ def configure_bfd_profile_rx_interval(device, profile_name, interval):
 
     Example:
         >>> configure_bfd_profile_rx_interval(
-        ...     device=device, profile_name='fast', interval=100000
+        ...     device=device, profile_name='fast', interval=300
         ... )
     """
     log.info(
@@ -590,10 +592,10 @@ def configure_bfd_single_hop_interface(device, interface, tx_interval=None,
     Args:
         device (obj): Device object
         interface (str): Interface name (e.g., 'ethernet-1/1')
-        tx_interval (int, optional): Desired minimum TX interval in microseconds.
-            Defaults to None.
-        rx_interval (int, optional): Required minimum receive interval in microseconds.
-            Defaults to None.
+        tx_interval (int, optional): Desired minimum TX interval in milliseconds
+            (arcOS CLI range: 30–1000 ms). Defaults to None.
+        rx_interval (int, optional): Required minimum receive interval in milliseconds
+            (arcOS CLI range: 30–1000 ms). Defaults to None.
         detection_multiplier (int, optional): Detection multiplier. Defaults to None.
 
     Returns:
@@ -606,8 +608,8 @@ def configure_bfd_single_hop_interface(device, interface, tx_interval=None,
         >>> configure_bfd_single_hop_interface(
         ...     device=device,
         ...     interface='ethernet-1/1',
-        ...     tx_interval=100000,
-        ...     rx_interval=100000,
+        ...     tx_interval=300,
+        ...     rx_interval=300,
         ...     detection_multiplier=3
         ... )
     """
