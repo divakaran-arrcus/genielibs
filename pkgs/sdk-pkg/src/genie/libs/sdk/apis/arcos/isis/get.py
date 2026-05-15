@@ -1112,3 +1112,127 @@ def is_isis_flex_algo_fast_reroute_present(
         device, algo=algo, afi=afi, instance=instance
     )
     return prefix in prefixes
+
+
+# ---------------------------------------------------------------------------
+# TI-LFA / MLA Get APIs (2026-05-13)
+# Wrappers over ShowIsisFastReroute and ShowIsisProtectionTracker parsers.
+# Note: global tunnel container is intentionally not wrapped here — the
+# ShowIsisGlobalTunnel parser is parked until Jericho-2 hardware data is
+# available (see orchestrator/proposals/parked/show_isis_global_tunnel.md).
+# ---------------------------------------------------------------------------
+
+def get_isis_fast_reroute(
+    device,
+    prefix: Optional[str] = None,
+    address_family: str = "ipv4",
+    instance: str = "default",
+) -> Dict[str, Any]:
+    """Get ISIS fast-reroute (TI-LFA / MLA) computation entries.
+
+    Wraps the ``ShowIsisFastReroute`` parser via ``device.parse``. Returns
+    parsed fast-reroute data either for a single prefix or all prefixes in
+    the requested address family. The deep parser hierarchy
+    (``network-instance.<ni>.isis.<pi>.fast-reroute.<AF>-UNICAST.prefixes``)
+    is flattened so the caller gets a prefix-keyed dict directly.
+
+    Args:
+        device: pyATS device object.
+        prefix: Specific prefix to query (e.g., '6.6.6.6/32'). If None,
+            returns all fast-reroute entries for the address family.
+        address_family: 'ipv4' or 'ipv6'. Default 'ipv4'.
+        instance: ISIS instance name. Default 'default'.
+
+    Returns:
+        Dict keyed by prefix. Each value contains the per-level fast-reroute
+        state (reroute-type, protection-types, flags, pq-node, nexthop info).
+        Empty dict {} if no entries or on parser error.
+
+    Example:
+        >>> entries = get_isis_fast_reroute(device, prefix='6.6.6.6/32')
+        >>> if '6.6.6.6/32' in entries:
+        ...     for level, lvl_data in entries['6.6.6.6/32']['levels'].items():
+        ...         print(lvl_data['reroute-type'], lvl_data.get('pq-node-system-id'))
+    """
+    afi_cmd_map = {"ipv4": "IPV4", "ipv6": "IPV6"}
+    afi = afi_cmd_map.get(address_family.lower())
+    if afi is None:
+        raise ValueError(f"Unsupported address_family: {address_family}")
+
+    af_map = {"ipv4": "IPV4-UNICAST", "ipv6": "IPV6-UNICAST"}
+    af_key = af_map.get(address_family.lower())
+
+    try:
+        from genie.libs.parser.arcos.show_isis import ShowIsisFastReroute
+        parser = ShowIsisFastReroute(device=device)
+        parse_kwargs = dict(
+            network_instance="default",
+            protocol_instance=instance,
+            afi=afi,
+        )
+        if prefix:
+            parse_kwargs["prefix"] = prefix
+        parsed = parser.parse(**parse_kwargs)
+    except SchemaEmptyParserError:
+        log.debug("get_isis_fast_reroute: no data for prefix=%s af=%s", prefix, afi)
+        return {}
+    except SubCommandFailure as exc:
+        log.debug("get_isis_fast_reroute: SubCommandFailure — %s", exc)
+        return {}
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("get_isis_fast_reroute: unexpected error — %s", exc)
+        return {}
+
+    isis = _safe_get_isis(parsed, ni="default", instance=instance)
+    af_data = isis.get("fast-reroute", {}).get(af_key, {})
+    prefixes = af_data.get("prefixes", {}) or {}
+    return prefixes
+
+
+def get_isis_protection_trackers(
+    device,
+    instance: str = "default",
+) -> Dict[str, Any]:
+    """Get all ISIS protection-tracker entries.
+
+    Wraps the ``ShowIsisProtectionTracker`` parser via ``device.parse`` and
+    returns the inner tracker-id-keyed dict directly, hiding the deep
+    parser hierarchy
+    (``network-instance.<ni>.isis.<pi>.global.protection-trackers.protection-tracker``).
+
+    Args:
+        device: pyATS device object.
+        instance: ISIS instance name. Default 'default'.
+
+    Returns:
+        Dict keyed by tracker-id (str). Each value contains the
+        tracker's state fields (id, reference-count, interface, system-id,
+        last-updated-time, plus optional BFD fields when BFD is enabled
+        on the protected interface). Empty dict {} when no trackers are
+        programmed or on parser error.
+
+    Example:
+        >>> trackers = get_isis_protection_trackers(device)
+        >>> for tid, t in trackers.items():
+        ...     print(tid, t['interface'], t['system-id'])
+    """
+    try:
+        from genie.libs.parser.arcos.show_isis import ShowIsisProtectionTracker
+        parser = ShowIsisProtectionTracker(device=device)
+        parsed = parser.parse(
+            network_instance="default",
+            protocol_instance=instance,
+        )
+    except SchemaEmptyParserError:
+        log.debug("get_isis_protection_trackers: no data found")
+        return {}
+    except SubCommandFailure as exc:
+        log.debug("get_isis_protection_trackers: SubCommandFailure — %s", exc)
+        return {}
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("get_isis_protection_trackers: unexpected error — %s", exc)
+        return {}
+
+    global_data = _safe_get_global(parsed, ni="default", instance=instance)
+    container = global_data.get("protection-trackers", {}) or {}
+    return container.get("protection-tracker", {}) or {}
