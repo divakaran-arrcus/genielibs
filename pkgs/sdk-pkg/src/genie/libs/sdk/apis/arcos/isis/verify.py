@@ -17,11 +17,13 @@ from genie.utils.timeout import Timeout
 from genie.libs.sdk.apis.arcos.isis.get import (
     get_isis_adjacency_state,
     get_isis_routes,
+    get_isis_route,
     get_isis_system_id,
     is_isis_adjacency_present,
     is_isis_flex_algo_route_present,
     is_isis_flex_algo_fast_reroute_present,
     get_isis_flex_algo_definitions,
+    get_isis_fast_reroute,
 )
 
 log = logging.getLogger(__name__)
@@ -575,3 +577,270 @@ def verify_isis_flex_algo_fast_reroute_not_present(
         timeout.sleep()
 
     return False
+
+
+# ---------------------------------------------------------------------------
+# TI-LFA / MLA Verify APIs (2026-05-13)
+# Polling helpers for backup-row presence and fast-reroute reroute-type.
+# ---------------------------------------------------------------------------
+
+
+def _iter_route_nexthops(route_data: Optional[dict]):
+    """Yield every next-hop dict from a ``get_isis_route`` result.
+
+    Handles two structural shapes:
+
+    1. Top-level ``next_hops`` / ``next-hops`` (dict or list) — legacy.
+    2. Nested under ``levels.<lvl>.next-hops`` (list of dicts) — current
+       :class:`ShowIsisRoute` parser output. ``next-hops`` may be a list,
+       a dict keyed by id, or wrapped under a ``next-hop`` key.
+    """
+    if not route_data:
+        return
+    # Top-level (legacy)
+    top = route_data.get("next_hops") or route_data.get("next-hops")
+    if isinstance(top, dict):
+        if "next-hop" in top and isinstance(top["next-hop"], list):
+            yield from top["next-hop"]
+        else:
+            yield from top.values()
+    elif isinstance(top, list):
+        yield from top
+
+    # Nested under levels (current parser shape)
+    levels = route_data.get("levels", {})
+    if isinstance(levels, dict):
+        for lv_data in levels.values():
+            if not isinstance(lv_data, dict):
+                continue
+            nhc = lv_data.get("next_hops") or lv_data.get("next-hops")
+            if isinstance(nhc, dict):
+                if "next-hop" in nhc and isinstance(nhc["next-hop"], list):
+                    yield from nhc["next-hop"]
+                else:
+                    yield from nhc.values()
+            elif isinstance(nhc, list):
+                yield from nhc
+
+
+def _has_backup_nexthop(
+    route_data: Optional[dict],
+) -> tuple[bool, Optional[str], Optional[int]]:
+    """Inspect a ``get_isis_route`` result and report backup-nexthop status.
+
+    Returns:
+        Tuple ``(has_backup, backup_egress, label_stack_len)``. When no backup
+        row is found, returns ``(False, None, None)``.
+
+    ``label_stack_len`` will be None when the parser doesn't expose a label
+    stack for this entry (e.g. PQ_IS_ADJACENT TI-LFA backups on docker arcOS
+    do not include label-stack fields — they don't need extra labels).
+    """
+    if not route_data:
+        return (False, None, None)
+
+    for nh in _iter_route_nexthops(route_data):
+        if not isinstance(nh, dict):
+            continue
+        is_backup = (
+            nh.get("backup") is True
+            or (nh.get("state") or {}).get("backup") is True
+        )
+        if is_backup:
+            egress = (
+                nh.get("interface")
+                or nh.get("outgoing-interface")
+                or (nh.get("state") or {}).get("outgoing-interface")
+            )
+            label_stack = (
+                nh.get("label_stack")
+                or nh.get("pushed-mpls-label-stack")
+                or nh.get("out-labels")
+                or (nh.get("state") or {}).get("pushed-mpls-label-stack")
+            )
+            label_len = (
+                len(label_stack) if isinstance(label_stack, list) else None
+            )
+            return (True, egress, label_len)
+
+    return (False, None, None)
+
+
+def verify_isis_route_has_backup(
+    device,
+    prefix: str,
+    expected_backup_egress: Optional[str] = None,
+    expected_label_stack_len: Optional[int] = None,
+    address_family: str = "ipv4",
+    instance: str = "default",
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify that the given prefix's ISIS route entry has a backup nexthop.
+
+    Polls ``get_isis_route`` until a next-hop with ``backup=true`` is found.
+    Optionally also asserts the backup row's outgoing-interface and/or
+    label-stack length match the provided expectations.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix to check (e.g., '6.6.6.6/32').
+        expected_backup_egress: If set, also require the backup row's
+            outgoing-interface to equal this value.
+        expected_label_stack_len: If set, also require the backup row's
+            label-stack length to equal this value.
+        address_family: 'ipv4' or 'ipv6'. Default 'ipv4'.
+        instance: ISIS instance name. Default 'default'.
+        max_time: Maximum time to wait (seconds). Default 60.
+        check_interval: Poll interval (seconds). Default 10.
+
+    Returns:
+        bool: True when a backup nexthop matching all constraints is
+        observed within the timeout; False otherwise.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            route = get_isis_route(
+                device, prefix=prefix,
+                address_family=address_family, instance=instance,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("get_isis_route failed for %s: %s", prefix, exc)
+            route = None
+
+        has_backup, egress, label_len = _has_backup_nexthop(route)
+
+        constraints_ok = True
+        if has_backup:
+            if expected_backup_egress is not None and egress != expected_backup_egress:
+                constraints_ok = False
+            if expected_label_stack_len is not None and label_len != expected_label_stack_len:
+                constraints_ok = False
+
+        log.debug(
+            "verify_isis_route_has_backup(%s): has_backup=%s egress=%s "
+            "label_len=%s constraints_ok=%s",
+            prefix, has_backup, egress, label_len, constraints_ok,
+        )
+
+        if has_backup and constraints_ok:
+            return True
+
+        timeout.sleep()
+
+    return False
+
+
+def verify_isis_no_backup_for_prefix(
+    device,
+    prefix: str,
+    address_family: str = "ipv4",
+    instance: str = "default",
+    max_time: int = 30,
+    check_interval: int = 5,
+) -> bool:
+    """Verify the given prefix's ISIS route entry has NO backup nexthop.
+
+    Used by ECMP-exclusion: per arcOS, TI-LFA must not install a backup
+    for prefixes with multiple primary equal-cost paths. Polls for the
+    entire ``max_time`` window — returns False if a backup row is observed
+    at ANY point.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix to check.
+        address_family: 'ipv4' or 'ipv6'. Default 'ipv4'.
+        instance: ISIS instance name. Default 'default'.
+        max_time: Polling window in seconds. Default 30.
+        check_interval: Poll interval. Default 5.
+
+    Returns:
+        bool: True if NO backup row is observed across the entire window.
+        False if a backup row IS observed at any point.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            route = get_isis_route(
+                device, prefix=prefix,
+                address_family=address_family, instance=instance,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("get_isis_route failed for %s: %s", prefix, exc)
+            route = None
+
+        has_backup, _, _ = _has_backup_nexthop(route)
+
+        log.debug(
+            "verify_isis_no_backup_for_prefix(%s): has_backup=%s",
+            prefix, has_backup,
+        )
+
+        if has_backup:
+            return False
+
+        timeout.sleep()
+
+    return True
+
+
+def verify_isis_no_mla_for_prefix(
+    device,
+    prefix: str,
+    address_family: str = "ipv4",
+    instance: str = "default",
+    max_time: int = 10,
+    check_interval: int = 1,
+) -> bool:
+    """Verify the given prefix has NO ``MICRO_LOOP_AVOIDANCE`` fast-reroute entry.
+
+    Per arcOS doc, MLA must NOT be programmed when multiple link events
+    fire concurrently. This API confirms that condition by polling
+    ``get_isis_fast_reroute`` for the prefix and asserting that either no
+    entry exists, or no level has ``reroute-type=='MICRO_LOOP_AVOIDANCE'``.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix to check.
+        address_family: 'ipv4' or 'ipv6'. Default 'ipv4'.
+        instance: ISIS instance name. Default 'default'.
+        max_time: Polling window in seconds. Default 10.
+        check_interval: Poll interval. Default 1.
+
+    Returns:
+        bool: True if no MICRO_LOOP_AVOIDANCE entry is observed across
+        the entire window. False if such an entry IS observed.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            entries = get_isis_fast_reroute(
+                device, prefix=prefix,
+                address_family=address_family, instance=instance,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("get_isis_fast_reroute failed for %s: %s", prefix, exc)
+            entries = {}
+
+        prefix_entry = entries.get(prefix, {}) if isinstance(entries, dict) else {}
+        levels = prefix_entry.get("levels", {}) if isinstance(prefix_entry, dict) else {}
+        has_mla = any(
+            (lv_data.get("reroute-type") == "MICRO_LOOP_AVOIDANCE")
+            for lv_data in levels.values() if isinstance(lv_data, dict)
+        )
+
+        log.debug(
+            "verify_isis_no_mla_for_prefix(%s): has_mla=%s",
+            prefix, has_mla,
+        )
+
+        if has_mla:
+            return False
+
+        timeout.sleep()
+
+    return True
