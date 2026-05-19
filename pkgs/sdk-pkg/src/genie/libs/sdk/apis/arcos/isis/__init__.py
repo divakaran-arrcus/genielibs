@@ -10,6 +10,20 @@ from .get import (
     get_isis_route,
     get_isis_lsp_count,
     get_isis_global,
+    get_isis_global_timers,
+    # TI-LFA / MLA
+    get_isis_fast_reroute,
+    get_isis_protection_trackers,
+    # Flex-Algo
+    get_isis_flex_algo_routes,
+    get_isis_flex_algo_route,
+    get_isis_flex_algo_route_count,
+    is_isis_flex_algo_route_present,
+    get_isis_flex_algo_fast_reroute,
+    get_isis_flex_algo_fast_reroutes,
+    is_isis_flex_algo_fast_reroute_present,
+    get_isis_flex_algo_definitions,
+    get_isis_flex_algo_definition,
 )
 from .verify import (
     verify_isis_system_id,
@@ -17,6 +31,17 @@ from .verify import (
     verify_isis_adjacency_not_present,
     verify_isis_adjacency_state,
     verify_isis_route_present,
+    # TI-LFA / MLA
+    verify_isis_route_has_backup,
+    verify_isis_no_backup_for_prefix,
+    verify_isis_no_mla_for_prefix,
+    # Flex-Algo
+    verify_isis_flex_algo_route_present,
+    verify_isis_flex_algo_route_not_present,
+    verify_isis_flex_algo_definition_present,
+    verify_isis_flex_algo_definition_not_present,
+    verify_isis_flex_algo_fast_reroute_present,
+    verify_isis_flex_algo_fast_reroute_not_present,
 )
 from .configure import (
     configure_isis_net_address,
@@ -48,6 +73,13 @@ from .configure import (
     unconfigure_isis_interface_auth_simple_key,
     configure_isis_interface_auth_password,
     unconfigure_isis_interface_auth_password,
+    # Level-Context PDU Authentication (LSP, CSNP, PSNP)
+    configure_isis_lsp_authentication,
+    unconfigure_isis_lsp_authentication,
+    configure_isis_csnp_authentication,
+    unconfigure_isis_csnp_authentication,
+    configure_isis_psnp_authentication,
+    unconfigure_isis_psnp_authentication,
     # Phase 2 Tier 1: Maximum ECMP Paths
     configure_isis_max_ecmp_paths,
     unconfigure_isis_max_ecmp_paths,
@@ -105,6 +137,55 @@ from .configure import (
     # Phase 3: Multi-Topology IPv6
     configure_isis_ipv6_multi_topology,
     unconfigure_isis_ipv6_multi_topology,
+    # Inter-level Propagation Policy (Route Leaking)
+    configure_isis_level_import_policy,
+    unconfigure_isis_level_import_policy,
+    # Operational
+    restart_isis_instance,
+    # Flex-Algo
+    configure_isis_flexible_algorithm,
+    unconfigure_isis_flexible_algorithm,
+    configure_isis_interface_flex_algo_admin_groups,
+    unconfigure_isis_interface_flex_algo_admin_groups,
+    configure_isis_interface_flex_algo_metric,
+    unconfigure_isis_interface_flex_algo_metric,
+    # Traffic Engineering
+    configure_isis_traffic_engineering_router_id,
+    unconfigure_isis_traffic_engineering_router_id,
+    configure_isis_level_traffic_engineering,
+    unconfigure_isis_level_traffic_engineering,
+    # Flex-Algo Extended
+    configure_isis_flexible_algorithm_priority,
+    unconfigure_isis_flexible_algorithm_priority,
+    configure_isis_flexible_algorithm_admin_groups,
+    unconfigure_isis_flexible_algorithm_admin_groups,
+    # Dynamic Delay Measurement
+    configure_isis_dynamic_delay_measurement,
+    unconfigure_isis_dynamic_delay_measurement,
+    configure_isis_interface_flex_algo_delay_metric_dynamic,
+    unconfigure_isis_interface_flex_algo_delay_metric_dynamic,
+    # SRMS
+    configure_isis_srms_mapping,
+    unconfigure_isis_srms_mapping,
+    configure_isis_srms_receive,
+    unconfigure_isis_srms_receive,
+    configure_isis_srms_advertise,
+    unconfigure_isis_srms_advertise,
+    # Auto-Cost and MPLS LDP Sync
+    configure_isis_auto_cost_reference_bandwidth,
+    unconfigure_isis_auto_cost_reference_bandwidth,
+    configure_isis_mpls_ldp_sync,
+    unconfigure_isis_mpls_ldp_sync,
+    # Global Hello Auth
+    configure_isis_global_hello_auth,
+    unconfigure_isis_global_hello_auth,
+    # Micro-Loop Avoidance
+    configure_isis_micro_loop_avoidance_sr_mpls,
+    unconfigure_isis_micro_loop_avoidance_sr_mpls,
+    configure_isis_micro_loop_avoidance_srv6,
+    unconfigure_isis_micro_loop_avoidance_srv6,
+    configure_isis_micro_loop_avoidance_rib_update_delay,
+    unconfigure_isis_micro_loop_avoidance_rib_update_delay,
 )
 
 __all__ = [
@@ -120,12 +201,20 @@ __all__ = [
     "get_isis_route",
     "get_isis_lsp_count",
     "get_isis_global",
+    "get_isis_global_timers",
+    # Get APIs - TI-LFA / MLA
+    "get_isis_fast_reroute",
+    "get_isis_protection_trackers",
     # Verify APIs
     "verify_isis_system_id",
     "verify_isis_adjacency_present",
     "verify_isis_adjacency_not_present",
     "verify_isis_adjacency_state",
     "verify_isis_route_present",
+    # Verify APIs - TI-LFA / MLA
+    "verify_isis_route_has_backup",
+    "verify_isis_no_backup_for_prefix",
+    "verify_isis_no_mla_for_prefix",
     # Configure APIs - Phase 1
     "configure_isis_net_address",
     "unconfigure_isis_net_address",
@@ -156,6 +245,13 @@ __all__ = [
     "unconfigure_isis_interface_auth_simple_key",
     "configure_isis_interface_auth_password",
     "unconfigure_isis_interface_auth_password",
+    # Configure APIs - Level-Context PDU Authentication (LSP, CSNP, PSNP)
+    "configure_isis_lsp_authentication",
+    "unconfigure_isis_lsp_authentication",
+    "configure_isis_csnp_authentication",
+    "unconfigure_isis_csnp_authentication",
+    "configure_isis_psnp_authentication",
+    "unconfigure_isis_psnp_authentication",
     # Configure APIs - Phase 2 Tier 1: Maximum ECMP Paths
     "configure_isis_max_ecmp_paths",
     "unconfigure_isis_max_ecmp_paths",
@@ -213,4 +309,70 @@ __all__ = [
     # Configure APIs - Phase 3: Multi-Topology IPv6
     "configure_isis_ipv6_multi_topology",
     "unconfigure_isis_ipv6_multi_topology",
+    # Configure APIs - Inter-level Propagation Policy (Route Leaking)
+    "configure_isis_level_import_policy",
+    "unconfigure_isis_level_import_policy",
+    # Operational
+    "restart_isis_instance",
+    # Flex-Algo Get APIs
+    "get_isis_flex_algo_routes",
+    "get_isis_flex_algo_route",
+    "get_isis_flex_algo_route_count",
+    "is_isis_flex_algo_route_present",
+    "get_isis_flex_algo_fast_reroute",
+    "get_isis_flex_algo_fast_reroutes",
+    "is_isis_flex_algo_fast_reroute_present",
+    "get_isis_flex_algo_definitions",
+    "get_isis_flex_algo_definition",
+    # Flex-Algo Verify APIs
+    "verify_isis_flex_algo_route_present",
+    "verify_isis_flex_algo_route_not_present",
+    "verify_isis_flex_algo_definition_present",
+    "verify_isis_flex_algo_definition_not_present",
+    "verify_isis_flex_algo_fast_reroute_present",
+    "verify_isis_flex_algo_fast_reroute_not_present",
+    # Flex-Algo Configure APIs
+    "configure_isis_flexible_algorithm",
+    "unconfigure_isis_flexible_algorithm",
+    "configure_isis_interface_flex_algo_admin_groups",
+    "unconfigure_isis_interface_flex_algo_admin_groups",
+    "configure_isis_interface_flex_algo_metric",
+    "unconfigure_isis_interface_flex_algo_metric",
+    # Configure APIs - Traffic Engineering
+    "configure_isis_traffic_engineering_router_id",
+    "unconfigure_isis_traffic_engineering_router_id",
+    "configure_isis_level_traffic_engineering",
+    "unconfigure_isis_level_traffic_engineering",
+    # Configure APIs - Flex-Algo Extended
+    "configure_isis_flexible_algorithm_priority",
+    "unconfigure_isis_flexible_algorithm_priority",
+    "configure_isis_flexible_algorithm_admin_groups",
+    "unconfigure_isis_flexible_algorithm_admin_groups",
+    # Configure APIs - Dynamic Delay Measurement
+    "configure_isis_dynamic_delay_measurement",
+    "unconfigure_isis_dynamic_delay_measurement",
+    "configure_isis_interface_flex_algo_delay_metric_dynamic",
+    "unconfigure_isis_interface_flex_algo_delay_metric_dynamic",
+    # Configure APIs - SRMS
+    "configure_isis_srms_mapping",
+    "unconfigure_isis_srms_mapping",
+    "configure_isis_srms_receive",
+    "unconfigure_isis_srms_receive",
+    "configure_isis_srms_advertise",
+    "unconfigure_isis_srms_advertise",
+    # Configure APIs - Auto-Cost and MPLS LDP Sync
+    "configure_isis_auto_cost_reference_bandwidth",
+    "unconfigure_isis_auto_cost_reference_bandwidth",
+    "configure_isis_mpls_ldp_sync",
+    "unconfigure_isis_mpls_ldp_sync",
+    # Configure APIs - Global Hello Auth
+    "configure_isis_global_hello_auth",
+    "unconfigure_isis_global_hello_auth",
+    # Configure APIs - Micro-Loop Avoidance
+    "configure_isis_micro_loop_avoidance_sr_mpls",
+    "unconfigure_isis_micro_loop_avoidance_sr_mpls",
+    "configure_isis_micro_loop_avoidance_srv6",
+    "unconfigure_isis_micro_loop_avoidance_srv6",
+    "configure_isis_micro_loop_avoidance_rib_update_delay",
+    "unconfigure_isis_micro_loop_avoidance_rib_update_delay",
 ]

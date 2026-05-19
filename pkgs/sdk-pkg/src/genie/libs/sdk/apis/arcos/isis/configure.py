@@ -3282,6 +3282,108 @@ def unconfigure_isis_interface_ipv6_ti_lfa_sr_mpls(device, interface,
         )
 
 
+def configure_isis_interface_ipv6_ti_lfa_srv6(device, interface, enabled=True,
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Enable TI-LFA SRv6 fast-reroute for IPv6.
+
+    Sibling of :func:`configure_isis_interface_ipv6_ti_lfa_sr_mpls`. Where the
+    SR-MPLS variant encodes backup paths as MPLS label stacks, this variant
+    uses SRv6 SID lists (compressed uSID when the locator has micro-segment
+    enabled). The two flavors can coexist on the same interface.
+
+    Prereqs: ISIS SRv6 globally enabled, an SRv6 locator attached to the
+    ISIS instance, and an encap source-address configured under
+    ``network-instance <ni> srv6``.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name
+        enabled (bool, optional): Enable or disable TI-LFA SRv6. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure TI-LFA SRv6
+
+    Example:
+        >>> configure_isis_interface_ipv6_ti_lfa_srv6(
+        ...     device=device,
+        ...     interface='swp1',
+        ...     enabled=True
+        ... )
+    """
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} TI-LFA SRv6 for IPv6 on "
+        f"interface {interface} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'af IPV6 UNICAST',
+        f'fast-reroute ti-lfa srv6 enabled {str(enabled).lower()}',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure TI-LFA SRv6 for IPv6 on interface {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_ipv6_ti_lfa_srv6(device, interface,
+                                                 network_instance='default',
+                                                 protocol_instance='default'):
+    """Disable TI-LFA SRv6 fast-reroute for IPv6.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to disable TI-LFA SRv6
+
+    Example:
+        >>> unconfigure_isis_interface_ipv6_ti_lfa_srv6(
+        ...     device=device,
+        ...     interface='swp1'
+        ... )
+    """
+    log.info(
+        f"Disabling TI-LFA SRv6 for IPv6 on interface {interface} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'af IPV6 UNICAST',
+        'no fast-reroute ti-lfa srv6',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not disable TI-LFA SRv6 for IPv6 on interface {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
 # ============================================================================
 # Category 6.4: Segment Routing Global Enable
 # ============================================================================
@@ -4719,7 +4821,7 @@ def configure_isis_traffic_engineering_router_id(device, router_id, af='ipv4',
     isis_context = _build_isis_config_context(network_instance, protocol_instance)
     config = [
         isis_context,
-        f'global traffic-engineering {af} router-id {router_id}',
+        f'global traffic-engineering {af}-router-id {router_id}',
         '!'
     ]
 
@@ -4756,7 +4858,7 @@ def unconfigure_isis_traffic_engineering_router_id(device, af='ipv4',
     isis_context = _build_isis_config_context(network_instance, protocol_instance)
     config = [
         isis_context,
-        f'no global traffic-engineering {af} router-id',
+        f'no global traffic-engineering {af}-router-id',
         '!'
     ]
 
