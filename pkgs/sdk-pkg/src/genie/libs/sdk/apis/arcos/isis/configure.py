@@ -4821,7 +4821,7 @@ def configure_isis_traffic_engineering_router_id(device, router_id, af='ipv4',
     isis_context = _build_isis_config_context(network_instance, protocol_instance)
     config = [
         isis_context,
-        f'global traffic-engineering {af} router-id {router_id}',
+        f'global traffic-engineering {af}-router-id {router_id}',
         '!'
     ]
 
@@ -4858,7 +4858,7 @@ def unconfigure_isis_traffic_engineering_router_id(device, af='ipv4',
     isis_context = _build_isis_config_context(network_instance, protocol_instance)
     config = [
         isis_context,
-        f'no global traffic-engineering {af} router-id',
+        f'no global traffic-engineering {af}-router-id',
         '!'
     ]
 
