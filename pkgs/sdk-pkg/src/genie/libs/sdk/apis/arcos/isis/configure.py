@@ -1953,35 +1953,40 @@ def unconfigure_isis_max_ecmp_paths(device, network_instance='default',
 
 
 def configure_isis_spf_intervals(device, first_interval=None, hold_interval=None,
-                                  second_interval=None, network_instance='default',
+                                  second_interval=None, mla_interval=None,
+                                  network_instance='default',
                                   protocol_instance='default'):
-    """Configure SPF timer intervals (first, hold, second).
-    
-    Configures one or more SPF timer intervals atomically. All three timers control
-    SPF calculation behavior and convergence speed.
-    
+    """Configure SPF timer intervals (first, hold, second, mla).
+
+    Configures one or more SPF timer intervals atomically. The four timers control
+    SPF calculation behavior and convergence speed. `mla_interval` is the
+    Microloop-Avoidance SPF first-interval used when MLA is active.
+
     Args:
         device (obj): Device object
-        first_interval (int, optional): SPF first interval in milliseconds (initial delay)
-        hold_interval (int, optional): SPF hold interval in milliseconds (backoff interval)
-        second_interval (int, optional): SPF second interval in milliseconds (max wait)
+        first_interval (int, optional): SPF first interval in milliseconds (initial delay; default 50)
+        hold_interval (int, optional): SPF hold interval in milliseconds (default 5000)
+        second_interval (int, optional): SPF second interval in milliseconds (default 200)
+        mla_interval (int, optional): SPF first interval when MLA active, in
+            milliseconds (default 25). adoc §IS-IS.adoc:689-697.
         network_instance (str, optional): Network instance name. Defaults to 'default'.
         protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
-    
+
     Returns:
         None
-    
+
     Raises:
         SubCommandFailure: Failed to configure SPF intervals
         ValueError: If no intervals are provided
-    
+
     Example:
-        >>> # Configure all three intervals
+        >>> # Configure all four intervals
         >>> configure_isis_spf_intervals(
         ...     device=device,
         ...     first_interval=50,
         ...     hold_interval=200,
         ...     second_interval=5000,
+        ...     mla_interval=100,
         ...     protocol_instance='default'
         ... )
         >>> # Configure only specific intervals
@@ -1991,12 +1996,13 @@ def configure_isis_spf_intervals(device, first_interval=None, hold_interval=None
         ...     hold_interval=500
         ... )
     """
-    if first_interval is None and hold_interval is None and second_interval is None:
+    if (first_interval is None and hold_interval is None and
+            second_interval is None and mla_interval is None):
         raise ValueError(
             "At least one SPF interval must be specified (first_interval, "
-            "hold_interval, or second_interval)"
+            "hold_interval, second_interval, or mla_interval)"
         )
-    
+
     intervals = []
     if first_interval is not None:
         intervals.append(f"first={first_interval}ms")
@@ -2004,24 +2010,28 @@ def configure_isis_spf_intervals(device, first_interval=None, hold_interval=None
         intervals.append(f"hold={hold_interval}ms")
     if second_interval is not None:
         intervals.append(f"second={second_interval}ms")
-    
+    if mla_interval is not None:
+        intervals.append(f"mla={mla_interval}ms")
+
     log.info(
         f"Configuring ISIS SPF intervals ({', '.join(intervals)}) on {device.name} "
         f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
     )
-    
+
     isis_context = _build_isis_config_context(network_instance, protocol_instance)
     config = [isis_context]
-    
+
     if first_interval is not None:
         config.append(f'global timers spf spf-first-interval {first_interval}')
     if hold_interval is not None:
         config.append(f'global timers spf spf-hold-interval {hold_interval}')
     if second_interval is not None:
         config.append(f'global timers spf spf-second-interval {second_interval}')
-    
+    if mla_interval is not None:
+        config.append(f'global timers spf spf-mla-interval {mla_interval}')
+
     config.append('!')
-    
+
     try:
         device.configure(config)
     except SubCommandFailure as e:
@@ -2064,6 +2074,7 @@ def unconfigure_isis_spf_intervals(device, network_instance='default',
         'no global timers spf spf-first-interval',
         'no global timers spf spf-hold-interval',
         'no global timers spf spf-second-interval',
+        'no global timers spf spf-mla-interval',
         '!'
     ]
     
@@ -6036,4 +6047,411 @@ def unconfigure_isis_micro_loop_avoidance_rib_update_delay(device,
         raise SubCommandFailure(
             f"Could not remove ISIS micro-loop-avoidance rib-update-delay from "
             f"{device.name}. Error:\n{e}"
+        )
+
+
+# ============================================================================
+# Batch B — Timer Knobs (Round 2)
+# ============================================================================
+# Six new timer-related APIs proposed in
+# orchestrator/proposals/approved/isis_api_batch_b_timers.md
+# Modeled on the existing configure_isis_lsp_lifetime_interval and
+# configure_isis_interface_hello_interval functions.
+# adoc references: IS-IS.adoc §645 (lsp-gen), §1807 (csnp), §1900 (lsp-pacing),
+# §2215 (interface-level hello-interval), §2240 (interface-level multiplier).
+# ============================================================================
+
+
+def configure_isis_lsp_first_wait_interval(device, interval_ms,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Configure ISIS LSP-generation first-wait interval.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+          global timers lsp-generation lsp-first-wait-interval {interval_ms}
+
+    Args:
+        device (obj): Device object.
+        interval_ms (int): LSP-first-wait delay in milliseconds.
+            Range 0..600000. Default in arcOS is 15 ms.
+        network_instance (str, optional): Network instance. Defaults 'default'.
+        protocol_instance (str, optional): ISIS protocol instance. Defaults 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_isis_lsp_first_wait_interval(device, 100)
+    """
+    log.info(
+        f"Configuring ISIS LSP first-wait-interval to {interval_ms}ms on "
+        f"{device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global timers lsp-generation lsp-first-wait-interval {interval_ms}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS LSP first-wait-interval on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_lsp_first_wait_interval(device, network_instance='default',
+                                              protocol_instance='default'):
+    """Reset ISIS LSP-generation first-wait interval to default (15 ms).
+
+    Args:
+        device (obj): Device object.
+        network_instance (str, optional): Network instance. Defaults 'default'.
+        protocol_instance (str, optional): ISIS protocol instance. Defaults 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+    """
+    log.info(
+        f"Resetting ISIS LSP first-wait-interval to default on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global timers lsp-generation lsp-first-wait-interval',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not reset ISIS LSP first-wait-interval on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_csnp_interval(device, interface, interval_sec,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Configure ISIS interface CSNP transmit interval.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+          interface {interface} timers csnp-interval {interval_sec}
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name (e.g., 'swp1').
+        interval_sec (int): CSNP transmit interval in seconds. Default 30.
+        network_instance (str, optional): Defaults 'default'.
+        protocol_instance (str, optional): Defaults 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_isis_interface_csnp_interval(device, 'swp1', 60)
+    """
+    log.info(
+        f"Configuring ISIS CSNP interval to {interval_sec}s on interface "
+        f"{interface} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'timers csnp-interval {interval_sec}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS CSNP interval on interface {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_csnp_interval(device, interface,
+                                              network_instance='default',
+                                              protocol_instance='default'):
+    """Reset ISIS interface CSNP transmit interval to default (30 s)."""
+    log.info(
+        f"Resetting ISIS CSNP interval to default on interface {interface} "
+        f"on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'no timers csnp-interval',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not reset ISIS CSNP interval on interface {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_lsp_pacing_interval(device, interface, interval_ms,
+                                                  network_instance='default',
+                                                  protocol_instance='default'):
+    """Configure ISIS interface LSP pacing interval.
+
+    Controls the spacing between consecutive LSP transmissions on an interface.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+          interface {interface} timers lsp-pacing-interval {interval_ms}
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        interval_ms (int): LSP pacing interval in milliseconds. Default 33.
+        network_instance (str, optional): Defaults 'default'.
+        protocol_instance (str, optional): Defaults 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_isis_interface_lsp_pacing_interval(device, 'swp1', 50)
+    """
+    log.info(
+        f"Configuring ISIS LSP pacing interval to {interval_ms}ms on interface "
+        f"{interface} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'timers lsp-pacing-interval {interval_ms}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS LSP pacing interval on interface "
+            f"{interface} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_lsp_pacing_interval(device, interface,
+                                                    network_instance='default',
+                                                    protocol_instance='default'):
+    """Reset ISIS interface LSP pacing interval to default (33 ms)."""
+    log.info(
+        f"Resetting ISIS LSP pacing interval to default on interface "
+        f"{interface} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'no timers lsp-pacing-interval',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not reset ISIS LSP pacing interval on interface "
+            f"{interface} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_level_hello_interval(device, interface, level,
+                                                    interval_sec,
+                                                    network_instance='default',
+                                                    protocol_instance='default'):
+    """Configure ISIS interface-level hello interval (per-level override).
+
+    LAN-only per arcOS adoc — overrides the interface-scope hello-interval
+    for a specific level on broadcast interfaces.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+          interface {interface} level {level_num} timers hello-interval {interval_sec}
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        level (str): 'level_1' or 'level_2' (maps to CLI '1' / '2').
+        interval_sec (int): Hello interval in seconds. Default 10.
+        network_instance (str, optional): Defaults 'default'.
+        protocol_instance (str, optional): Defaults 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If level is not 'level_1' or 'level_2'.
+
+    Example:
+        >>> configure_isis_interface_level_hello_interval(
+        ...     device, 'swp1', 'level_2', 5)
+    """
+    log.info(
+        f"Configuring ISIS level {level} hello-interval to {interval_sec}s on "
+        f"interface {interface} on {device.name}"
+    )
+
+    level_num = _get_level_number(level)
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {level_num} timers hello-interval {interval_sec}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS level {level} hello-interval on "
+            f"interface {interface} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_level_hello_interval(device, interface, level,
+                                                     network_instance='default',
+                                                     protocol_instance='default'):
+    """Reset ISIS interface-level hello interval to default (10 s)."""
+    log.info(
+        f"Resetting ISIS level {level} hello-interval to default on "
+        f"interface {interface} on {device.name}"
+    )
+
+    level_num = _get_level_number(level)
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'no level {level_num} timers hello-interval',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not reset ISIS level {level} hello-interval on "
+            f"interface {interface} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_level_hello_multiplier(device, interface, level,
+                                                     multiplier,
+                                                     network_instance='default',
+                                                     protocol_instance='default'):
+    """Configure ISIS interface-level hello multiplier (per-level override).
+
+    LAN-only. Sets the hold-time multiplier for hello packets at the
+    specified level: hold-time = hello-interval × multiplier.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+          interface {interface} level {level_num} timers hello-multiplier {multiplier}
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        level (str): 'level_1' or 'level_2'.
+        multiplier (int): Hello multiplier. Default 3.
+        network_instance (str, optional): Defaults 'default'.
+        protocol_instance (str, optional): Defaults 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If level is not 'level_1' or 'level_2'.
+
+    Example:
+        >>> configure_isis_interface_level_hello_multiplier(
+        ...     device, 'swp1', 'level_2', 5)
+    """
+    log.info(
+        f"Configuring ISIS level {level} hello-multiplier to {multiplier} on "
+        f"interface {interface} on {device.name}"
+    )
+
+    level_num = _get_level_number(level)
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {level_num} timers hello-multiplier {multiplier}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS level {level} hello-multiplier on "
+            f"interface {interface} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_level_hello_multiplier(device, interface, level,
+                                                      network_instance='default',
+                                                      protocol_instance='default'):
+    """Reset ISIS interface-level hello multiplier to default (3)."""
+    log.info(
+        f"Resetting ISIS level {level} hello-multiplier to default on "
+        f"interface {interface} on {device.name}"
+    )
+
+    level_num = _get_level_number(level)
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'no level {level_num} timers hello-multiplier',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not reset ISIS level {level} hello-multiplier on "
+            f"interface {interface} on {device.name}. Error:\n{e}"
         )
