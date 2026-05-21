@@ -1130,3 +1130,186 @@ def configure_routing_policy_call_policy(device, policy_name,
         raise SubCommandFailure(
             f"Could not configure call-policy on {device.name}. Error:\n{e}"
         )
+
+
+# ---------------------------------------------------------------------------
+# ISIS-Specific Actions (Batch D)
+# ---------------------------------------------------------------------------
+# Proposed and approved via:
+#   orchestrator/proposals/approved/isis_api_batch_d_redistribution.md
+# adoc reference: IS-IS.adoc §2312-2365.
+# ---------------------------------------------------------------------------
+
+
+def configure_routing_policy_isis_actions_set_level(device, policy_name,
+                                                     statement_name, level):
+    """Configure ISIS set-level action on a routing-policy statement.
+
+    Restricts the level at which a redistributed prefix is advertised
+    into ISIS. Default behavior (when this action is absent) is to
+    advertise into both L1 AND L2 (adoc §2344).
+
+    CLI emitted::
+
+        routing-policy policy-definition {policy_name}
+          statement {statement_name}
+            actions igp-actions isis-actions set-level {level}
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Existing routing-policy-definition name.
+        statement_name (str): Statement name/number within the policy.
+        level (int): ISIS level — 1 or 2.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If level is not 1 or 2.
+
+    Example:
+        >>> # Redistribute statics into L1 only
+        >>> configure_routing_policy_isis_actions_set_level(
+        ...     device, 'v4-statics-fltr', '10', level=1)
+    """
+    if level not in (1, 2):
+        raise ValueError(
+            f"Invalid ISIS level '{level}'. Must be 1 or 2."
+        )
+
+    log.info(
+        f"Configuring ISIS set-level={level} on {policy_name}/"
+        f"{statement_name} on {device.name}"
+    )
+
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'actions igp-actions isis-actions set-level {level}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS set-level on {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_routing_policy_isis_actions_set_level(device, policy_name,
+                                                       statement_name):
+    """Remove ISIS set-level action from a routing-policy statement.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Routing-policy-definition name.
+        statement_name (str): Statement name/number.
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+    """
+    log.info(
+        f"Removing ISIS set-level from {policy_name}/{statement_name} "
+        f"on {device.name}"
+    )
+
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        'no actions igp-actions isis-actions set-level',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS set-level from {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_routing_policy_isis_actions_set_metric(device, policy_name,
+                                                      statement_name, metric):
+    """Configure ISIS set-metric action on a routing-policy statement.
+
+    Overrides the default ISIS metric (10) for the redistributed prefix.
+
+    CLI emitted::
+
+        routing-policy policy-definition {policy_name}
+          statement {statement_name}
+            actions igp-actions isis-actions set-metric {metric}
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Existing routing-policy-definition name.
+        statement_name (str): Statement name/number within the policy.
+        metric (int): ISIS wide metric value.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> # Set ISIS metric to 50 on redistributed routes
+        >>> configure_routing_policy_isis_actions_set_metric(
+        ...     device, 'v4-statics-fltr', '10', metric=50)
+    """
+    log.info(
+        f"Configuring ISIS set-metric={metric} on {policy_name}/"
+        f"{statement_name} on {device.name}"
+    )
+
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'actions igp-actions isis-actions set-metric {metric}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS set-metric on {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_routing_policy_isis_actions_set_metric(device, policy_name,
+                                                       statement_name):
+    """Remove ISIS set-metric action from a routing-policy statement.
+
+    Args:
+        device (obj): Device object.
+        policy_name (str): Routing-policy-definition name.
+        statement_name (str): Statement name/number.
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+    """
+    log.info(
+        f"Removing ISIS set-metric from {policy_name}/{statement_name} "
+        f"on {device.name}"
+    )
+
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        'no actions igp-actions isis-actions set-metric',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS set-metric from {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )

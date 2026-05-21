@@ -6455,3 +6455,170 @@ def unconfigure_isis_interface_level_hello_multiplier(device, interface, level,
             f"Could not reset ISIS level {level} hello-multiplier on "
             f"interface {interface} on {device.name}. Error:\n{e}"
         )
+
+
+# ============================================================================
+# Batch D — Default-Information Originate (Round 2)
+# ============================================================================
+# Proposed and approved via:
+#   orchestrator/proposals/approved/isis_api_batch_d_redistribution.md
+# adoc reference: IS-IS.adoc §981-1072.
+# ============================================================================
+
+
+def configure_isis_default_information_originate(device, afi, enabled=None,
+                                                  always=None,
+                                                  export_policy=None,
+                                                  network_instance='default',
+                                                  protocol_instance='default'):
+    """Configure ISIS default-information originate per address family.
+
+    By default, IS-IS does not originate the default route. This API
+    enables per-AF default-route advertisement with three sub-knobs.
+
+    Behavior per adoc §981-1072:
+    - `enabled=True` alone   → conditional origination (default exists in
+                               RIB AND was not added by this IS-IS instance).
+    - `enabled=True` + `always=True`        → unconditional origination.
+    - `enabled=True` + `export_policy='X'`  → policy-controlled origination
+                                              (policy must `accept-route`).
+    - `enabled=False`        → no origination (the other knobs become moot;
+                               their lines are still emitted if specified,
+                               but a log.warning notes the override).
+
+    At least one of `enabled` / `always` / `export_policy` must be specified.
+
+    CLI emitted:
+        network-instance {ni} protocol ISIS {pi}
+          global af {afi} UNICAST default-information originate enabled {bool}
+          global af {afi} UNICAST default-information originate always {bool}
+          global af {afi} UNICAST default-information originate export-policy {name}
+
+    Args:
+        device (obj): Device object.
+        afi (str): Address family — 'IPV4' or 'IPV6'.
+        enabled (bool, optional): Master enable/disable for default origination.
+        always (bool, optional): Always-advertise toggle.
+        export_policy (str, optional): Routing-policy name for conditional
+            origination.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If no sub-knob is specified, or if `afi` is invalid.
+
+    Examples:
+        >>> # Unconditional IPv4 default
+        >>> configure_isis_default_information_originate(
+        ...     device, 'IPV4', enabled=True, always=True)
+        >>> # Conditional IPv6 default via policy
+        >>> configure_isis_default_information_originate(
+        ...     device, 'IPV6', enabled=True, export_policy='def-info-origin')
+    """
+    if afi not in ('IPV4', 'IPV6'):
+        raise ValueError(
+            f"Invalid afi '{afi}'. Must be 'IPV4' or 'IPV6'."
+        )
+
+    if enabled is None and always is None and export_policy is None:
+        raise ValueError(
+            "At least one of enabled / always / export_policy must be specified."
+        )
+
+    if enabled is False and (always is not None or export_policy is not None):
+        log.warning(
+            f"default-information originate enabled=False on {device.name} "
+            f"{afi} — `always` / `export_policy` settings have no effect "
+            f"per adoc §1067."
+        )
+
+    parts = []
+    if enabled is not None:
+        parts.append(f"enabled={str(enabled).lower()}")
+    if always is not None:
+        parts.append(f"always={str(always).lower()}")
+    if export_policy is not None:
+        parts.append(f"export-policy={export_policy}")
+
+    log.info(
+        f"Configuring ISIS default-information originate ({', '.join(parts)}) "
+        f"on {device.name} {afi} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [isis_context]
+
+    if enabled is not None:
+        config.append(
+            f'global af {afi} UNICAST default-information originate enabled '
+            f'{str(enabled).lower()}'
+        )
+    if always is not None:
+        config.append(
+            f'global af {afi} UNICAST default-information originate always '
+            f'{str(always).lower()}'
+        )
+    if export_policy is not None:
+        config.append(
+            f'global af {afi} UNICAST default-information originate '
+            f'export-policy {export_policy}'
+        )
+
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS default-information originate "
+            f"on {device.name} {afi}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_default_information_originate(device, afi,
+                                                    network_instance='default',
+                                                    protocol_instance='default'):
+    """Reset ISIS default-information originate for an AF.
+
+    Emits `no` lines for all three sub-knobs to ensure clean removal.
+
+    Args:
+        device (obj): Device object.
+        afi (str): 'IPV4' or 'IPV6'.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+        ValueError: If `afi` is invalid.
+    """
+    if afi not in ('IPV4', 'IPV6'):
+        raise ValueError(
+            f"Invalid afi '{afi}'. Must be 'IPV4' or 'IPV6'."
+        )
+
+    log.info(
+        f"Resetting ISIS default-information originate on {device.name} {afi}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global af {afi} UNICAST no default-information originate enabled',
+        f'global af {afi} UNICAST no default-information originate always',
+        f'global af {afi} UNICAST no default-information originate export-policy',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not reset ISIS default-information originate "
+            f"on {device.name} {afi}. Error:\n{e}"
+        )
