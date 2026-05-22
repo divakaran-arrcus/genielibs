@@ -7169,3 +7169,841 @@ def unconfigure_isis_interface_level_priority(device, interface, level,
             f"Could not remove ISIS interface {interface} level {lvl} "
             f"priority from {device.name}. Error:\n{e}"
         )
+
+
+# ============================================================================
+# Batch A — Level + Interface-Level (LAN Hello) Authentication
+# ============================================================================
+#
+# Source gaps:
+#   * KNOB §5  (Level container auth): keychain / simple-key / password
+#   * KNOB §7  (Interface-level LAN hello auth): keychain / simple-key /
+#              password / master toggle
+#
+# Pattern: mirrors existing P2P interface auth APIs
+# (configure_isis_interface_auth_*). All use the level-submode form per
+# Batch E lesson; unconfigure paths will be lab-validated and adjusted.
+#
+# Adoc references:
+#   * Level container auth: IS-IS.adoc L1262-L1322
+#   * Interface-level LAN hello auth: IS-IS.adoc L2011-L2127
+# ============================================================================
+
+
+# ----- Group 1: Level container auth (3 functions, 6 APIs) -----------------
+
+
+def configure_isis_level_auth_keychain(device, level, keychain_name,
+                                        network_instance='default',
+                                        protocol_instance='default'):
+    """Configure ISIS level-container keychain (RFC5310) authentication.
+
+    Sets the auth-type to KEYCHAIN and binds a keychain at level scope. The
+    auth material is consumed by LSP / CSNP / PSNP PDU authentication
+    toggles (configure_isis_lsp_authentication, _csnp_authentication,
+    _psnp_authentication).
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         level {N}
+          authentication auth-type KEYCHAIN
+          authentication keychain {keychain_name}
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        keychain_name (str): Name of an already-defined keychain on the device.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If ``level`` is not 'level_1' or 'level_2'.
+
+    Example:
+        >>> configure_isis_level_auth_keychain(
+        ...     device, level='level_2', keychain_name='mykeychain1')
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Configuring ISIS level {lvl} keychain auth ({keychain_name}) "
+        f"on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        'authentication auth-type KEYCHAIN',
+        f'authentication keychain {keychain_name}',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS level {lvl} keychain auth on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_level_auth_keychain(device, level,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Remove ISIS level-container keychain authentication.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         level {N}
+          no authentication keychain
+          no authentication auth-type
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+        ValueError: If ``level`` is invalid.
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Removing ISIS level {lvl} keychain auth from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        'no authentication keychain',
+        'no authentication auth-type',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS level {lvl} keychain auth from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_level_auth_simple_key(device, level, password,
+                                          crypto_algorithm='MD5',
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Configure ISIS level-container simple-key (RFC5304) authentication.
+
+    Bundles ``auth-type SIMPLE_KEY`` + ``key crypto-algorithm MD5`` + the
+    password. Only MD5 is supported by arcOS for SIMPLE_KEY mode.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         level {N}
+          authentication auth-type SIMPLE_KEY
+          authentication key crypto-algorithm MD5
+          authentication key auth-password {password}
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        password (str): Authentication password. arcOS will AES-encrypt this
+            in running-config output.
+        crypto_algorithm (str, optional): Cryptographic algorithm. Only
+            'MD5' is supported. Defaults to 'MD5'.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If ``level`` is invalid or ``crypto_algorithm`` is not 'MD5'.
+
+    Example:
+        >>> configure_isis_level_auth_simple_key(
+        ...     device, level='level_1', password='MyLvl1Passwd')
+    """
+    if crypto_algorithm != 'MD5':
+        raise ValueError(
+            f"Invalid crypto_algorithm '{crypto_algorithm}'. Only 'MD5' is "
+            f"supported for SIMPLE_KEY mode."
+        )
+    lvl = _get_level_number(level)
+    log.info(
+        f"Configuring ISIS level {lvl} simple-key auth ({crypto_algorithm}) "
+        f"on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        'authentication auth-type SIMPLE_KEY',
+        f'authentication key crypto-algorithm {crypto_algorithm}',
+        f'authentication key auth-password {password}',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS level {lvl} simple-key auth on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_level_auth_simple_key(device, level,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Remove ISIS level-container simple-key authentication.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         level {N}
+          no authentication key
+          no authentication auth-type
+          exit
+         !
+
+    The ``no authentication key`` form is documented at adoc L1322 and
+    removes the whole key block (crypto-algorithm + auth-password).
+
+    Args:
+        device (obj): Device object.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+        ValueError: If ``level`` is invalid.
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Removing ISIS level {lvl} simple-key auth from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        'no authentication key',
+        'no authentication auth-type',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS level {lvl} simple-key auth from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_level_auth_password(device, level, password,
+                                        network_instance='default',
+                                        protocol_instance='default'):
+    """Update the authentication password at ISIS level scope (key block).
+
+    Use this when the auth-type and crypto-algorithm are already set (via
+    configure_isis_level_auth_simple_key) and only the password needs to
+    change. Does NOT alter auth-type or crypto-algorithm.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         level {N}
+          authentication key auth-password {password}
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        password (str): New authentication password.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If ``level`` is invalid.
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Updating ISIS level {lvl} auth password on {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        f'authentication key auth-password {password}',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not update ISIS level {lvl} auth password on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_level_auth_password(device, level,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Remove only the auth-password at ISIS level scope (preserves crypto-algorithm).
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         level {N}
+          no authentication key auth-password
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+        ValueError: If ``level`` is invalid.
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Removing ISIS level {lvl} auth password from {device.name}"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        'no authentication key auth-password',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS level {lvl} auth password from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+# ----- Group 2: Interface-level (LAN hello) auth (4 functions, 8 APIs) ----
+
+
+def configure_isis_interface_level_hello_authentication(device, interface, level,
+                                                        enabled=True,
+                                                        network_instance='default',
+                                                        protocol_instance='default'):
+    """Enable or disable per-interface per-level LAN hello authentication.
+
+    Master toggle for LAN/broadcast hello-PDU authentication on a specific
+    interface at a specific level. Auth material must be configured
+    separately via configure_isis_interface_level_hello_auth_keychain or
+    _simple_key. LAN-only (broadcast network-type).
+
+    CLI emitted (note: ``hello-authentication hello-authentication`` is the
+    actual CLI; the inner word is the leaf, the outer is the container per
+    YANG augment — see adoc L2118)::
+
+        network-instance {ni} protocol ISIS {pi}
+         interface {interface}
+          level {N}
+           hello-authentication hello-authentication {true|false}
+           exit
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name (LAN/broadcast).
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        enabled (bool, optional): True to enable, False to disable. Defaults
+            to True.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If ``level`` is invalid.
+        TypeError: If ``enabled`` is not a bool.
+
+    Example:
+        >>> configure_isis_interface_level_hello_authentication(
+        ...     device, interface='swp1', level='level_1', enabled=True)
+    """
+    if not isinstance(enabled, bool):
+        raise TypeError(
+            f"enabled must be a bool, got {type(enabled).__name__}: {enabled!r}"
+        )
+    lvl = _get_level_number(level)
+    val = 'true' if enabled else 'false'
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} ISIS LAN hello-auth on "
+        f"interface {interface} level {lvl} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl}',
+        f'hello-authentication hello-authentication {val}',
+        'exit',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS LAN hello-auth on interface "
+            f"{interface} level {lvl} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_level_hello_authentication(device, interface, level,
+                                                          network_instance='default',
+                                                          protocol_instance='default'):
+    """Disable per-interface per-level LAN hello authentication (master toggle).
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         interface {interface}
+          level {N}
+           no hello-authentication hello-authentication
+           exit
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+        ValueError: If ``level`` is invalid.
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Removing ISIS LAN hello-auth from interface {interface} level "
+        f"{lvl} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl}',
+        'no hello-authentication hello-authentication',
+        'exit',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS LAN hello-auth from interface "
+            f"{interface} level {lvl} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_level_hello_auth_keychain(device, interface, level,
+                                                       keychain_name,
+                                                       network_instance='default',
+                                                       protocol_instance='default'):
+    """Configure RFC5310 keychain auth material for LAN hello at interface-level scope.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         interface {interface}
+          level {N}
+           hello-authentication auth-type KEYCHAIN
+           hello-authentication keychain {keychain_name}
+           exit
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name (LAN/broadcast).
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        keychain_name (str): Name of an already-defined keychain.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If ``level`` is invalid.
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Configuring ISIS LAN hello-auth keychain ({keychain_name}) on "
+        f"interface {interface} level {lvl} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl}',
+        'hello-authentication auth-type KEYCHAIN',
+        f'hello-authentication keychain {keychain_name}',
+        'exit',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS LAN hello-auth keychain on interface "
+            f"{interface} level {lvl} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_level_hello_auth_keychain(device, interface, level,
+                                                         network_instance='default',
+                                                         protocol_instance='default'):
+    """Remove LAN hello keychain auth material at interface-level scope.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         interface {interface}
+          level {N}
+           no hello-authentication keychain
+           no hello-authentication auth-type
+           exit
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+        ValueError: If ``level`` is invalid.
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Removing ISIS LAN hello-auth keychain from interface {interface} "
+        f"level {lvl} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl}',
+        'no hello-authentication keychain',
+        'no hello-authentication auth-type',
+        'exit',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS LAN hello-auth keychain from interface "
+            f"{interface} level {lvl} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_level_hello_auth_simple_key(device, interface, level,
+                                                          password,
+                                                          crypto_algorithm='MD5',
+                                                          network_instance='default',
+                                                          protocol_instance='default'):
+    """Configure RFC5304 simple-key auth material for LAN hello at interface-level scope.
+
+    Bundles ``auth-type SIMPLE_KEY`` + ``key crypto-algorithm MD5`` + the
+    password. Only MD5 is supported for SIMPLE_KEY mode.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         interface {interface}
+          level {N}
+           hello-authentication auth-type SIMPLE_KEY
+           hello-authentication key crypto-algorithm MD5
+           hello-authentication key auth-password {password}
+           exit
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name (LAN/broadcast).
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        password (str): Authentication password. arcOS will AES-encrypt in
+            running-config output.
+        crypto_algorithm (str, optional): Only 'MD5' supported. Defaults to 'MD5'.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If ``level`` is invalid or ``crypto_algorithm`` is not 'MD5'.
+    """
+    if crypto_algorithm != 'MD5':
+        raise ValueError(
+            f"Invalid crypto_algorithm '{crypto_algorithm}'. Only 'MD5' is "
+            f"supported for SIMPLE_KEY mode."
+        )
+    lvl = _get_level_number(level)
+    log.info(
+        f"Configuring ISIS LAN hello-auth simple-key ({crypto_algorithm}) "
+        f"on interface {interface} level {lvl} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl}',
+        'hello-authentication auth-type SIMPLE_KEY',
+        f'hello-authentication key crypto-algorithm {crypto_algorithm}',
+        f'hello-authentication key auth-password {password}',
+        'exit',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS LAN hello-auth simple-key on "
+            f"interface {interface} level {lvl} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_level_hello_auth_simple_key(device, interface, level,
+                                                            network_instance='default',
+                                                            protocol_instance='default'):
+    """Remove LAN hello simple-key auth material at interface-level scope.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         interface {interface}
+          level {N}
+           no hello-authentication key
+           no hello-authentication auth-type
+           exit
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+        ValueError: If ``level`` is invalid.
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Removing ISIS LAN hello-auth simple-key from interface {interface} "
+        f"level {lvl} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl}',
+        'no hello-authentication key',
+        'no hello-authentication auth-type',
+        'exit',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS LAN hello-auth simple-key from interface "
+            f"{interface} level {lvl} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_level_hello_auth_password(device, interface, level,
+                                                        password,
+                                                        network_instance='default',
+                                                        protocol_instance='default'):
+    """Update the LAN hello auth-password at interface-level scope.
+
+    Use this when auth-type and crypto-algorithm are already configured
+    (via configure_isis_interface_level_hello_auth_simple_key) and only
+    the password needs to change. Does NOT alter auth-type or
+    crypto-algorithm.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         interface {interface}
+          level {N}
+           hello-authentication key auth-password {password}
+           exit
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        password (str): New authentication password.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If ``level`` is invalid.
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Updating ISIS LAN hello-auth password on interface {interface} "
+        f"level {lvl} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl}',
+        f'hello-authentication key auth-password {password}',
+        'exit',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not update ISIS LAN hello-auth password on interface "
+            f"{interface} level {lvl} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_level_hello_auth_password(device, interface, level,
+                                                          network_instance='default',
+                                                          protocol_instance='default'):
+    """Remove the LAN hello auth-password at interface-level scope.
+
+    Preserves auth-type and crypto-algorithm.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         interface {interface}
+          level {N}
+           no hello-authentication key auth-password
+           exit
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        network_instance (str, optional): Defaults to 'default'.
+        protocol_instance (str, optional): Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+        ValueError: If ``level`` is invalid.
+    """
+    lvl = _get_level_number(level)
+    log.info(
+        f"Removing ISIS LAN hello-auth password from interface {interface} "
+        f"level {lvl} on {device.name}"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl}',
+        'no hello-authentication key auth-password',
+        'exit',
+        'exit',
+        '!'
+    ]
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS LAN hello-auth password from interface "
+            f"{interface} level {lvl} on {device.name}. Error:\n{e}"
+        )
