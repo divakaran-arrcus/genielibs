@@ -6777,3 +6777,395 @@ def unconfigure_isis_level_labeled_preference(device, level,
             f"Could not remove ISIS labeled-preference level {lvl} from "
             f"{device.name}. Error:\n{e}"
         )
+
+
+# ============================================================================
+# Batch C — Attached-bit (global) + DIS priority (per-level interface)
+# ============================================================================
+#
+# Source gaps:
+#   * KNOB §13 (LSP Bit / Overload): attached-bit ignore-bit + suppress-bit
+#   * COVERAGE_GAPS #10: per-level interface priority (DIS election)
+#
+# Lab-validated 2026-05-22 on rtr1:
+#   * attached-bit unconfigure MUST use prefix-`no` form
+#     (`no global lsp-bit attached-bit <subkey>`). The inline form
+#     `global lsp-bit attached-bit no <subkey>` is silently accepted by commit
+#     but does NOT remove the config on this build.
+#   * interface level priority: configure+unconfigure work with the standard
+#     level-submode form. CLI rejects 128 explicitly (good — config-mode error
+#     visible to caller), but silently caps 200 to 127 (cap-at-127 then no-op).
+#     The API enforces 0..127 client-side to be safe.
+# ============================================================================
+
+
+def configure_isis_attached_bit_ignore(device, enabled=True,
+                                       network_instance='default',
+                                       protocol_instance='default'):
+    """Configure ISIS attached-bit ignore behaviour (global).
+
+    When enabled (True), an L1-only router IGNORES the attached-bit set by
+    L1/L2 routers in their L1 LSPs — i.e., does not install a default route
+    via the nearest L1/L2 router from the attached-bit. Default arcOS value
+    is false (honor the bit, install default route).
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         global lsp-bit attached-bit ignore-bit {true|false}
+         !
+
+    Args:
+        device (obj): Device object.
+        enabled (bool, optional): True to ignore the attached-bit, False to
+            honor it. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to
+            'default'.
+        protocol_instance (str, optional): ISIS protocol instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        TypeError: If ``enabled`` is not a bool.
+
+    Example:
+        >>> configure_isis_attached_bit_ignore(device, enabled=True)
+    """
+    if not isinstance(enabled, bool):
+        raise TypeError(
+            f"enabled must be a bool, got {type(enabled).__name__}: {enabled!r}"
+        )
+
+    val = 'true' if enabled else 'false'
+    log.info(
+        f"Configuring ISIS attached-bit ignore-bit {val} on {device.name} "
+        f"(network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global lsp-bit attached-bit ignore-bit {val}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS attached-bit ignore-bit {val} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_attached_bit_ignore(device,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Reset ISIS attached-bit ignore-bit to default (false).
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         no global lsp-bit attached-bit ignore-bit
+         !
+
+    Lab-validated 2026-05-22: this prefix-`no` form is required. The
+    inline form ``global lsp-bit attached-bit no ignore-bit`` is silently
+    accepted by commit but does NOT remove the configuration on this
+    arcOS build.
+
+    Args:
+        device (obj): Device object.
+        network_instance (str, optional): Network instance name. Defaults to
+            'default'.
+        protocol_instance (str, optional): ISIS protocol instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+
+    Example:
+        >>> unconfigure_isis_attached_bit_ignore(device)
+    """
+    log.info(
+        f"Removing ISIS attached-bit ignore-bit from {device.name} "
+        f"(network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global lsp-bit attached-bit ignore-bit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS attached-bit ignore-bit from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_attached_bit_suppress(device, enabled=True,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Configure ISIS attached-bit suppress behaviour (global).
+
+    When enabled (True), an L1/L2 router SUPPRESSES (does not set) the
+    attached-bit in its own L1 LSP fragment zero. Default arcOS value is
+    false (set the bit when this router has L2 connectivity).
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         global lsp-bit attached-bit suppress-bit {true|false}
+         !
+
+    Args:
+        device (obj): Device object.
+        enabled (bool, optional): True to suppress the bit, False to set it
+            normally. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to
+            'default'.
+        protocol_instance (str, optional): ISIS protocol instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        TypeError: If ``enabled`` is not a bool.
+
+    Example:
+        >>> configure_isis_attached_bit_suppress(device, enabled=True)
+    """
+    if not isinstance(enabled, bool):
+        raise TypeError(
+            f"enabled must be a bool, got {type(enabled).__name__}: {enabled!r}"
+        )
+
+    val = 'true' if enabled else 'false'
+    log.info(
+        f"Configuring ISIS attached-bit suppress-bit {val} on {device.name} "
+        f"(network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global lsp-bit attached-bit suppress-bit {val}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS attached-bit suppress-bit {val} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_attached_bit_suppress(device,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Reset ISIS attached-bit suppress-bit to default (false).
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         no global lsp-bit attached-bit suppress-bit
+         !
+
+    Lab-validated 2026-05-22: this prefix-`no` form is required. The
+    inline form ``global lsp-bit attached-bit no suppress-bit`` is silently
+    accepted by commit but does NOT remove the configuration on this
+    arcOS build.
+
+    Args:
+        device (obj): Device object.
+        network_instance (str, optional): Network instance name. Defaults to
+            'default'.
+        protocol_instance (str, optional): ISIS protocol instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+
+    Example:
+        >>> unconfigure_isis_attached_bit_suppress(device)
+    """
+    log.info(
+        f"Removing ISIS attached-bit suppress-bit from {device.name} "
+        f"(network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global lsp-bit attached-bit suppress-bit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS attached-bit suppress-bit from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_level_priority(device, interface, level, priority,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Configure ISIS interface per-level DIS-election priority.
+
+    Sets the priority used in DIS (Designated Intermediate System) election
+    on broadcast/LAN interfaces. Higher priority wins; tie-broken by MAC.
+    arcOS default is 63. Range 0..127. Has no effect on P2P interfaces.
+
+    CLI emitted (level-submode form)::
+
+        network-instance {ni} protocol ISIS {pi}
+         interface {interface}
+          level {level_num}
+           priority {priority}
+           exit
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name (e.g., 'swp1', 'ethernet-1/1').
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        priority (int): DIS-election priority. Range 0..127. Default 63.
+        network_instance (str, optional): Network instance name. Defaults to
+            'default'.
+        protocol_instance (str, optional): ISIS protocol instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If ``level`` is not 'level_1' or 'level_2', or if
+            ``priority`` is outside 0..127.
+
+    Example:
+        >>> configure_isis_interface_level_priority(
+        ...     device, interface='swp1', level='level_1', priority=100)
+    """
+    lvl = _get_level_number(level)
+
+    if not isinstance(priority, int) or isinstance(priority, bool):
+        raise ValueError(
+            f"Invalid priority '{priority}'. Must be an integer 0..127."
+        )
+    if priority < 0 or priority > 127:
+        raise ValueError(
+            f"Invalid priority '{priority}'. Must be in range 0..127."
+        )
+
+    log.info(
+        f"Configuring ISIS interface {interface} level {lvl} priority "
+        f"{priority} on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl}',
+        f'priority {priority}',
+        'exit',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS interface {interface} level {lvl} "
+            f"priority {priority} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_level_priority(device, interface, level,
+                                              network_instance='default',
+                                              protocol_instance='default'):
+    """Reset ISIS interface per-level DIS-election priority to default (63).
+
+    CLI emitted (level-submode form)::
+
+        network-instance {ni} protocol ISIS {pi}
+         interface {interface}
+          level {level_num}
+           no priority
+           exit
+          exit
+         !
+
+    Args:
+        device (obj): Device object.
+        interface (str): Interface name.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        network_instance (str, optional): Network instance name. Defaults to
+            'default'.
+        protocol_instance (str, optional): ISIS protocol instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+        ValueError: If ``level`` is not 'level_1' or 'level_2'.
+
+    Example:
+        >>> unconfigure_isis_interface_level_priority(
+        ...     device, interface='swp1', level='level_1')
+    """
+    lvl = _get_level_number(level)
+
+    log.info(
+        f"Removing ISIS interface {interface} level {lvl} priority from "
+        f"{device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl}',
+        'no priority',
+        'exit',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS interface {interface} level {lvl} "
+            f"priority from {device.name}. Error:\n{e}"
+        )
