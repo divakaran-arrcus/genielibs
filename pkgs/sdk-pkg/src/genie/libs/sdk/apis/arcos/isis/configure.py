@@ -6622,3 +6622,158 @@ def unconfigure_isis_default_information_originate(device, afi,
             f"Could not reset ISIS default-information originate "
             f"on {device.name} {afi}. Error:\n{e}"
         )
+
+
+# ============================================================================
+# Batch E — Per-Level SR Labeled Preference
+# ============================================================================
+#
+# Lab-validated 2026-05-22 on rtr1:
+#   * Default value 114 (matches IS-IS.adoc §1198 table)
+#   * Effective range 1..255. CLI silently ignores `preference 0` (state
+#     unchanged) and silently caps 256+ to 255. API enforces 1..255
+#     client-side and raises ValueError otherwise.
+#   * Unconfigure MUST enter the level submode — the flat form
+#     `network-instance ... no level <N> labeled-preference` is a silent no-op
+#     on this build.
+# ============================================================================
+
+
+def configure_isis_level_labeled_preference(device, level, preference,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Configure ISIS per-level labeled-preference for SR LSPs.
+
+    Sets the route-preference (administrative distance) that the RIB assigns
+    to ISIS-SR-MPLS labeled paths at the specified level. arcOS default is
+    114 (lower than LDP's default 20, so LDP wins by default). Lowering this
+    value (e.g., to 10) makes ISIS-SR paths preferred over LDP — the typical
+    LDP -> SR migration knob.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         level {N}
+          labeled-preference {preference}
+          exit
+
+    Args:
+        device (obj): Device object.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        preference (int): Administrative distance for ISIS-SR labeled paths.
+            Range 1..255 (lab-validated). arcOS default 114.
+        network_instance (str, optional): Network instance name. Defaults to
+            'default'.
+        protocol_instance (str, optional): ISIS protocol instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If configuration fails.
+        ValueError: If ``level`` is not 'level_1' or 'level_2', or if
+            ``preference`` is outside 1..255.
+
+    Example:
+        >>> # Make ISIS-SR L2 paths preferred over LDP (force migration)
+        >>> configure_isis_level_labeled_preference(
+        ...     device, level='level_2', preference=10)
+    """
+    lvl = _level_number(level)
+
+    if not isinstance(preference, int) or isinstance(preference, bool):
+        raise ValueError(
+            f"Invalid preference '{preference}'. Must be an integer 1..255."
+        )
+    if preference < 1 or preference > 255:
+        raise ValueError(
+            f"Invalid preference '{preference}'. Must be in range 1..255. "
+            f"Note: arcOS CLI silently ignores `labeled-preference 0` (no "
+            f"state change) and silently caps values >255 (e.g., 256 becomes "
+            f"255), so this API enforces the range client-side."
+        )
+
+    log.info(
+        f"Configuring ISIS labeled-preference {preference} level {lvl} on "
+        f"{device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        f'labeled-preference {preference}',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS labeled-preference {preference} "
+            f"level {lvl} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_level_labeled_preference(device, level,
+                                              network_instance='default',
+                                              protocol_instance='default'):
+    """Reset ISIS per-level labeled-preference to default (114).
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+         level {N}
+          no labeled-preference
+          exit
+
+    Note: The level-submode form is required. The flat form
+    ``no level <N> labeled-preference`` is silently accepted by commit but
+    does not remove the configuration on this arcOS build (verified
+    2026-05-22).
+
+    Args:
+        device (obj): Device object.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        network_instance (str, optional): Network instance name. Defaults to
+            'default'.
+        protocol_instance (str, optional): ISIS protocol instance name.
+            Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: If unconfigure fails.
+        ValueError: If ``level`` is not 'level_1' or 'level_2'.
+
+    Example:
+        >>> unconfigure_isis_level_labeled_preference(device, level='level_2')
+    """
+    lvl = _level_number(level)
+
+    log.info(
+        f"Removing ISIS labeled-preference level {lvl} from {device.name} "
+        f"(network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'level {lvl}',
+        'no labeled-preference',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS labeled-preference level {lvl} from "
+            f"{device.name}. Error:\n{e}"
+        )
