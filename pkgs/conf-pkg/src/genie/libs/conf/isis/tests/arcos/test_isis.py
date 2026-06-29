@@ -929,6 +929,156 @@ class TestNativeArcosIsisBasic(unittest.TestCase):
         self.assertIn("sid-type INDEX", cfg_str)
         self.assertIn("value    12", cfg_str)
 
+    # ------------------------------------------------------------------
+    # Global Flex-Algo FAD definitions — admin-group constraints + priority
+    # ------------------------------------------------------------------
+
+    def _build_fad(self, algo_defs):
+        """Helper: build config for a device carrying flexible_algorithms."""
+        isis = GenieIsis(pid="default")
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+        da.flexible_algorithms = algo_defs
+        cfgs = isis.build_config(devices=[self.device], apply=False)
+        return str(cfgs["rtr1"])
+
+    def test_flexalgo_exclude_any(self):
+        """FAD admin-groups exclude-any is emitted (IGP + affinity divergence)."""
+        cfg_str = self._build_fad({
+            128: {
+                "advertise_definition_enabled": True,
+                "metric_type": "IGP_METRIC",
+                "admin_groups_exclude_any": ["red"],
+            },
+        })
+        self.assertIn("global flexible-algorithm 128", cfg_str)
+        self.assertIn("advertise-definition enabled true", cfg_str)
+        self.assertIn("metric-type IGP_METRIC", cfg_str)
+        self.assertIn("admin-groups exclude-any [ red ]", cfg_str)
+
+    def test_flexalgo_include_all(self):
+        """FAD admin-groups include-all is emitted with multiple colors."""
+        cfg_str = self._build_fad({
+            130: {
+                "metric_type": "LINK_DELAY",
+                "admin_groups_include_all": ["red", "blue"],
+            },
+        })
+        self.assertIn("global flexible-algorithm 130", cfg_str)
+        self.assertIn("metric-type LINK_DELAY", cfg_str)
+        self.assertIn("admin-groups include-all [ red blue ]", cfg_str)
+
+    def test_flexalgo_priority(self):
+        """FAD priority is emitted."""
+        cfg_str = self._build_fad({
+            128: {"metric_type": "IGP_METRIC", "priority": 200},
+        })
+        self.assertIn("global flexible-algorithm 128", cfg_str)
+        self.assertIn("priority 200", cfg_str)
+
+    def test_flexalgo_priority_only_enters_submode(self):
+        """An algo with only priority set must enter the submode, not a bare line."""
+        cfg_str = self._build_fad({128: {"priority": 100}})
+        self.assertIn("global flexible-algorithm 128", cfg_str)
+        self.assertIn("priority 100", cfg_str)
+
+    def test_flexalgo_include_any_unchanged(self):
+        """Existing include-any path still renders identically (no regression)."""
+        cfg_str = self._build_fad({
+            129: {
+                "advertise_definition_enabled": True,
+                "metric_type": "TE_METRIC",
+                "admin_groups_include_any": ["green"],
+            },
+        })
+        self.assertIn("global flexible-algorithm 129", cfg_str)
+        self.assertIn("metric-type TE_METRIC", cfg_str)
+        self.assertIn("admin-groups include-any [ green ]", cfg_str)
+
+    def test_flexalgo_combined(self):
+        """advertise + metric-type + priority + exclude-any render together."""
+        cfg_str = self._build_fad({
+            128: {
+                "advertise_definition_enabled": True,
+                "metric_type": "IGP_METRIC",
+                "priority": 200,
+                "admin_groups_exclude_any": ["red"],
+            },
+        })
+        self.assertIn("advertise-definition enabled true", cfg_str)
+        self.assertIn("metric-type IGP_METRIC", cfg_str)
+        self.assertIn("priority 200", cfg_str)
+        self.assertIn("admin-groups exclude-any [ red ]", cfg_str)
+
+    def test_flexalgo_unconfig(self):
+        """FAD builds under config; build_unconfig negates the protocol subtree."""
+        isis = GenieIsis(pid="default")
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+        da.flexible_algorithms = {
+            128: {"metric_type": "IGP_METRIC", "admin_groups_exclude_any": ["red"]},
+        }
+
+        cfg_str = str(isis.build_config(devices=[self.device], apply=False)["rtr1"])
+        self.assertIn("global flexible-algorithm 128", cfg_str)
+        self.assertIn("admin-groups exclude-any [ red ]", cfg_str)
+
+        # Whole-protocol unconfig (standard CliConfigBuilder(unconfig=True) shape)
+        uncfg_str = str(
+            isis.build_unconfig(devices=[self.device], apply=False)["rtr1"]
+        )
+        self.assertIn(
+            "no network-instance default protocol ISIS default", uncfg_str
+        )
+
+    # ------------------------------------------------------------------
+    # Per-algo SR-MPLS prefix-SIDs (list) on one loopback
+    # ------------------------------------------------------------------
+
+    def test_per_algo_prefix_sids_ipv4(self):
+        """A list of IPv4 prefix-SIDs emits one prefix-sid block per algorithm."""
+        isis = GenieIsis(pid="default")
+        lo = Interface(name="loopback0", device=self.device)
+        lo.add_feature(isis)
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+        ia = da.interface_attr[lo]
+        ia.enabled = True
+        ia.interface_id = "loopback0"
+        ia.ipv4_prefix_sids = [
+            {"algorithm": "SPF", "sid_type": "INDEX", "value": 1,
+             "label_option": "EXPLICIT_NULL"},
+            {"algorithm": 128, "sid_type": "INDEX", "value": 101},
+            {"algorithm": 129, "sid_type": "INDEX", "value": 201},
+        ]
+        cfg_str = str(isis.build_config(devices=[self.device], apply=False)["rtr1"])
+        self.assertIn("af IPV4 UNICAST", cfg_str)
+        self.assertIn("prefix-sid SPF", cfg_str)
+        self.assertIn("prefix-sid 128", cfg_str)
+        self.assertIn("prefix-sid 129", cfg_str)
+        self.assertIn("label-option EXPLICIT_NULL", cfg_str)
+        self.assertIn("value        101", cfg_str)
+        self.assertIn("value        201", cfg_str)
+
+    def test_prefix_sid_single_dict_back_compat(self):
+        """The legacy single ipv4_prefix_sid dict still emits one block."""
+        isis = GenieIsis(pid="default")
+        lo = Interface(name="loopback0", device=self.device)
+        lo.add_feature(isis)
+        da = isis.device_attr[self.device]
+        da.net_id = "49.0000.0000.0000.0001.00"
+        da.is_type = GenieIsis.IsType.level_2
+        ia = da.interface_attr[lo]
+        ia.enabled = True
+        ia.interface_id = "loopback0"
+        ia.ipv4_prefix_sid = {"algorithm": "SPF", "sid_type": "INDEX", "value": 1}
+        cfg_str = str(isis.build_config(devices=[self.device], apply=False)["rtr1"])
+        self.assertIn("prefix-sid SPF", cfg_str)
+        self.assertIn("value        1", cfg_str)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

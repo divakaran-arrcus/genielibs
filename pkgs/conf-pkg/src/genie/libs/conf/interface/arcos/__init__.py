@@ -108,5 +108,22 @@ if genie_iface_mod is not None:
                 **kwargs,
             )
 
+    # The wrapper above invokes ``_ArcosInterfaceAttributes.build_config`` with
+    # the interface object as ``self``. That method internally calls
+    # ``self._build_config`` / ``self._build_unconfig`` /
+    # ``self._build_subinterface_0_compat``, which are defined on
+    # InterfaceAttributes — not on the interface object — so the unbound call
+    # raised AttributeError. Expose those helpers on ArcosAwareInterface so the
+    # internal self._build_* calls resolve.
+    for _helper_name in dir(_ArcosInterfaceAttributes):
+        if _helper_name.startswith("_build") and not hasattr(
+            ArcosAwareInterface, _helper_name
+        ):
+            setattr(
+                ArcosAwareInterface,
+                _helper_name,
+                getattr(_ArcosInterfaceAttributes, _helper_name),
+            )
+
     genie_iface_mod.Interface = ArcosAwareInterface
     sys.modules["genie.libs.conf.interface"].Interface = ArcosAwareInterface
