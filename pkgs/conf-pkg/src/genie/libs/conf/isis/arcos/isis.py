@@ -131,7 +131,10 @@ class Isis(ABC):
             doc='Dict of flex-algo definitions keyed by algorithm ID (128-255). '
                 'Each value is a dict with keys: advertise_definition_enabled (bool), '
                 'metric_type (str: IGP_METRIC|TE_METRIC|LINK_DELAY), '
-                'admin_groups_include_any (list of str)')
+                'priority (int 0-255), '
+                'admin_groups_include_any (list of str), '
+                'admin_groups_exclude_any (list of str), '
+                'admin_groups_include_all (list of str)')
 
         # Global auto-cost reference bandwidth
         auto_cost_reference_bandwidth = managedattribute(
@@ -550,15 +553,23 @@ class Isis(ABC):
                                     'advertise_definition_enabled'
                                 )
                                 metric_type = algo_attrs.get('metric_type')
-                                admin_groups = algo_attrs.get(
+                                priority = algo_attrs.get('priority')
+                                inc_any = algo_attrs.get(
                                     'admin_groups_include_any'
+                                )
+                                exc_any = algo_attrs.get(
+                                    'admin_groups_exclude_any'
+                                )
+                                inc_all = algo_attrs.get(
+                                    'admin_groups_include_all'
                                 )
 
                                 # If no sub-attributes set, emit bare line
-                                if (
-                                    adv_enabled is None
-                                    and metric_type is None
-                                    and admin_groups is None
+                                if all(
+                                    v is None for v in (
+                                        adv_enabled, metric_type, priority,
+                                        inc_any, exc_any, inc_all,
+                                    )
                                 ):
                                     configurations.append_line(
                                         f'global flexible-algorithm {algo_id}'
@@ -580,17 +591,27 @@ class Isis(ABC):
                                             configurations.append_line(
                                                 f'metric-type {metric_type}'
                                             )
-                                        if admin_groups:
+                                        if priority is not None:
+                                            configurations.append_line(
+                                                f'priority {priority}'
+                                            )
+                                        for constraint, groups in (
+                                            ('include-any', inc_any),
+                                            ('exclude-any', exc_any),
+                                            ('include-all', inc_all),
+                                        ):
+                                            if not groups:
+                                                continue
                                             if isinstance(
-                                                admin_groups, (list, tuple)
+                                                groups, (list, tuple)
                                             ):
                                                 groups_str = ' '.join(
-                                                    str(g) for g in admin_groups
+                                                    str(g) for g in groups
                                                 )
                                             else:
-                                                groups_str = str(admin_groups)
+                                                groups_str = str(groups)
                                             configurations.append_line(
-                                                f'admin-groups include-any '
+                                                f'admin-groups {constraint} '
                                                 f'[ {groups_str} ]'
                                             )
                                     configurations.append_line('!')
@@ -1075,6 +1096,14 @@ class Isis(ABC):
                 type=(None, managedattribute.test_istype(dict)),
                 doc='IPv4 Prefix-SID: {algorithm, sid_type, value, label_option, clear_n_flag}')
 
+            # Per-algo IPv4 Prefix-SIDs on one loopback (SPF + flex-algos);
+            # list of dicts. Takes precedence over single ipv4_prefix_sid.
+            ipv4_prefix_sids = managedattribute(
+                name='ipv4_prefix_sids',
+                default=None,
+                type=(None, managedattribute.test_istype(list)),
+                doc='List of IPv4 Prefix-SID dicts (one per algorithm).')
+
             # Legacy aggregate IPv4 TI-LFA and SR SID knobs (compatibility)
             ti_lfa_sr_mpls_enabled = managedattribute(
                 name='ti_lfa_sr_mpls_enabled',
@@ -1134,6 +1163,14 @@ class Isis(ABC):
                 default=None,
                 type=(None, managedattribute.test_istype(dict)),
                 doc='IPv6 Prefix-SID: {algorithm, sid_type, value, label_option, clear_n_flag}')
+
+            # SR-MPLS: multiple IPv6 Prefix-SIDs (per-algorithm) on one interface.
+            # See ipv4_prefix_sids. Takes precedence over ipv6_prefix_sid.
+            ipv6_prefix_sids = managedattribute(
+                name='ipv6_prefix_sids',
+                default=None,
+                type=(None, managedattribute.test_istype(list)),
+                doc='List of IPv6 Prefix-SID dicts (one per algorithm).')
 
             # Flexible-algorithm admin-groups (interface-level)
             flex_algo_admin_groups = managedattribute(
@@ -1288,9 +1325,12 @@ class Isis(ABC):
                                             configurations.append_line(f'value    {value}')
                                     configurations.append_line('!')
 
-                                # IPv6 Prefix-SID
-                                ipv6_pfx_sid = attributes.value('ipv6_prefix_sid')
-                                if ipv6_pfx_sid:
+                                # IPv6 Prefix-SID(s) — list (per-algo) or single dict
+                                ipv6_pfx_sids = attributes.value('ipv6_prefix_sids')
+                                if not ipv6_pfx_sids:
+                                    _single6 = attributes.value('ipv6_prefix_sid')
+                                    ipv6_pfx_sids = [_single6] if _single6 else []
+                                for ipv6_pfx_sid in ipv6_pfx_sids:
                                     algorithm = ipv6_pfx_sid.get('algorithm', 'SPF') if isinstance(ipv6_pfx_sid, dict) else 'SPF'
                                     with configurations.submode_context(f'prefix-sid {algorithm}'):
                                         sid_type = ipv6_pfx_sid.get('sid_type') if isinstance(ipv6_pfx_sid, dict) else None
@@ -1364,11 +1404,14 @@ class Isis(ABC):
                                             configurations.append_line(f'value    {value}')
                                     configurations.append_line('!')
 
-                                # IPv4 Prefix-SID
-                                ipv4_pfx_sid = attributes.value('ipv4_prefix_sid')
-                                if not ipv4_pfx_sid:
-                                    ipv4_pfx_sid = attributes.value('sr_prefix_sid')
-                                if ipv4_pfx_sid:
+                                # IPv4 Prefix-SID(s) — list (per-algo) or single dict
+                                ipv4_pfx_sids = attributes.value('ipv4_prefix_sids')
+                                if not ipv4_pfx_sids:
+                                    _single4 = attributes.value('ipv4_prefix_sid')
+                                    if not _single4:
+                                        _single4 = attributes.value('sr_prefix_sid')
+                                    ipv4_pfx_sids = [_single4] if _single4 else []
+                                for ipv4_pfx_sid in ipv4_pfx_sids:
                                     algorithm = ipv4_pfx_sid.get('algorithm', 'SPF') if isinstance(ipv4_pfx_sid, dict) else 'SPF'
                                     with configurations.submode_context(f'prefix-sid {algorithm}'):
                                         sid_type = ipv4_pfx_sid.get('sid_type') if isinstance(ipv4_pfx_sid, dict) else None
