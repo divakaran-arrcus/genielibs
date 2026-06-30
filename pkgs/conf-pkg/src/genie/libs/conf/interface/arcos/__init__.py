@@ -108,5 +108,17 @@ if genie_iface_mod is not None:
                 **kwargs,
             )
 
+    # build_config runs with the interface as ``self`` but calls ``self._build_*``
+    # helpers that live on InterfaceAttributes — bind them here so they resolve.
+    for _helper_name in dir(_ArcosInterfaceAttributes):
+        if _helper_name.startswith("_build") and not hasattr(
+            ArcosAwareInterface, _helper_name
+        ):
+            setattr(
+                ArcosAwareInterface,
+                _helper_name,
+                getattr(_ArcosInterfaceAttributes, _helper_name),
+            )
+
     genie_iface_mod.Interface = ArcosAwareInterface
     sys.modules["genie.libs.conf.interface"].Interface = ArcosAwareInterface
