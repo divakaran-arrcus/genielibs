@@ -1096,11 +1096,8 @@ class Isis(ABC):
                 type=(None, managedattribute.test_istype(dict)),
                 doc='IPv4 Prefix-SID: {algorithm, sid_type, value, label_option, clear_n_flag}')
 
-            # SR-MPLS: multiple IPv4 Prefix-SIDs (per-algorithm) on one interface.
-            # List of dicts, each {algorithm, sid_type, value, label_option,
-            # clear_n_flag}. Lets one loopback carry SPF + flex-algo SIDs
-            # (e.g. prefix-sid SPF, prefix-sid 128, prefix-sid 129). Takes
-            # precedence over the single ipv4_prefix_sid when set.
+            # Per-algo IPv4 Prefix-SIDs on one loopback (SPF + flex-algos);
+            # list of dicts. Takes precedence over single ipv4_prefix_sid.
             ipv4_prefix_sids = managedattribute(
                 name='ipv4_prefix_sids',
                 default=None,
