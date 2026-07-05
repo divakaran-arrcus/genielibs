@@ -8007,3 +8007,132 @@ def unconfigure_isis_interface_level_hello_auth_password(device, interface, leve
             f"Could not remove ISIS LAN hello-auth password from interface "
             f"{interface} level {lvl} on {device.name}. Error:\n{e}"
         )
+
+
+def _get_global_af_name(af):
+    """Map an address-family string to the ArcOS global AF submode name.
+
+    Args:
+        af (str): Address family — ``'ipv4'`` or ``'ipv6'`` (case-insensitive).
+
+    Returns:
+        str: ArcOS AF submode name, ``'IPV4 UNICAST'`` or ``'IPV6 UNICAST'``.
+
+    Raises:
+        ValueError: If ``af`` is not 'ipv4' or 'ipv6'.
+    """
+    af_lower = af.lower()
+    if af_lower == 'ipv4':
+        return 'IPV4 UNICAST'
+    if af_lower == 'ipv6':
+        return 'IPV6 UNICAST'
+    raise ValueError(
+        f"Invalid address family '{af}'. Expected 'ipv4' or 'ipv6'."
+    )
+
+
+def configure_isis_address_family(device, af, enabled=True, network_instance='default',
+                                  protocol_instance='default'):
+    """Enable or disable an ISIS global (instance-level) address family.
+
+    Emits the instance-level AF toggle matching the conf object's rendering:
+    a ``global af <AF> UNICAST`` submode followed by ``enabled true|false``.
+    Use ``enabled=False`` for the global AF disable and ``enabled=True`` to
+    restore it.
+
+    Args:
+        device (obj): Device object.
+        af (str): Address family — ``'ipv4'`` or ``'ipv6'`` (case-insensitive).
+        enabled (bool, optional): AF enabled state. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the ISIS global address family.
+        ValueError: If ``af`` is invalid.
+
+    Example:
+        >>> configure_isis_address_family(
+        ...     device=device,
+        ...     af='ipv6',
+        ...     enabled=False,
+        ...     protocol_instance='isis1'
+        ... )
+    """
+    af_name = _get_global_af_name(af)
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} ISIS global address family "
+        f"{af_name} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global af {af_name}',
+        f'enabled {"true" if enabled else "false"}',
+        'exit',  # Exit global AF submode
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not {'enable' if enabled else 'disable'} ISIS global address "
+            f"family {af_name} on {device.name} "
+            f"(network-instance: {network_instance}, protocol-instance: {protocol_instance}). "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_isis_address_family(device, af, network_instance='default',
+                                    protocol_instance='default'):
+    """Remove an ISIS global (instance-level) address family submode.
+
+    Emits ``no global af <AF> UNICAST`` to remove the AF submode entirely.
+
+    Args:
+        device (obj): Device object.
+        af (str): Address family — ``'ipv4'`` or ``'ipv6'`` (case-insensitive).
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the ISIS global address family.
+        ValueError: If ``af`` is invalid.
+
+    Example:
+        >>> unconfigure_isis_address_family(
+        ...     device=device,
+        ...     af='ipv4',
+        ...     protocol_instance='isis1'
+        ... )
+    """
+    af_name = _get_global_af_name(af)
+    log.info(
+        f"Removing ISIS global address family {af_name} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'no global af {af_name}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS global address family {af_name} on {device.name} "
+            f"(network-instance: {network_instance}, protocol-instance: {protocol_instance}). "
+            f"Error:\n{e}"
+        )
