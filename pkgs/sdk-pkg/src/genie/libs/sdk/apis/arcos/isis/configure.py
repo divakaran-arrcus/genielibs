@@ -8136,3 +8136,193 @@ def unconfigure_isis_address_family(device, af, network_instance='default',
             f"(network-instance: {network_instance}, protocol-instance: {protocol_instance}). "
             f"Error:\n{e}"
         )
+
+
+def configure_isis_srv6(device, enabled=True, network_instance='default',
+                        protocol_instance='default'):
+    """Enable or disable ISIS SRv6 globally on the protocol instance.
+
+    Emits ``global srv6 enabled true|false`` under the ISIS instance
+    submode. Use ``enabled=False`` to disable SRv6 and ``enabled=True``
+    to (re)enable it.
+
+    Args:
+        device (obj): Device object.
+        enabled (bool, optional): SRv6 enabled state. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure ISIS SRv6.
+
+    Example:
+        >>> configure_isis_srv6(
+        ...     device=device,
+        ...     enabled=True,
+        ...     protocol_instance='isis1'
+        ... )
+    """
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} ISIS SRv6 on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global srv6 enabled {"true" if enabled else "false"}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not {'enable' if enabled else 'disable'} ISIS SRv6 on {device.name} "
+            f"(network-instance: {network_instance}, protocol-instance: {protocol_instance}). "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_isis_srv6(device, network_instance='default',
+                          protocol_instance='default'):
+    """Disable ISIS SRv6 globally on the protocol instance.
+
+    Emits ``global srv6 enabled false`` under the ISIS instance submode.
+
+    Args:
+        device (obj): Device object.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to disable ISIS SRv6.
+
+    Example:
+        >>> unconfigure_isis_srv6(
+        ...     device=device,
+        ...     protocol_instance='isis1'
+        ... )
+    """
+    log.info(
+        f"Disabling ISIS SRv6 on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'global srv6 enabled false',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not disable ISIS SRv6 on {device.name} "
+            f"(network-instance: {network_instance}, protocol-instance: {protocol_instance}). "
+            f"Error:\n{e}"
+        )
+
+
+def configure_isis_srv6_locator(device, locator, network_instance='default',
+                                protocol_instance='default'):
+    """Bind an SRv6 locator to the ISIS protocol instance.
+
+    Emits ``global srv6 locator <locator>`` under the ISIS instance
+    submode.
+
+    Args:
+        device (obj): Device object.
+        locator (str): SRv6 locator name to bind.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the ISIS SRv6 locator.
+
+    Example:
+        >>> configure_isis_srv6_locator(
+        ...     device=device,
+        ...     locator='LOC_R1_ALG128',
+        ...     protocol_instance='isis1'
+        ... )
+    """
+    log.info(
+        f"Binding ISIS SRv6 locator {locator} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global srv6 locator {locator}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not bind ISIS SRv6 locator {locator} on {device.name} "
+            f"(network-instance: {network_instance}, protocol-instance: {protocol_instance}). "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_isis_srv6_locator(device, locator, network_instance='default',
+                                  protocol_instance='default'):
+    """Remove an SRv6 locator binding from the ISIS protocol instance.
+
+    Emits ``no global srv6 locator <locator>`` under the ISIS instance
+    submode.
+
+    Args:
+        device (obj): Device object.
+        locator (str): SRv6 locator name to unbind.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the ISIS SRv6 locator.
+
+    Example:
+        >>> unconfigure_isis_srv6_locator(
+        ...     device=device,
+        ...     locator='LOC_R1_ALG128',
+        ...     protocol_instance='isis1'
+        ... )
+    """
+    log.info(
+        f"Removing ISIS SRv6 locator {locator} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'no global srv6 locator {locator}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS SRv6 locator {locator} on {device.name} "
+            f"(network-instance: {network_instance}, protocol-instance: {protocol_instance}). "
+            f"Error:\n{e}"
+        )
