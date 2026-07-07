@@ -8189,9 +8189,9 @@ def configure_isis_srv6(device, enabled=True, network_instance='default',
 
 def unconfigure_isis_srv6(device, network_instance='default',
                           protocol_instance='default'):
-    """Disable ISIS SRv6 globally on the protocol instance.
+    """Disable ISIS SRv6 globally on the protocol instance (reset to default).
 
-    Emits ``global srv6 enabled false`` under the ISIS instance submode.
+    Emits ``no global srv6 enabled`` under the ISIS instance submode.
 
     Args:
         device (obj): Device object.
@@ -8218,7 +8218,7 @@ def unconfigure_isis_srv6(device, network_instance='default',
     isis_context = _build_isis_config_context(network_instance, protocol_instance)
     config = [
         isis_context,
-        'global srv6 enabled false',
+        'no global srv6 enabled',
         '!'
     ]
 
