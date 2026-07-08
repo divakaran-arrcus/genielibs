@@ -390,22 +390,22 @@ def get_srv6_locator_function_length(device, locator_name: str,
 # ---------------------------------------------------------------------------
 
 def _parse_srv6_local_sids(device,
-                           network_instance: str = 'default') -> Dict[str, Any]:
+                           ni: str = 'default') -> Dict[str, Any]:
     """Parse SRv6 local-SID table operational state for a network instance.
 
     Args:
         device: pyATS device object.
-        network_instance: Network instance name.
+        ni: Network instance name.
 
     Returns:
         Parsed output dict from ShowSrv6LocalSids, or empty dict on error.
     """
     try:
-        return ShowSrv6LocalSids(device=device).parse(instance=network_instance)
+        return ShowSrv6LocalSids(device=device).parse(instance=ni)
     except SchemaEmptyParserError:
         log.debug(
             "_parse_srv6_local_sids: no local-SIDs found for ni=%s",
-            network_instance
+            ni
         )
         return {}
     except SubCommandFailure as exc:
@@ -417,12 +417,12 @@ def _parse_srv6_local_sids(device,
 
 
 def get_srv6_local_sids(device,
-                        network_instance: str = 'default') -> Dict[str, Any]:
+                        ni: str = 'default') -> Dict[str, Any]:
     """Get all SRv6 local-SIDs from operational state.
 
     Args:
         device: pyATS device object.
-        network_instance: Network instance name (default: 'default').
+        ni: Network instance name (default: 'default').
 
     Returns:
         Dictionary of local-SID entries keyed by SID, e.g.::
@@ -438,68 +438,68 @@ def get_srv6_local_sids(device,
 
         Returns empty dict if no local-SIDs are found.
     """
-    parsed = _parse_srv6_local_sids(device, network_instance=network_instance)
+    parsed = _parse_srv6_local_sids(device, ni=ni)
     return (
         parsed
         .get("network_instance", {})
-        .get(network_instance, {})
+        .get(ni, {})
         .get("local_sids", {})
     )
 
 
 def get_srv6_local_sid(device, sid: str,
-                       network_instance: str = 'default'
+                       ni: str = 'default'
                        ) -> Optional[Dict[str, Any]]:
     """Get a single SRv6 local-SID entry by SID.
 
     Args:
         device: pyATS device object.
         sid: SID value to retrieve (e.g. ``'fcbb:bb00:1:1::/64'``).
-        network_instance: Network instance name (default: 'default').
+        ni: Network instance name (default: 'default').
 
     Returns:
         Dictionary with the local-SID details, or None if not found.
     """
-    sids = get_srv6_local_sids(device, network_instance=network_instance)
+    sids = get_srv6_local_sids(device, ni=ni)
     return sids.get(sid)
 
 
 def get_srv6_local_sid_behavior(device, sid: str,
-                                network_instance: str = 'default'
+                                ni: str = 'default'
                                 ) -> Optional[str]:
     """Get the behavior of a single SRv6 local-SID.
 
     Args:
         device: pyATS device object.
         sid: SID value to look up.
-        network_instance: Network instance name (default: 'default').
+        ni: Network instance name (default: 'default').
 
     Returns:
         Behavior string (e.g. ``'END_PSP_USD'``), or None if the SID is
         not found or behavior is not set.
     """
-    entry = get_srv6_local_sid(device, sid, network_instance=network_instance)
+    entry = get_srv6_local_sid(device, sid, ni=ni)
     if not entry:
         return None
     return entry.get("behavior")
 
 
 def get_srv6_local_sids_by_locator(device, locator_name: str,
-                                   network_instance: str = 'default'
+                                   ni: str = 'default'
                                    ) -> Dict[str, Any]:
     """Get all SRv6 local-SIDs belonging to a given locator.
 
     Args:
         device: pyATS device object.
         locator_name: Name of the locator to filter by.
-        network_instance: Network instance name (default: 'default').
+        ni: Network instance name (default: 'default').
 
     Returns:
         Dictionary of local-SID entries (same shape as
         :func:`get_srv6_local_sids`) filtered to those whose
         ``locator_name`` matches. Returns empty dict if none match.
     """
-    sids = get_srv6_local_sids(device, network_instance=network_instance)
+    sids = get_srv6_local_sids(device, ni=ni)
     return {
         sid: entry for sid, entry in sids.items()
         if entry.get("locator_name") == locator_name

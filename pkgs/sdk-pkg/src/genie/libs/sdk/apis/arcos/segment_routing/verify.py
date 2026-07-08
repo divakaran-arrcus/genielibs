@@ -409,7 +409,7 @@ def verify_srv6_local_sid_present(device,
                                   locator_name: Optional[str] = None,
                                   behavior: Optional[str] = None,
                                   sid: Optional[str] = None,
-                                  network_instance: str = 'default',
+                                  ni: str = 'default',
                                   max_time: int = 30,
                                   check_interval: int = 5) -> bool:
     """Verify that an SRv6 local-SID matching the given filters is present.
@@ -422,7 +422,7 @@ def verify_srv6_local_sid_present(device,
         locator_name: Locator name to match, or None to ignore.
         behavior: Behavior string to match, or None to ignore.
         sid: Specific SID to match, or None to ignore.
-        network_instance: Network instance name (default: 'default').
+        ni: Network instance name (default: 'default').
         max_time: Maximum time to wait in seconds.
         check_interval: Poll interval in seconds.
 
@@ -435,7 +435,7 @@ def verify_srv6_local_sid_present(device,
     while timeout.iterate():
         try:
             sids = get_srv6_local_sids(
-                device, network_instance=network_instance
+                device, ni=ni
             )
         except Exception as exc:  # pragma: no cover - defensive
             log.error("get_srv6_local_sids failed: %s", exc)
@@ -469,7 +469,7 @@ def verify_srv6_local_sid_present(device,
 
 
 def verify_srv6_local_sid_behavior(device, sid: str, behavior: str,
-                                   network_instance: str = 'default',
+                                   ni: str = 'default',
                                    max_time: int = 30,
                                    check_interval: int = 5) -> bool:
     """Verify the behavior of an SRv6 local-SID matches expected.
@@ -480,7 +480,7 @@ def verify_srv6_local_sid_behavior(device, sid: str, behavior: str,
         device: pyATS device object.
         sid: SID value to check.
         behavior: Expected behavior string (e.g. ``'END_PSP_USD'``).
-        network_instance: Network instance name (default: 'default').
+        ni: Network instance name (default: 'default').
         max_time: Maximum time to wait in seconds.
         check_interval: Poll interval in seconds.
 
@@ -493,7 +493,7 @@ def verify_srv6_local_sid_behavior(device, sid: str, behavior: str,
     while timeout.iterate():
         try:
             actual: Optional[str] = get_srv6_local_sid_behavior(
-                device, sid, network_instance=network_instance
+                device, sid, ni=ni
             )
         except Exception as exc:  # pragma: no cover - defensive
             log.error(
