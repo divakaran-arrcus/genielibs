@@ -1236,3 +1236,56 @@ def get_isis_protection_trackers(
     global_data = _safe_get_global(parsed, ni="default", instance=instance)
     container = global_data.get("protection-trackers", {}) or {}
     return container.get("protection-tracker", {}) or {}
+
+
+def get_isis_micro_loop_avoidance(
+    device,
+    network_instance: str = "default",
+    protocol_instance: str = "default",
+) -> Dict[str, Any]:
+    """Get ISIS global micro-loop-avoidance operational state.
+
+    Wraps the ``ShowIsisMicroLoopAvoidance`` parser. Returns the flattened
+    micro-loop-avoidance dict::
+
+        {
+          "srv6-enabled": bool,
+          "rib-update-delay": int,
+          "status": {"<idx>": {"algo": int, "level": int, "topology-id": str,
+                               "mla-state": "ACTIVE"|"EXPIRED", "last-event": str,
+                               "near-node": str, "far-node": str,
+                               "spf-start-timestamp": str}},
+        }
+
+    The MLA *status* rows durably record the last MLA event per topology —
+    this is the control-plane observable for micro-loop avoidance (the ISIS
+    fast-reroute table does NOT surface MLA on VIR, and a 0-segment MLA where
+    the pre-convergence path equals the new primary installs no FR route).
+
+    Returns ``{}`` if MLA is not present/configured or on any parse error.
+    """
+    try:
+        from genie.libs.parser.arcos.show_isis import ShowIsisMicroLoopAvoidance
+
+        parser = ShowIsisMicroLoopAvoidance(device=device)
+        parsed = parser.parse(
+            network_instance=network_instance,
+            protocol_instance=protocol_instance,
+        )
+    except SchemaEmptyParserError:
+        return {}
+    except SubCommandFailure as exc:
+        log.error("get_isis_micro_loop_avoidance failed: %s", exc)
+        return {}
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("get_isis_micro_loop_avoidance: unexpected error — %s", exc)
+        return {}
+
+    # Parser nests under the (hardcoded) default NI/instance; navigate
+    # defensively so a non-default NI name still resolves.
+    for ni in (parsed.get("network-instance", {}) or {}).values():
+        for pi in (ni.get("isis", {}) or {}).values():
+            mla = (pi.get("global", {}) or {}).get("micro-loop-avoidance")
+            if mla is not None:
+                return mla
+    return {}
