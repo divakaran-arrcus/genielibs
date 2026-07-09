@@ -1289,3 +1289,32 @@ def get_isis_micro_loop_avoidance(
             if mla is not None:
                 return mla
     return {}
+
+
+def get_isis_mla_status_timestamp(
+    device,
+    algo: int = 0,
+    network_instance: str = "default",
+    protocol_instance: str = "default",
+) -> str:
+    """Return the current MLA status-row ``spf-start-timestamp`` for ``algo``.
+
+    Baseline helper for fresh-fire detection: capture this BEFORE a trigger,
+    then pass it to ``verify_isis_mla_fired(since_timestamp=...)`` so a stale
+    row from a prior event (the status table is a single row per algo/topology
+    overwritten in place) is not mistaken for a fresh fire. Returns ``""`` if
+    no status row exists yet.
+    """
+    try:
+        mla = get_isis_micro_loop_avoidance(
+            device,
+            network_instance=network_instance,
+            protocol_instance=protocol_instance,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("get_isis_mla_status_timestamp: %s", exc)
+        return ""
+    for row in (mla.get("status") or {}).values():
+        if row.get("algo") == algo:
+            return str(row.get("spf-start-timestamp") or "")
+    return ""

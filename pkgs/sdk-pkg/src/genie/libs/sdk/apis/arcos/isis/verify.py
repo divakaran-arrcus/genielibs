@@ -854,6 +854,7 @@ def verify_isis_mla_fired(
     near_node: Optional[str] = None,
     far_node: Optional[str] = None,
     expected_states=("ACTIVE", "EXPIRED"),
+    since_timestamp: Optional[str] = None,
     network_instance: str = "default",
     protocol_instance: str = "default",
     max_time: int = 60,
@@ -901,6 +902,16 @@ def verify_isis_mla_fired(
 
         for row in (mla.get("status") or {}).values():
             if row.get("algo") != algo:
+                continue
+            # Fresh-fire filter: the MLA status is a single row per
+            # (algo, topology) overwritten in place, so a stale event from a
+            # prior trigger can linger. When ``since_timestamp`` is given,
+            # only a row whose ``spf-start-timestamp`` is strictly newer counts
+            # (ISO-8601 strings compare lexicographically). Capture the
+            # baseline timestamp BEFORE the trigger and pass it here.
+            if since_timestamp is not None and (
+                str(row.get("spf-start-timestamp") or "") <= since_timestamp
+            ):
                 continue
             if row.get("mla-state") not in expected_states:
                 continue
