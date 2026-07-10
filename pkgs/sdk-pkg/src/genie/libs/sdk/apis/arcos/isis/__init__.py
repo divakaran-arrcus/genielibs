@@ -14,6 +14,8 @@ from .get import (
     # TI-LFA / MLA
     get_isis_fast_reroute,
     get_isis_protection_trackers,
+    get_isis_micro_loop_avoidance,
+    get_isis_mla_status_timestamp,
     # Flex-Algo
     get_isis_flex_algo_routes,
     get_isis_flex_algo_route,
@@ -35,6 +37,7 @@ from .verify import (
     verify_isis_route_has_backup,
     verify_isis_no_backup_for_prefix,
     verify_isis_no_mla_for_prefix,
+    verify_isis_mla_fired,
     # Flex-Algo
     verify_isis_flex_algo_route_present,
     verify_isis_flex_algo_route_not_present,
@@ -205,6 +208,8 @@ __all__ = [
     # Get APIs - TI-LFA / MLA
     "get_isis_fast_reroute",
     "get_isis_protection_trackers",
+    "get_isis_micro_loop_avoidance",
+    "get_isis_mla_status_timestamp",
     # Verify APIs
     "verify_isis_system_id",
     "verify_isis_adjacency_present",
@@ -215,6 +220,7 @@ __all__ = [
     "verify_isis_route_has_backup",
     "verify_isis_no_backup_for_prefix",
     "verify_isis_no_mla_for_prefix",
+    "verify_isis_mla_fired",
     # Configure APIs - Phase 1
     "configure_isis_net_address",
     "unconfigure_isis_net_address",

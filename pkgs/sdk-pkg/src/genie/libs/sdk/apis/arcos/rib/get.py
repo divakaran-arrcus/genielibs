@@ -14,7 +14,7 @@ network-instance and address family.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
 from unicon.core.errors import SubCommandFailure
@@ -343,3 +343,57 @@ def get_rib_label_entry_count(
     """
     label_entries = get_rib_label_entries(device, af=af, ni=ni)
     return len(label_entries)
+
+
+def get_rib_backup_nexthops(
+    device,
+    prefix: str,
+    af: str = "IPV4",
+    ni: str = "default",
+    backup_flag: str = "BACKUP",
+) -> List[Dict[str, Any]]:
+    """Return the RIB backup next-hops for a prefix.
+
+    A next-hop is a backup when its ``flags`` field contains ``backup_flag``.
+    arcOS renders TI-LFA / FRR backups in the RIB entry as a second next-hop
+    with e.g. ``flags ATTACH,BACKUP`` (SR-MPLS: ``ATTACH,BACKUP,SR`` plus a
+    ``pushed-mpls-label-stack`` repair label). This is the control-plane
+    observable for TI-LFA backup programming (the ISIS route table and ISIS
+    ``fast-reroute`` output do NOT surface it).
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix string (e.g. ``'6.6.6.6/32'``).
+        af: Address family — ``"IPV4"`` or ``"IPV6"`` (default ``"IPV4"``).
+        ni: Network instance name (default ``"default"``).
+        backup_flag: Flag token identifying a backup next-hop (default
+            ``"BACKUP"``).
+
+    Returns:
+        List of matching next-hop dicts (each may carry ``interface``,
+        ``next-hop``, ``flags``, ``pushed-mpls-label-stack``). Empty list
+        if the prefix is absent or has no backup next-hop.
+
+    Example:
+        >>> bk = get_rib_backup_nexthops(device, '6.6.6.6/32')
+        >>> bk and bk[0].get('interface')
+        'swp2'
+    """
+    entry = get_rib_entry(device, prefix=prefix, af=af, ni=ni)
+    if not entry:
+        return []
+
+    backups: List[Dict[str, Any]] = []
+    for origin in (entry.get("origins") or {}).values():
+        for nh in (origin.get("next-hops") or {}).values():
+            if backup_flag in (nh.get("flags") or ""):
+                backups.append(nh)
+
+    log.debug(
+        "get_rib_backup_nexthops(%s, af=%s, ni=%s): %d backup next-hop(s)",
+        prefix,
+        af,
+        ni,
+        len(backups),
+    )
+    return backups

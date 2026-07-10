@@ -24,6 +24,7 @@ from genie.libs.sdk.apis.arcos.isis.get import (
     is_isis_flex_algo_fast_reroute_present,
     get_isis_flex_algo_definitions,
     get_isis_fast_reroute,
+    get_isis_micro_loop_avoidance,
 )
 
 log = logging.getLogger(__name__)
@@ -844,3 +845,107 @@ def verify_isis_no_mla_for_prefix(
         timeout.sleep()
 
     return True
+
+
+def verify_isis_mla_fired(
+    device,
+    expected_event: Optional[str] = None,
+    algo: int = 0,
+    near_node: Optional[str] = None,
+    far_node: Optional[str] = None,
+    expected_states=("ACTIVE", "EXPIRED"),
+    since_timestamp: Optional[str] = None,
+    network_instance: str = "default",
+    protocol_instance: str = "default",
+    max_time: int = 60,
+    check_interval: int = 5,
+) -> bool:
+    """Verify Micro-Loop-Avoidance fired for a given algorithm/topology.
+
+    MLA records each event durably in the ``micro-loop-avoidance status``
+    table (one row per algo/topology): ``mla-state`` (ACTIVE during the
+    rib-update-delay window, EXPIRED after) + ``last-event`` +
+    ``near-node``/``far-node``. This is the control-plane observable for MLA
+    on arcOS/VIR (the ISIS fast-reroute table does not surface it).
+
+    Polls ``get_isis_micro_loop_avoidance`` until a status row for ``algo``
+    (0 = SPF/base, 128+ = flex-algo) has ``mla-state`` in ``expected_states``
+    and — when specified — ``last-event == expected_event`` and matching
+    ``near_node``/``far_node``.
+
+    Args:
+        device: pyATS device object.
+        expected_event: If set, require ``last-event`` to equal this. The
+            arcOS ``last-event`` enum is: 'LINK-DOWN', 'LINK-UP',
+            'METRIC-INCREASE', 'METRIC-DECREASE', 'OVERLOAD-SET',
+            'OVERLOAD-CLEAR', 'MAX-METRIC-SET', 'MAX-METRIC-CLEAR'.
+        algo: Algorithm id of the status row to match (default 0 = SPF).
+        near_node / far_node: If set, require the row's endpoints to match.
+        expected_states: Acceptable ``mla-state`` values (default ACTIVE or
+            EXPIRED — i.e. MLA fired at some point).
+        network_instance / protocol_instance: ISIS instance selectors.
+        max_time / check_interval: Polling bounds (seconds).
+
+    Returns:
+        True if a matching MLA status row is found within the timeout.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            mla = get_isis_micro_loop_avoidance(
+                device,
+                network_instance=network_instance,
+                protocol_instance=protocol_instance,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("get_isis_micro_loop_avoidance failed: %s", exc)
+            mla = {}
+
+        for row in (mla.get("status") or {}).values():
+            if row.get("algo") != algo:
+                continue
+            # Fresh-fire filter: the MLA status is a single row per
+            # (algo, topology) overwritten in place, so a stale event from a
+            # prior trigger can linger. When ``since_timestamp`` is given,
+            # only a row whose ``spf-start-timestamp`` is strictly newer counts
+            # (ISO-8601 strings compare lexicographically). Capture the
+            # baseline timestamp BEFORE the trigger and pass it here.
+            if since_timestamp is not None:
+                row_ts = row.get("spf-start-timestamp")
+                if row_ts is None:
+                    # No timestamp to compare — freshness cannot be confirmed.
+                    # A matching algo/state/event row with no timestamp is very
+                    # likely the fire we just triggered; accept it (with a
+                    # warning) rather than silently skipping, which would
+                    # misreport a genuine fire as a no-fire.
+                    log.warning(
+                        "verify_isis_mla_fired: algo=%s row has no "
+                        "spf-start-timestamp; cannot confirm freshness vs "
+                        "baseline %s — accepting the match",
+                        algo, since_timestamp,
+                    )
+                elif str(row_ts) <= since_timestamp:
+                    continue
+            if row.get("mla-state") not in expected_states:
+                continue
+            if expected_event is not None and row.get("last-event") != expected_event:
+                continue
+            if near_node is not None and row.get("near-node") != near_node:
+                continue
+            if far_node is not None and row.get("far-node") != far_node:
+                continue
+            log.debug(
+                "verify_isis_mla_fired: matched algo=%s state=%s last-event=%s "
+                "near=%s far=%s",
+                algo,
+                row.get("mla-state"),
+                row.get("last-event"),
+                row.get("near-node"),
+                row.get("far-node"),
+            )
+            return True
+
+        timeout.sleep()
+
+    return False

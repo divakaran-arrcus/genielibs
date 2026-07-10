@@ -18,6 +18,7 @@ from genie.libs.sdk.apis.arcos.rib.get import (
     is_route_in_rib,
     get_route_best_protocol,
     get_rib_label_entry,
+    get_rib_backup_nexthops,
 )
 
 log = logging.getLogger(__name__)
@@ -224,6 +225,77 @@ def verify_label_in_rib(
 
         if entry is not None:
             return True
+
+        timeout.sleep()
+
+    return False
+
+
+def verify_rib_has_backup(
+    device,
+    prefix: str,
+    af: str = "IPV4",
+    ni: str = "default",
+    expected_backup_egress: Optional[str] = None,
+    backup_flag: str = "BACKUP",
+    max_time: int = 60,
+    check_interval: int = 10,
+) -> bool:
+    """Verify a prefix has a TI-LFA / FRR backup next-hop in the RIB.
+
+    Polls ``get_rib_backup_nexthops`` until a next-hop whose ``flags`` field
+    contains ``backup_flag`` (e.g. ``ATTACH,BACKUP`` / ``ATTACH,BACKUP,SR``)
+    is present. If ``expected_backup_egress`` is set, also requires that
+    backup next-hop's ``interface`` to match it. This is the control-plane
+    observable for TI-LFA backup programming on arcOS (the ISIS route table
+    and ISIS ``fast-reroute`` output do NOT surface it).
+
+    NOTE: arcOS installs the backup next-hop on the first SPF/topology event
+    *after* TI-LFA is enabled — enabling TI-LFA alone does not install it.
+    Callers should trigger a metric-change (or other SPF) event after
+    enabling TI-LFA and before polling this verifier.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix string (e.g. ``'6.6.6.6/32'``).
+        af: Address family ('IPV4' or 'IPV6').
+        ni: Network instance name (default: 'default').
+        expected_backup_egress: If set, require the backup next-hop's
+            outgoing ``interface`` to equal this (e.g. ``'swp2'``).
+        backup_flag: Flag token identifying a backup next-hop (default
+            ``'BACKUP'``).
+        max_time: Maximum time to wait (seconds).
+        check_interval: Poll interval (seconds).
+
+    Returns:
+        True if a matching backup next-hop is present within the timeout,
+        False otherwise.
+    """
+
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            backups = get_rib_backup_nexthops(
+                device, prefix=prefix, af=af, ni=ni, backup_flag=backup_flag
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("get_rib_backup_nexthops failed for %s: %s", prefix, exc)
+            backups = []
+
+        for nh in backups:
+            if (
+                expected_backup_egress is None
+                or nh.get("interface") == expected_backup_egress
+            ):
+                log.debug(
+                    "verify_rib_has_backup(%s, af=%s): backup via %s flags=%s",
+                    prefix,
+                    af,
+                    nh.get("interface"),
+                    nh.get("flags"),
+                )
+                return True
 
         timeout.sleep()
 
