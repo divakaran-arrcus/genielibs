@@ -7,12 +7,16 @@ from .get import (
     get_rib_label_entry_count,
     get_route_best_protocol,
     is_route_in_rib,
+    # TI-LFA / MLA
+    get_rib_backup_nexthops,
 )
 from .verify import (
     verify_label_in_rib,
     verify_route_in_rib,
     verify_route_not_in_rib,
     verify_route_protocol,
+    # TI-LFA / MLA
+    verify_rib_has_backup,
 )
 
 __all__ = [
@@ -25,9 +29,11 @@ __all__ = [
     "get_rib_label_entry_count",
     "get_route_best_protocol",
     "is_route_in_rib",
+    "get_rib_backup_nexthops",
     # Verify APIs
     "verify_label_in_rib",
     "verify_route_in_rib",
     "verify_route_not_in_rib",
     "verify_route_protocol",
+    "verify_rib_has_backup",
 ]

@@ -875,8 +875,10 @@ def verify_isis_mla_fired(
 
     Args:
         device: pyATS device object.
-        expected_event: If set, require ``last-event`` to equal this
-            (e.g. 'METRIC-INCREASE', 'ADJACENCY-DOWN', 'OVERLOAD-BIT').
+        expected_event: If set, require ``last-event`` to equal this. The
+            arcOS ``last-event`` enum is: 'LINK-DOWN', 'LINK-UP',
+            'METRIC-INCREASE', 'METRIC-DECREASE', 'OVERLOAD-SET',
+            'OVERLOAD-CLEAR', 'MAX-METRIC-SET', 'MAX-METRIC-CLEAR'.
         algo: Algorithm id of the status row to match (default 0 = SPF).
         near_node / far_node: If set, require the row's endpoints to match.
         expected_states: Acceptable ``mla-state`` values (default ACTIVE or
@@ -909,10 +911,22 @@ def verify_isis_mla_fired(
             # only a row whose ``spf-start-timestamp`` is strictly newer counts
             # (ISO-8601 strings compare lexicographically). Capture the
             # baseline timestamp BEFORE the trigger and pass it here.
-            if since_timestamp is not None and (
-                str(row.get("spf-start-timestamp") or "") <= since_timestamp
-            ):
-                continue
+            if since_timestamp is not None:
+                row_ts = row.get("spf-start-timestamp")
+                if row_ts is None:
+                    # No timestamp to compare — freshness cannot be confirmed.
+                    # A matching algo/state/event row with no timestamp is very
+                    # likely the fire we just triggered; accept it (with a
+                    # warning) rather than silently skipping, which would
+                    # misreport a genuine fire as a no-fire.
+                    log.warning(
+                        "verify_isis_mla_fired: algo=%s row has no "
+                        "spf-start-timestamp; cannot confirm freshness vs "
+                        "baseline %s — accepting the match",
+                        algo, since_timestamp,
+                    )
+                elif str(row_ts) <= since_timestamp:
+                    continue
             if row.get("mla-state") not in expected_states:
                 continue
             if expected_event is not None and row.get("last-event") != expected_event:
