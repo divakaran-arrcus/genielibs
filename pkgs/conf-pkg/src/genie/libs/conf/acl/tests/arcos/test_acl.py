@@ -6,6 +6,16 @@ from unittest.mock import Mock
 from genie.libs.conf.acl.arcos.acl import Acl
 
 
+class _ObjectAce:
+    """A non-dict ACE provided as a plain attribute-holding object,
+    exercising the getattr() fallback branch in _build_acl_entry's local
+    _get() helper (the dict-vs-object dispatch)."""
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
 class TestAcl(TestCase):
     """Unit tests for Acl AclSetAttributes configuration object."""
 
@@ -184,6 +194,148 @@ class TestAcl(TestCase):
         pos_30 = output.index("acl-entry 30")
         self.assertLess(pos_10, pos_30,
                         "ACE seq 10 should appear before seq 30")
+
+    # ------------------------------------------------------------------
+    # 7. ipv6_protocol + l2_source_mac_mask fields (previously untested)
+    # ------------------------------------------------------------------
+    def test_acl_ipv6_protocol_and_l2_mac_mask(self):
+        """Test ipv6_protocol and l2_source_mac_mask fields render."""
+        output = self._build(
+            acl_set_key="misc-acl ACL_IPV6",
+            acl_entries={
+                10: {
+                    "ipv6_protocol": "TCP",
+                    "l2_source_mac_mask": "ff:ff:ff:00:00:00",
+                    "forwarding_action": "ACCEPT",
+                },
+            },
+        )
+        self.assertIn("ipv6 protocol TCP", output)
+        self.assertIn("l2 source-mac-mask ff:ff:ff:00:00:00", output)
+
+    # ------------------------------------------------------------------
+    # 8. ACE supplied as an object (not dict) -- getattr() fallback path
+    # ------------------------------------------------------------------
+    def test_acl_entry_object_attribute_style(self):
+        """ACE provided as a plain object (not dict) -- covers the
+        getattr() fallback branch in _build_acl_entry's local _get()."""
+        ace = _ObjectAce(
+            ipv4_source_address="10.1.1.0/24",
+            forwarding_action="ACCEPT",
+        )
+        output = self._build(
+            acl_set_key="obj-acl ACL_IPV4",
+            acl_entries={1: ace},
+        )
+        self.assertIn("ipv4 source-address 10.1.1.0/24", output)
+        self.assertIn("actions forwarding-action ACCEPT", output)
+
+    # ------------------------------------------------------------------
+    # 9. AclSetAttributes.build_unconfig()
+    # ------------------------------------------------------------------
+    def test_acl_set_build_unconfig(self):
+        """Test AclSetAttributes.build_unconfig() delegates to
+        build_config(unconfig=True) and emits 'no'-prefixed ACE lines."""
+        attr = Acl.DeviceAttributes.AclSetAttributes()
+        attr.device = self.device
+        attr.acl_set_key = "unconf-acl ACL_IPV4"
+        attr.acl_entries = {
+            10: {"ipv4_source_address": "10.0.0.0/8",
+                 "forwarding_action": "DROP"},
+        }
+        result = attr.build_unconfig(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("acl acl-set unconf-acl ACL_IPV4", output)
+        self.assertIn("no ipv4 source-address 10.0.0.0/8", output)
+        self.assertIn("no actions forwarding-action DROP", output)
+
+
+class TestAclDeviceAttributes(TestCase):
+    """Unit tests for Acl.DeviceAttributes.build_config()/build_unconfig()
+    (device-level dispatch to per-ACL-set AclSetAttributes via
+    mapping_values('acl_set_attr', ...))."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.device = Mock()
+        self.device.name = "test-device"
+
+    def _make_acl_set(self, acl_set_key, **attrs):
+        acl_set = Acl.DeviceAttributes.AclSetAttributes()
+        acl_set.device = self.device
+        acl_set.acl_set_key = acl_set_key
+        for key, value in attrs.items():
+            setattr(acl_set, key, value)
+        return acl_set
+
+    def test_device_build_config_delegates_to_acl_sets(self):
+        """Device-level build_config(apply=False) should aggregate config
+        blocks from every ACL set in acl_set_attr."""
+        dev_attr = Acl.DeviceAttributes()
+        dev_attr.device = self.device
+        dev_attr.acl_set_attr = {
+            "v4-acl ACL_IPV4": self._make_acl_set(
+                "v4-acl ACL_IPV4",
+                acl_entries={10: {"ipv4_source_address": "10.0.0.0/8",
+                                  "forwarding_action": "ACCEPT"}},
+            ),
+        }
+
+        result = dev_attr.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("acl acl-set v4-acl ACL_IPV4", output)
+        self.assertIn("ipv4 source-address 10.0.0.0/8", output)
+
+    def test_device_build_config_empty_acl_set_attr(self):
+        """No ACL sets configured -> empty CliConfig, nothing to apply."""
+        dev_attr = Acl.DeviceAttributes()
+        dev_attr.device = self.device
+        dev_attr.acl_set_attr = {}
+
+        result = dev_attr.build_config(apply=False)
+        self.assertEqual(str(result.cli_config), "")
+
+    def test_device_build_config_apply_true_calls_device_configure(self):
+        """apply=True should call device.configure() with the rendered
+        config and return None."""
+        dev_attr = Acl.DeviceAttributes()
+        dev_attr.device = self.device
+        dev_attr.acl_set_attr = {
+            "v4-acl ACL_IPV4": self._make_acl_set(
+                "v4-acl ACL_IPV4",
+                acl_entries={10: {"ipv4_source_address": "10.0.0.0/8",
+                                  "forwarding_action": "ACCEPT"}},
+            ),
+        }
+
+        result = dev_attr.build_config(apply=True)
+
+        self.assertIsNone(result)
+        self.device.configure.assert_called_once()
+        args, kwargs = self.device.configure.call_args
+        self.assertIn("acl acl-set v4-acl ACL_IPV4", args[0])
+        self.assertTrue(kwargs.get("fail_invalid"))
+
+    def test_device_build_unconfig_delegates(self):
+        """build_unconfig() should delegate to build_config(unconfig=True)
+        and emit 'no'-prefixed lines from the ACL set."""
+        dev_attr = Acl.DeviceAttributes()
+        dev_attr.device = self.device
+        dev_attr.acl_set_attr = {
+            "v4-acl ACL_IPV4": self._make_acl_set(
+                "v4-acl ACL_IPV4",
+                acl_entries={10: {"ipv4_source_address": "10.0.0.0/8",
+                                  "forwarding_action": "ACCEPT"}},
+            ),
+        }
+
+        result = dev_attr.build_unconfig(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("acl acl-set v4-acl ACL_IPV4", output)
+        self.assertIn("no ipv4 source-address 10.0.0.0/8", output)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -160,6 +160,47 @@ class TestVrrpOps(unittest.TestCase):
         self.assertEqual(g3["group_id"], 3)
         self.assertEqual(g3["virtual_addresses"], ["2001:db8::ffff"])
 
+    @patch(f"{MOD}.ShowVrrp")
+    def test_learn_minimal_group_fields(self, mock_parser):
+        """Group data with only the mandatory virtual-router-id field --
+        exercises every optional-field 'is not None' False branch in a
+        single pass."""
+        minimal_output = {
+            "vrrp-groups": {
+                "swp5:0:ipv4:10.5.5.5:5": {
+                    "virtual-router-id": 5,
+                }
+            }
+        }
+        mock_parser.return_value.parse.return_value = minimal_output
+
+        ops = Vrrp(device=self.device)
+        ops.learn()
+
+        self.assertIn("vrrp_groups", ops.info)
+        groups = ops.info["vrrp_groups"]
+        key = "swp5:0:ipv4:10.5.5.5:5"
+        self.assertIn(key, groups)
+        # Only group_id should be populated; every optional field absent.
+        self.assertEqual(groups[key], {"group_id": 5})
+
+    @patch(f"{MOD}.ShowVrrp")
+    def test_learn_explicit_single_af_and_filters(self, mock_parser):
+        """When af is explicitly given, only that AF is queried once (not
+        both ipv4 and ipv6), and interface/sub_id/address are passed
+        through instead of wildcards."""
+        mock_parser.return_value.parse.return_value = BASIC_OUTPUT
+
+        ops = Vrrp(device=self.device)
+        ops.learn(
+            interface="swp1", sub_id=5, af="ipv6", address="10.1.1.5",
+        )
+
+        mock_parser.return_value.parse.assert_called_once_with(
+            interface="swp1", sub_id=5, af="ipv6", address="10.1.1.5",
+        )
+        self.assertIn("vrrp_groups", ops.info)
+
 
 if __name__ == "__main__":
     unittest.main()

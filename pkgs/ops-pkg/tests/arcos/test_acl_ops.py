@@ -197,6 +197,70 @@ class TestAclOps(unittest.TestCase):
 
         self.assertEqual(ops.info, {})
 
+    @patch(f"{MOD}.ShowAclSet")
+    def test_learn_skips_acl_set_without_name(self, mock_parser):
+        """An acl-sets entry missing the 'name' key is skipped entirely
+        (the `if not acl_name: continue` branch)."""
+        output = {
+            "acl-sets": {
+                "no-name-set": {
+                    # no "name" key -- must be skipped
+                    "type": "ACL_IPV4",
+                },
+                "GOOD-ACL ACL_IPV4": {
+                    "name": "GOOD-ACL",
+                    "type": "ACL_IPV4",
+                },
+            }
+        }
+        mock_parser.return_value.parse.return_value = output
+
+        ops = Acl(device=self.device)
+        ops.learn()
+
+        self.assertIn("acls", ops.info)
+        self.assertEqual(list(ops.info["acls"].keys()), ["GOOD-ACL"])
+
+    @patch(f"{MOD}.ShowAclSet")
+    def test_learn_l2_ethernet_matches_and_missing_acl_type(self, mock_parser):
+        """Covers the L2 eth source/destination-mac-address match branches
+        and the acl_type=None path through _is_ipv4_type/_is_ipv6_type
+        (both should return False, so no l3 match is added even though
+        'protocol' is present on the ACE)."""
+        output = {
+            "acl-sets": {
+                "L2-ACL": {
+                    "name": "L2-ACL",
+                    # no "type" key -> acl_type is None
+                    "acl-entries": {
+                        "5": {
+                            "sequence-id": 5,
+                            "source-mac-address": "aa:bb:cc:dd:ee:ff",
+                            "destination-mac-address": "11:22:33:44:55:66",
+                            "protocol": "TCP",
+                            "forwarding-action": "ACCEPT",
+                        },
+                    },
+                },
+            }
+        }
+        mock_parser.return_value.parse.return_value = output
+
+        ops = Acl(device=self.device)
+        ops.learn()
+
+        acl = ops.info["acls"]["L2-ACL"]
+        self.assertNotIn("type", acl)
+
+        ace = acl["aces"]["5"]
+        eth = ace["matches"]["l2"]["eth"]
+        self.assertEqual(eth["source_mac_address"], "aa:bb:cc:dd:ee:ff")
+        self.assertEqual(eth["destination_mac_address"], "11:22:33:44:55:66")
+
+        # acl_type is None -> _is_ipv4_type/_is_ipv6_type both False ->
+        # 'protocol' present but no l3 match gets added.
+        self.assertNotIn("l3", ace["matches"])
+
 
 if __name__ == "__main__":
     unittest.main()

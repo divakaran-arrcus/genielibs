@@ -203,6 +203,313 @@ class TestNextHopVrfLeaking(_ArcosStaticRoutingBase):
         self.assertIn('next-network-instance vrfB', output)
 
 
+class TestNextHopMetric(_ArcosStaticRoutingBase):
+    """Test 10: next-hop metric line."""
+
+    def test_nexthop_metric(self):
+        sr, route = self._make_route('10.80.0.0/16')
+
+        nh = route.next_hop_attr['1']
+        nh.next_hop_index = '1'
+        nh.nexthop = '10.1.1.1'
+        nh.metric = 50
+
+        output = self._build(sr)
+
+        self.assertIn('next-hop 10.1.1.1', output)
+        self.assertIn('metric 50', output)
+
+
+class TestNextHopMplsImplicitNull(_ArcosStaticRoutingBase):
+    """Test 11: next-hop remote_label_stack as the 'IMPLICIT-NULL' string
+    (as opposed to a list of label ints)."""
+
+    def test_nexthop_mpls_implicit_null(self):
+        sr, route = self._make_route('10.81.0.0/16')
+
+        nh = route.next_hop_attr['1']
+        nh.next_hop_index = '1'
+        nh.nexthop = '10.1.1.1'
+        nh.remote_label_stack = 'IMPLICIT-NULL'
+
+        output = self._build(sr)
+
+        self.assertIn('remote-label-stack IMPLICIT-NULL', output)
+        self.assertNotIn('[ IMPLICIT-NULL ]', output)
+
+
+class TestNextHopBfdDestinationIpv6(_ArcosStaticRoutingBase):
+    """Test 12: next-hop with bfd_destination_address (IPv6)."""
+
+    def test_nexthop_bfd_destination_ipv6(self):
+        sr, route = self._make_route('2001:db8:10::/64')
+
+        nh = route.next_hop_attr['1']
+        nh.next_hop_index = '1'
+        nh.nexthop = '2001:db8::1'
+        nh.bfd_destination_address = '2001:db8::100'
+
+        output = self._build(sr)
+
+        self.assertIn('bfd destination-address ipv6 2001:db8::100', output)
+
+
+# ---------------------------------------------------------------------------
+# DIRECT dispatch tests: instantiate the arcOS-specific nested ABC classes
+# directly (bypassing the Genie abstraction/attribute-mixing machinery), the
+# same way pkgs/conf-pkg/.../lag/tests/arcos/test_lag.py does for Lag. This
+# reaches branches the full-hierarchy tests above cannot:
+#   - apply=True -> device.configure(..., fail_invalid=True) at every level
+#   - build_unconfig() direct delegation at every level
+#   - the "no route prefix" early-return guard in RouteAttributes
+#   - the next_hop_index '1' default fallback (next_hop_index and nexthop
+#     both falsy)
+#   - the plain (non-managedattribute) `self.__dict__.get('nexthop')`
+#     fallback branch (hit only when 'nexthop' was never wrapped by the
+#     generic base class's managedattribute descriptor, i.e. exactly the
+#     bare-instantiation scenario used here)
+# ---------------------------------------------------------------------------
+
+from genie.libs.conf.static_routing.arcos.static_routing import (
+    StaticRouting as ArcosStaticRouting,
+)
+
+
+def _make_route_direct(prefix=None, **attrs):
+    route = ArcosStaticRouting.DeviceAttributes.VrfAttributes.AddressFamilyAttributes.RouteAttributes()
+    route.route = prefix
+    for key, value in attrs.items():
+        setattr(route, key, value)
+    return route
+
+
+def _make_nexthop_direct(**attrs):
+    nh = ArcosStaticRouting.DeviceAttributes.VrfAttributes.AddressFamilyAttributes.RouteAttributes.NextHopAttributes()
+    for key, value in attrs.items():
+        setattr(nh, key, value)
+    return nh
+
+
+class TestRouteAttributesDirect(TestCase):
+    """Direct instantiation of RouteAttributes (bypassing device_attr /
+    vrf_attr / address_family_attr / route_attr dict indexing)."""
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = 'R1'
+
+    def test_no_prefix_returns_empty_config(self):
+        """`self.route` falsy -> early return with nothing emitted."""
+        route = _make_route_direct(prefix=None)
+        route.device = self.device
+
+        result = route.build_config(apply=False)
+
+        self.assertEqual(str(result.cli_config), '')
+
+    def test_empty_prefix_string_returns_empty_config(self):
+        route = _make_route_direct(prefix='')
+        route.device = self.device
+
+        result = route.build_config(apply=False)
+
+        self.assertEqual(str(result.cli_config), '')
+
+    def test_apply_true_calls_device_configure(self):
+        route = _make_route_direct(prefix='10.0.0.0/8', preference=5)
+        route.device = self.device
+
+        result = route.build_config(apply=True)
+
+        self.assertIsNone(result)
+        self.device.configure.assert_called_once()
+        args, kwargs = self.device.configure.call_args
+        self.assertIn('static-route 10.0.0.0/8', args[0])
+        self.assertTrue(kwargs.get('fail_invalid'))
+
+    def test_build_unconfig_direct(self):
+        route = _make_route_direct(prefix='10.0.0.0/8', description='desc')
+        route.device = self.device
+
+        result = route.build_unconfig(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn('static-route 10.0.0.0/8', output)
+        self.assertIn('no description', output)
+
+
+class TestNextHopAttributesDirect(TestCase):
+    """Direct instantiation of NextHopAttributes."""
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = 'R1'
+
+    def test_next_hop_index_defaults_to_1(self):
+        """Neither next_hop_index nor nexthop set (nexthop explicitly
+        falsy) -> falls back to the literal '1'."""
+        nh = _make_nexthop_direct(interface='swp1')
+        nh.device = self.device
+        nh.nexthop = None  # explicit falsy value avoids AttributeError
+
+        result = nh.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn('next-hop-index 1', output)
+
+    def test_next_hop_index_falls_back_to_nexthop_key(self):
+        nh = _make_nexthop_direct(interface='swp1')
+        nh.device = self.device
+        nh.nexthop = '10.2.2.2'  # no next_hop_index set -> used as index too
+
+        result = nh.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn('next-hop-index 10.2.2.2', output)
+
+    def test_bare_nexthop_dict_fallback_drop(self):
+        """`nexthop` assigned as a plain (non-managedattribute) instance
+        attribute -> exercises `self.__dict__.get('nexthop')` fallback."""
+        nh = _make_nexthop_direct(next_hop_index='5')
+        nh.device = self.device
+        nh.nexthop = 'DROP'
+
+        result = nh.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn('next-hop-index 5', output)
+        self.assertIn('next-hop DROP', output)
+
+    def test_apply_true_calls_device_configure(self):
+        nh = _make_nexthop_direct(next_hop_index='1', interface='swp1')
+        nh.device = self.device
+        nh.nexthop = '10.1.1.1'
+
+        result = nh.build_config(apply=True)
+
+        self.assertIsNone(result)
+        self.device.configure.assert_called_once()
+        args, kwargs = self.device.configure.call_args
+        self.assertIn('next-hop-index 1', args[0])
+        self.assertTrue(kwargs.get('fail_invalid'))
+
+    def test_build_unconfig_direct(self):
+        nh = _make_nexthop_direct(next_hop_index='1', interface='swp1')
+        nh.device = self.device
+        nh.nexthop = '10.1.1.1'
+
+        result = nh.build_unconfig(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn('next-hop-index 1', output)
+        self.assertIn('no interface swp1', output)
+
+
+class TestVrfAttributesDirect(TestCase):
+    """Direct instantiation of VrfAttributes, manually wiring the
+    address_family_attr mapping (mirrors Lag's bond_attr dict pattern)."""
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = 'R1'
+
+    def _make_vrf(self, vrf_name, routes_by_af):
+        vrf_attr = ArcosStaticRouting.DeviceAttributes.VrfAttributes()
+        vrf_attr.device = self.device
+        vrf_attr.vrf = vrf_name
+
+        af_attr_map = {}
+        for af, routes in routes_by_af.items():
+            af_attr = ArcosStaticRouting.DeviceAttributes.VrfAttributes.AddressFamilyAttributes()
+            af_attr.device = self.device
+            af_attr.route_attr = routes
+            af_attr_map[af] = af_attr
+        vrf_attr.address_family_attr = af_attr_map
+        return vrf_attr
+
+    def test_apply_true_calls_device_configure(self):
+        route = _make_route_direct(prefix='10.0.0.0/8')
+        route.device = self.device
+        vrf_attr = self._make_vrf('default', {'ipv4': {'10.0.0.0/8': route}})
+
+        result = vrf_attr.build_config(apply=True)
+
+        self.assertIsNone(result)
+        self.device.configure.assert_called_once()
+        args, kwargs = self.device.configure.call_args
+        self.assertIn('network-instance default', args[0])
+        self.assertTrue(kwargs.get('fail_invalid'))
+
+    def test_build_unconfig_direct(self):
+        route = _make_route_direct(prefix='10.0.0.0/8', description='desc')
+        route.device = self.device
+        vrf_attr = self._make_vrf('vrfA', {'ipv4': {'10.0.0.0/8': route}})
+
+        result = vrf_attr.build_unconfig(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn('network-instance vrfA', output)
+        self.assertIn('no description', output)
+
+
+class TestDeviceAttributesDirect(TestCase):
+    """Direct instantiation of DeviceAttributes, manually wiring the
+    vrf_attr mapping."""
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = 'R1'
+
+    def _make_device_attr(self, vrfs):
+        dev_attr = ArcosStaticRouting.DeviceAttributes()
+        dev_attr.device = self.device
+        dev_attr.vrf_attr = vrfs
+        return dev_attr
+
+    def _make_vrf_with_route(self, vrf_name, prefix):
+        vrf_attr = ArcosStaticRouting.DeviceAttributes.VrfAttributes()
+        vrf_attr.device = self.device
+        vrf_attr.vrf = vrf_name
+
+        route = _make_route_direct(prefix=prefix, description='desc')
+        route.device = self.device
+
+        af_attr = ArcosStaticRouting.DeviceAttributes.VrfAttributes.AddressFamilyAttributes()
+        af_attr.device = self.device
+        af_attr.route_attr = {prefix: route}
+
+        vrf_attr.address_family_attr = {'ipv4': af_attr}
+        return vrf_attr
+
+    def test_apply_true_calls_device_configure(self):
+        vrf_attr = self._make_vrf_with_route('default', '10.0.0.0/8')
+        dev_attr = self._make_device_attr({'default': vrf_attr})
+
+        result = dev_attr.build_config(apply=True)
+
+        self.assertIsNone(result)
+        self.device.configure.assert_called_once()
+        args, kwargs = self.device.configure.call_args
+        self.assertIn('static-route 10.0.0.0/8', args[0])
+        self.assertTrue(kwargs.get('fail_invalid'))
+
+    def test_build_config_empty_vrf_attr(self):
+        dev_attr = self._make_device_attr({})
+
+        result = dev_attr.build_config(apply=False)
+
+        self.assertEqual(str(result.cli_config), '')
+
+    def test_build_unconfig_direct(self):
+        vrf_attr = self._make_vrf_with_route('default', '10.0.0.0/8')
+        dev_attr = self._make_device_attr({'default': vrf_attr})
+
+        result = dev_attr.build_unconfig(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn('static-route 10.0.0.0/8', output)
+
+
 if __name__ == '__main__':
     import unittest
     unittest.main()

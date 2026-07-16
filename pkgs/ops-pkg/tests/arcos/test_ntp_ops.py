@@ -107,6 +107,110 @@ class TestNtpOps(unittest.TestCase):
         self.assertNotIn("clock_state", ops.info)
         self.assertIn("vrf", ops.info)
 
+    @patch(f"{MOD}.ShowNtp")
+    def test_learn_parsed_empty_dict(self, mock_parser):
+        """Parser returns an empty dict (falsy) -- info stays empty."""
+        mock_parser.return_value.parse.return_value = {}
+
+        ops = Ntp(device=self.device)
+        ops.learn()
+
+        self.assertEqual(ops.info, {})
+
+    @patch(f"{MOD}.ShowNtp")
+    def test_learn_no_associations_key(self, mock_parser):
+        """Parser returns data with no 'associations' key -- info stays empty."""
+        mock_parser.return_value.parse.return_value = {
+            "network-instance": "default",
+        }
+
+        ops = Ntp(device=self.device)
+        ops.learn()
+
+        self.assertEqual(ops.info, {})
+
+    @patch(f"{MOD}.ShowNtp")
+    def test_learn_empty_associations_dict(self, mock_parser):
+        """Parser returns an empty 'associations' dict -- info stays empty."""
+        mock_parser.return_value.parse.return_value = {
+            "network-instance": "default",
+            "associations": {},
+        }
+
+        ops = Ntp(device=self.device)
+        ops.learn()
+
+        self.assertEqual(ops.info, {})
+
+    @patch(f"{MOD}.ShowNtp")
+    def test_learn_sync_source_no_stratum(self, mock_parser):
+        """SYNC_SOURCE peer present but missing stratum -- clock_stratum omitted."""
+        mock_parser.return_value.parse.return_value = {
+            "associations": {
+                "10.0.0.1": {
+                    "address": "10.0.0.1",
+                    "association-status": "SYNC_SOURCE",
+                },
+            },
+        }
+
+        ops = Ntp(device=self.device)
+        ops.learn()
+
+        cs = ops.info["clock_state"]["system_status"]
+        self.assertEqual(cs["associations_address"], "10.0.0.1")
+        self.assertNotIn("clock_stratum", cs)
+
+    @patch(f"{MOD}.ShowNtp")
+    def test_learn_peer_missing_optional_fields(self, mock_parser):
+        """Peer with no stratum/poll/reach/offset/delay -- optional keys omitted."""
+        mock_parser.return_value.parse.return_value = {
+            "associations": {
+                "192.0.2.1": {
+                    "address": "192.0.2.1",
+                    "association-status": "CANDIDATE",
+                },
+            },
+        }
+
+        ops = Ntp(device=self.device)
+        ops.learn()
+
+        self.assertNotIn("clock_state", ops.info)
+
+        peer = ops.info["vrf"]["default"]["associations"]["address"]["192.0.2.1"]
+        config = peer["local_mode"]["client"]["isconfigured"][True]
+        self.assertEqual(config["address"], "192.0.2.1")
+        self.assertEqual(config["vrf"], "default")
+        self.assertTrue(config["isconfigured"])
+        self.assertNotIn("stratum", config)
+        self.assertNotIn("poll", config)
+        self.assertNotIn("reach", config)
+        self.assertNotIn("offset", config)
+        self.assertNotIn("delay", config)
+
+    @patch(f"{MOD}.ShowNtp")
+    def test_learn_custom_vrf(self, mock_parser):
+        """Non-default network-instance is threaded through to vrf and peer entries."""
+        mock_parser.return_value.parse.return_value = {
+            "network-instance": "mgmt",
+            "associations": {
+                "203.0.113.1": {
+                    "address": "203.0.113.1",
+                    "stratum": 4,
+                    "association-status": "COMBINED",
+                },
+            },
+        }
+
+        ops = Ntp(device=self.device)
+        ops.learn()
+
+        self.assertIn("mgmt", ops.info["vrf"])
+        peer = ops.info["vrf"]["mgmt"]["associations"]["address"]["203.0.113.1"]
+        config = peer["local_mode"]["client"]["isconfigured"][True]
+        self.assertEqual(config["vrf"], "mgmt")
+
 
 if __name__ == "__main__":
     unittest.main()
