@@ -172,6 +172,62 @@ class TestLldpOps(unittest.TestCase):
 
     @patch(f"{MOD}.ShowLldpInterface")
     @patch(f"{MOD}.ShowLldpState")
+    def test_learn_state_edge_cases(self, mock_state, mock_intf):
+        """Non-numeric hello-timer falls back to the raw string; missing
+        system-name/system-description/counters are simply omitted; a
+        neighbor missing 'port-id' falls back to keying by neighbor id; a
+        neighbor missing 'capabilities' omits that key from the entry;
+        an interface missing 'enabled' omits that key too."""
+        state = {
+            "hello-timer": "not-a-number",
+            "system-name": "",
+            "system-description": "",
+            "counters": {
+                "frame-in": "not-numeric-either",
+            },
+        }
+        intf = {
+            "interfaces": {
+                "swp9": {
+                    "name": "swp9",
+                    # no "enabled" key
+                    "neighbors": {
+                        "nbr9": {
+                            "id": "nbr9",
+                            "system-name": "rtr9",
+                            # no "port-id", no "capabilities"
+                        },
+                    },
+                },
+            }
+        }
+        mock_state.return_value.parse.return_value = state
+        mock_intf.return_value.parse.return_value = intf
+
+        ops = Lldp(device=self.device)
+        ops.learn()
+
+        # Non-numeric hello-timer kept as-is (ValueError branch)
+        self.assertEqual(ops.info["hello_timer"], "not-a-number")
+
+        # Falsy system-name/system-description are omitted
+        self.assertNotIn("system_name", ops.info)
+        self.assertNotIn("system_description", ops.info)
+
+        # Non-numeric counter value kept as-is (ValueError branch)
+        self.assertEqual(ops.info["counters"]["frame_in"], "not-numeric-either")
+
+        swp9 = ops.info["interfaces"]["swp9"]
+        self.assertNotIn("enabled", swp9)
+
+        # Neighbor keyed under fallback port_id == nbr_id (no port-id present)
+        nbr = swp9["port_id"]["nbr9"]["neighbors"]["nbr9"]
+        self.assertEqual(nbr["system_name"], "rtr9")
+        self.assertNotIn("capabilities", nbr)
+        self.assertNotIn("port_id", nbr)
+
+    @patch(f"{MOD}.ShowLldpInterface")
+    @patch(f"{MOD}.ShowLldpState")
     def test_learn_no_neighbors(self, mock_state, mock_intf):
         """State present but interfaces have no neighbors."""
         mock_state.return_value.parse.return_value = STATE_OUTPUT

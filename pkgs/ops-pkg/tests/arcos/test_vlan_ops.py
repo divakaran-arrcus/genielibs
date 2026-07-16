@@ -46,6 +46,17 @@ VLAN_OUTPUT_MULTIPLE = {
 }
 
 
+VLAN_OUTPUT_MINIMAL = {
+    "vlans": {
+        "300": {
+            "vlan-id": 300,
+            # no name, no status, no members -- exercises the "field is
+            # absent" branch of every Optional(...) mapping in learn()
+        },
+    }
+}
+
+
 class TestVlanOps(unittest.TestCase):
     """Test VLAN Ops model learn()."""
 
@@ -118,6 +129,23 @@ class TestVlanOps(unittest.TestCase):
         self.assertTrue(vlans["999"]["shutdown"])
         # No members for suspended VLAN
         self.assertNotIn("interfaces", vlans["999"])
+
+    @patch(f"{MOD}.ShowVlanParser")
+    def test_learn_vlan_with_minimal_fields(self, mock_vlan):
+        """VLAN entry lacking name/status/members -- every Optional field
+        mapping in learn() must skip cleanly instead of KeyError'ing."""
+        mock_vlan.return_value.parse.return_value = VLAN_OUTPUT_MINIMAL
+
+        ops = Vlan(device=self.device)
+        ops.learn()
+
+        self.assertIn("vlans", ops.info)
+        vlan = ops.info["vlans"]["300"]
+        self.assertEqual(vlan["vlan_id"], "300")
+        self.assertNotIn("name", vlan)
+        self.assertNotIn("state", vlan)
+        self.assertNotIn("shutdown", vlan)
+        self.assertNotIn("interfaces", vlan)
 
 
 if __name__ == "__main__":

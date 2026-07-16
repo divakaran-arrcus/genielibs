@@ -146,6 +146,95 @@ class TestLagOps(unittest.TestCase):
         self.assertTrue(m3["bundled"])
         self.assertTrue(m3["distributing"])
 
+    @patch(f"{MOD}.ShowLacpInterface")
+    def test_learn_empty_interfaces_dict(self, mock_parser_cls):
+        """Parser returns a dict with an empty 'interfaces' key (no
+        exception) -- info should remain empty."""
+        mock_parser_cls.return_value.parse.return_value = {"interfaces": {}}
+
+        ops = Lag(device=self.device)
+        ops.learn()
+
+        self.assertEqual(ops.info, {})
+
+    @patch(f"{MOD}.ShowLacpInterface")
+    def test_learn_no_bundle_id_suffix(self, mock_parser_cls):
+        """Bond name with no trailing digits -- bundle_id should be
+        omitted."""
+        output = {
+            "interfaces": {
+                "bond-mgmt": {
+                    "name": "bond-mgmt",
+                    "interval": "FAST",
+                },
+            },
+        }
+        mock_parser_cls.return_value.parse.return_value = output
+
+        ops = Lag(device=self.device)
+        ops.learn()
+
+        bond = ops.info["interfaces"]["bond-mgmt"]
+        self.assertNotIn("bundle_id", bond)
+        self.assertEqual(bond["protocol"], "lacp")
+        # No members -> oper_status defaults to down
+        self.assertEqual(bond["oper_status"], "down")
+        self.assertNotIn("members", bond)
+
+    @patch(f"{MOD}.ShowLacpInterface")
+    def test_learn_no_interval_no_activity(self, mock_parser_cls):
+        """Bond with no 'interval' key -- member 'activity' should be
+        omitted."""
+        output = {
+            "interfaces": {
+                "bond300": {
+                    "name": "bond300",
+                    "members": {
+                        "ethernet-1/1": {
+                            "interface": "ethernet-1/1",
+                            "synchronization": "IN_SYNC",
+                            "aggregatable": True,
+                            "collecting": True,
+                            "distributing": True,
+                        },
+                    },
+                },
+            },
+        }
+        mock_parser_cls.return_value.parse.return_value = output
+
+        ops = Lag(device=self.device)
+        ops.learn()
+
+        bond = ops.info["interfaces"]["bond300"]
+        mem = bond["members"]["ethernet-1/1"]
+        self.assertNotIn("activity", mem)
+
+    @patch(f"{MOD}.ShowLacpInterface")
+    def test_learn_unmapped_synchronization_value(self, mock_parser_cls):
+        """Synchronization values not in _SYNC_MAP fall back to
+        lower-cased raw value."""
+        output = {
+            "interfaces": {
+                "bond400": {
+                    "name": "bond400",
+                    "members": {
+                        "ethernet-1/1": {
+                            "interface": "ethernet-1/1",
+                            "synchronization": "UNKNOWN_STATE",
+                        },
+                    },
+                },
+            },
+        }
+        mock_parser_cls.return_value.parse.return_value = output
+
+        ops = Lag(device=self.device)
+        ops.learn()
+
+        mem = ops.info["interfaces"]["bond400"]["members"]["ethernet-1/1"]
+        self.assertEqual(mem["synchronization"], "unknown_state")
+
 
 if __name__ == "__main__":
     unittest.main()
