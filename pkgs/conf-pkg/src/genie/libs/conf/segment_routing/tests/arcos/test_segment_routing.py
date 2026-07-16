@@ -1,5 +1,6 @@
 """Unit tests for ArcOS Segment Routing (SRv6 / SR-MPLS) configuration object."""
 
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock
 
@@ -193,6 +194,229 @@ class TestSegmentRoutingDeviceAttributes(TestCase):
 
         # All under the same network-instance
         self.assertIn("network-instance default", output)
+
+    # ------------------------------------------------------------------ #
+    # 7. Unconfig (unconfig=True / build_unconfig())
+    # ------------------------------------------------------------------ #
+
+    def test_sr_unconfig_via_build_config_unconfig_true(self):
+        """Test build_config(unconfig=True) emits the single 'no
+        network-instance <ni> srv6' unconfig stanza."""
+        dev_attr = self._make_dev_attr(
+            srv6_encap_source_address="2001:db8::1",
+        )
+
+        result = dev_attr.build_config(apply=False, unconfig=True)
+        output = str(result.cli_config)
+
+        self.assertIn("no network-instance default srv6", output)
+
+    def test_sr_unconfig_via_build_unconfig_method(self):
+        """Test build_unconfig() delegates to build_config(unconfig=True)."""
+        dev_attr = self._make_dev_attr(
+            srv6_encap_source_address="2001:db8::1",
+        )
+
+        result = dev_attr.build_unconfig(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("no network-instance default srv6", output)
+
+    # ------------------------------------------------------------------ #
+    # 8. Skip invalid locator / block / mapping entries (falsy key or
+    #    None attrs)
+    # ------------------------------------------------------------------ #
+
+    def test_sr_srv6_locator_skips_invalid_entries(self):
+        """Locators with a falsy name or None attrs are skipped."""
+        dev_attr = self._make_dev_attr(
+            srv6_locators={
+                "": {"prefix": "2001:db8:dead::/48"},
+                "loc-none": None,
+                "loc-good": {
+                    "prefix": "2001:db8:aaaa::/48",
+                    "locator_node_length": 24,
+                },
+            },
+        )
+
+        result = dev_attr.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("srv6 locator loc-good", output)
+        self.assertNotIn("2001:db8:dead::/48", output)
+
+    def test_sr_mpls_label_block_skips_invalid_entries(self):
+        """MPLS label blocks with a falsy id or None attrs are skipped."""
+        dev_attr = self._make_dev_attr(
+            mpls_reserved_label_blocks={
+                "": {"lower_bound": 1, "upper_bound": 2},
+                "block-none": None,
+                "srgb": {
+                    "lower_bound": 16000,
+                    "upper_bound": 23999,
+                    "usage": "SRGB",
+                    "protocol_identifier": "ISIS",
+                },
+            },
+        )
+
+        result = dev_attr.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("mpls global reserved-label-block srgb", output)
+        self.assertNotIn("reserved-label-block \n", output)
+
+    def test_sr_srms_mapping_skips_invalid_entries(self):
+        """SRMS mappings with a falsy id or None attrs are skipped."""
+        dev_attr = self._make_dev_attr(
+            srms_mappings={
+                "": {"local_id": "999"},
+                "map-none": None,
+                "map1": {
+                    "local_id": "100",
+                    "ipv4_prefixes": [
+                        {"prefix": "10.0.0.0/24", "sid": 1000, "range": 10},
+                    ],
+                },
+            },
+        )
+
+        result = dev_attr.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("segment-routing srms mapping map1", output)
+        self.assertNotIn("999", output)
+
+    # ------------------------------------------------------------------ #
+    # 9. Attribute-style (non-dict) locator / block / mapping / prefix
+    #    entries (exercise the getattr() fallback branches)
+    # ------------------------------------------------------------------ #
+
+    def test_sr_srv6_locator_object_style_attrs(self):
+        """Locator attrs supplied as an attribute-style object (not a
+        dict) are read via getattr()."""
+        dev_attr = self._make_dev_attr(
+            srv6_locators={
+                "loc-obj": SimpleNamespace(
+                    prefix="fcbb:bb00:9::/48",
+                    locator_node_length=24,
+                    function_length=16,
+                    algorithm=5,
+                ),
+            },
+        )
+
+        result = dev_attr.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("srv6 locator loc-obj", output)
+        self.assertIn("prefix fcbb:bb00:9::/48", output)
+        self.assertIn("locator-node-length 24", output)
+        self.assertIn("function-length 16", output)
+        self.assertIn("algorithm 5", output)
+
+    def test_sr_mpls_label_block_object_style_attrs(self):
+        """MPLS label block attrs supplied as an attribute-style object
+        (not a dict) are read via getattr()."""
+        dev_attr = self._make_dev_attr(
+            mpls_reserved_label_blocks={
+                "srgb-obj": SimpleNamespace(
+                    lower_bound=16000,
+                    upper_bound=23999,
+                    usage="SRGB",
+                    protocol_identifier="ISIS",
+                    protocol_name="default",
+                ),
+            },
+        )
+
+        result = dev_attr.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("mpls global reserved-label-block srgb-obj", output)
+        self.assertIn("16000", output)
+        self.assertIn("23999", output)
+        self.assertIn("SRGB", output)
+
+    def test_sr_srms_mapping_object_style_attrs_with_ipv4_and_ipv6(self):
+        """SRMS mapping attrs (and its ipv4/ipv6 prefix entries) supplied
+        as attribute-style objects (not dicts) are read via getattr()."""
+        dev_attr = self._make_dev_attr(
+            srms_mappings={
+                "map-obj": SimpleNamespace(
+                    local_id="200",
+                    ipv4_prefixes=[
+                        SimpleNamespace(
+                            prefix="10.1.0.0/24", sid=2000, range=50,
+                        ),
+                    ],
+                    ipv6_prefixes=[
+                        SimpleNamespace(
+                            prefix="2001:db8:1::/32", sid=3000, range=50,
+                        ),
+                    ],
+                ),
+            },
+        )
+
+        result = dev_attr.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("segment-routing srms mapping map-obj", output)
+        self.assertIn("local-id 200", output)
+        self.assertIn("ipv4 prefix 10.1.0.0/24", output)
+        self.assertIn("sid   2000", output)
+        self.assertIn("ipv6 prefix 2001:db8:1::/32", output)
+        self.assertIn("sid   3000", output)
+
+    # ------------------------------------------------------------------ #
+    # 10. SRMS mapping IPv6 prefixes (dict-style) -- separate from IPv4
+    # ------------------------------------------------------------------ #
+
+    def test_sr_srms_mapping_ipv6_prefix_dict_style(self):
+        """Test SRMS mapping with dict-style IPv6 prefix entries."""
+        dev_attr = self._make_dev_attr(
+            srms_mappings={
+                "map-v6": {
+                    "local_id": "300",
+                    "ipv6_prefixes": [
+                        {"prefix": "2001:db8:2::/32", "sid": 4000, "range": 20},
+                        {"prefix": "2001:db8:3::/32", "sid": 4020, "range": 10},
+                    ],
+                },
+            },
+        )
+
+        result = dev_attr.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("segment-routing srms mapping map-v6", output)
+        self.assertIn("local-id 300", output)
+        self.assertIn("ipv6 prefix 2001:db8:2::/32", output)
+        self.assertIn("sid   4000", output)
+        self.assertIn("range 20", output)
+        self.assertIn("ipv6 prefix 2001:db8:3::/32", output)
+        self.assertIn("sid   4020", output)
+        self.assertIn("range 10", output)
+
+    # ------------------------------------------------------------------ #
+    # 11. apply=True dispatches to device.configure()
+    # ------------------------------------------------------------------ #
+
+    def test_sr_build_config_apply_true_calls_device_configure(self):
+        """apply=True should render the config and call
+        device.configure() with the rendered string."""
+        dev_attr = self._make_dev_attr(
+            srv6_encap_source_address="2001:db8::1",
+        )
+
+        result = dev_attr.build_config(apply=True)
+
+        self.assertIsNone(result)
+        self.device.configure.assert_called_once()
+        args, _ = self.device.configure.call_args
+        self.assertIn("srv6 encapsulation source-address 2001:db8::1", args[0])
 
 
 if __name__ == "__main__":  # pragma: no cover
