@@ -91,3 +91,64 @@ class TestTeDeviceAttributes(TestCase):
         self.assertIn("te admin-group yellow", output)
         # No bit-position line should appear
         self.assertNotIn("bit-position", output)
+
+    def test_te_group_non_dict_value(self):
+        """Test an admin-group entry whose value isn't a dict at all
+        (e.g. None) -- takes the non-dict fallback branch (flat
+        `te admin-group <name>` line, no submode/bit-position)."""
+        dev_attr = Te.DeviceAttributes()
+        dev_attr.device = self.device
+        dev_attr.admin_groups = {
+            "orange": None,
+        }
+
+        result = dev_attr.build_config(apply=False)
+        output = str(result.cli_config)
+
+        self.assertIn("network-instance default", output)
+        self.assertIn("te admin-group orange", output)
+        self.assertNotIn("bit-position", output)
+
+    def test_te_build_config_apply_true_calls_device_configure(self):
+        """apply=True should call device.configure() with the rendered
+        config and fail_invalid=True, returning None."""
+        dev_attr = Te.DeviceAttributes()
+        dev_attr.device = self.device
+        dev_attr.admin_groups = {
+            "red": {"bit_position": 11},
+        }
+
+        result = dev_attr.build_config(apply=True)
+
+        self.assertIsNone(result)
+        self.device.configure.assert_called_once()
+        args, kwargs = self.device.configure.call_args
+        self.assertIn("te admin-group red", args[0])
+        self.assertTrue(kwargs.get("fail_invalid"))
+
+    def test_te_build_config_apply_true_empty_does_not_call_configure(self):
+        """apply=True with no admin_groups yields an empty CliConfigBuilder,
+        which is falsy -- device.configure() must not be called."""
+        dev_attr = Te.DeviceAttributes()
+        dev_attr.device = self.device
+
+        result = dev_attr.build_config(apply=True)
+
+        self.assertIsNone(result)
+        self.device.configure.assert_not_called()
+
+    def test_te_build_unconfig_apply_true_delegates(self):
+        """build_unconfig(apply=True) delegates to build_config(unconfig=True,
+        apply=True) and calls device.configure with the removal lines."""
+        dev_attr = Te.DeviceAttributes()
+        dev_attr.device = self.device
+        dev_attr.admin_groups = {
+            "red": {"bit_position": 11},
+        }
+
+        result = dev_attr.build_unconfig(apply=True)
+
+        self.assertIsNone(result)
+        self.device.configure.assert_called_once()
+        args, _ = self.device.configure.call_args
+        self.assertIn("network-instance default te admin-group red", args[0])
