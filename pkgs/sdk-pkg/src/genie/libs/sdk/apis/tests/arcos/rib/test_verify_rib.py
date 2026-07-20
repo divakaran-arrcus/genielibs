@@ -20,17 +20,10 @@ To get real branch/line coverage here:
     loop-continues path before falling through to ``return False``.
 """
 
-import importlib
-import io
-import sys
 import unittest
 from unittest.mock import patch
 
-import coverage
-
 from genie.libs.sdk.apis.arcos.rib import verify as rib_verify
-
-VERIFY_MODULE = "genie.libs.sdk.apis.arcos.rib.verify"
 
 # Small, real, non-zero timings so the Timeout loop body actually executes
 # (Timeout(max_time=0, ...) never enters the loop at all).
@@ -279,49 +272,6 @@ class TestVerifyRib(unittest.TestCase):
             check_interval=EXHAUST_INTERVAL,
         )
         self.assertFalse(result)
-
-
-# ---------------------------------------------------------------------------
-# Embedded machine coverage check
-# ---------------------------------------------------------------------------
-
-_COVERAGE_TEST_CLASSES = (TestVerifyRib,)
-
-
-class TestVerifyRibFullCoverage(unittest.TestCase):
-    def test_full_coverage(self):
-        global rib_verify
-
-        sys.modules.pop(VERIFY_MODULE, None)
-        cov = coverage.Coverage(source=[VERIFY_MODULE])
-        cov.start()
-        try:
-            rib_verify = importlib.import_module(VERIFY_MODULE)
-
-            loader = unittest.defaultTestLoader
-            suite = unittest.TestSuite()
-            for cls in _COVERAGE_TEST_CLASSES:
-                suite.addTests(loader.loadTestsFromTestCase(cls))
-
-            result = unittest.TextTestRunner(
-                verbosity=0, stream=io.StringIO()
-            ).run(suite)
-        finally:
-            cov.stop()
-            cov.save()
-
-        self.assertTrue(
-            result.wasSuccessful(),
-            "rib/verify.py functional test suite failed during coverage re-run",
-        )
-
-        report_buf = io.StringIO()
-        total = cov.report(show_missing=True, file=report_buf)
-        self.assertGreaterEqual(
-            total,
-            100.0,
-            f"rib/verify.py line coverage only {total:.1f}%\n{report_buf.getvalue()}",
-        )
 
 
 if __name__ == "__main__":

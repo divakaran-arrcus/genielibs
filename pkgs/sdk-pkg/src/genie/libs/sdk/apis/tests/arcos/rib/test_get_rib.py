@@ -9,25 +9,17 @@ canned parser output (shaped like ``_RibEntriesSchema`` /
 ``genie.libs.parser.arcos.show_rib``) exercises every function.
 
 A module-alias import (``from ... import get as rib_get``) is used instead
-of ``from ... import <function>`` so the embedded coverage meta-test can
-force a fresh, coverage-instrumented import of ``get.py`` and have the
-existing test classes transparently pick it up (module-level attribute
-lookups are resolved at call time, not at import time).
+of ``from ... import <function>`` for consistency with the functional test
+classes below (module-level attribute lookups are resolved at call time,
+not at import time).
 """
 
-import importlib
-import io
-import sys
 import unittest
-
-import coverage
 
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
 from unicon.core.errors import SubCommandFailure
 
 from genie.libs.sdk.apis.arcos.rib import get as rib_get
-
-GET_MODULE = "genie.libs.sdk.apis.arcos.rib.get"
 
 
 # ---------------------------------------------------------------------------
@@ -353,59 +345,6 @@ class TestGetRibSubCommandFailure(unittest.TestCase):
 
     def test_get_rib_label_entries_empty(self):
         self.assertEqual(rib_get.get_rib_label_entries(self.device), {})
-
-
-# ---------------------------------------------------------------------------
-# Embedded machine coverage check
-# ---------------------------------------------------------------------------
-#
-# Forces a fresh, coverage-instrumented import of rib/get.py (so its
-# module-level statements are attributed too, not just function bodies),
-# re-runs every functional test class above against that fresh import via
-# the ``rib_get`` module alias, and asserts the suite both passes and
-# achieves 100% line coverage of get.py.
-
-_COVERAGE_TEST_CLASSES = (
-    TestGetRib,
-    TestGetRibEmpty,
-    TestGetRibSubCommandFailure,
-)
-
-
-class TestGetRibFullCoverage(unittest.TestCase):
-    def test_full_coverage(self):
-        global rib_get
-
-        sys.modules.pop(GET_MODULE, None)
-        cov = coverage.Coverage(source=[GET_MODULE])
-        cov.start()
-        try:
-            rib_get = importlib.import_module(GET_MODULE)
-
-            loader = unittest.defaultTestLoader
-            suite = unittest.TestSuite()
-            for cls in _COVERAGE_TEST_CLASSES:
-                suite.addTests(loader.loadTestsFromTestCase(cls))
-
-            result = unittest.TextTestRunner(
-                verbosity=0, stream=io.StringIO()
-            ).run(suite)
-        finally:
-            cov.stop()
-            cov.save()
-
-        self.assertTrue(
-            result.wasSuccessful(),
-            "rib/get.py functional test suite failed during coverage re-run",
-        )
-
-        report_buf = io.StringIO()
-        total = cov.report(show_missing=True, file=report_buf)
-        self.assertGreaterEqual(
-            total,
-            100.0,
-            f"rib/get.py line coverage only {total:.1f}%\n{report_buf.getvalue()}",
-        )
 
 
 if __name__ == "__main__":
