@@ -254,6 +254,60 @@ class TestNextHopBfdDestinationIpv6(_ArcosStaticRoutingBase):
         self.assertIn('bfd destination-address ipv6 2001:db8::100', output)
 
 
+class TestRouteEcmpMultipleNextHops(_ArcosStaticRoutingBase):
+    """Test 13: ECMP -- a single route with multiple next_hop_attr entries.
+
+    Ported from the legacy arcos/tests suite (test_iteration2_ecmp_*): every
+    other test in this file builds a route with exactly one next-hop, so
+    none of them exercise iterating over more than one entry in
+    ``route.next_hop_attr``. This confirms multiple next-hops under the same
+    route each render their own next-hop-index/next-hop/interface lines
+    without clobbering one another.
+    """
+
+    def test_ecmp_dual_nexthop(self):
+        sr, route = self._make_route('203.0.113.0/24')
+        route.description = 'ECMP route with 2 next-hops'
+
+        nh1 = route.next_hop_attr['1']
+        nh1.next_hop_index = '1'
+        nh1.nexthop = '192.168.1.1'
+        nh1.interface = 'swp1'
+
+        nh2 = route.next_hop_attr['2']
+        nh2.next_hop_index = '2'
+        nh2.nexthop = '192.168.1.2'
+        nh2.interface = 'swp2'
+
+        output = self._build(sr)
+
+        self.assertIn('static-route 203.0.113.0/24', output)
+        self.assertIn('next-hop-index 1', output)
+        self.assertIn('next-hop 192.168.1.1', output)
+        self.assertIn('interface swp1', output)
+        self.assertIn('next-hop-index 2', output)
+        self.assertIn('next-hop 192.168.1.2', output)
+        self.assertIn('interface swp2', output)
+
+    def test_ecmp_quad_nexthop_with_preference(self):
+        sr, route = self._make_route('172.31.0.0/16')
+        route.description = 'ECMP with admin distance'
+        route.preference = 50
+
+        for i in range(1, 5):
+            nh = route.next_hop_attr[str(i)]
+            nh.next_hop_index = str(i)
+            nh.nexthop = f'10.20.1.{i}'
+
+        output = self._build(sr)
+
+        self.assertIn('static-route 172.31.0.0/16', output)
+        self.assertIn('preference 50', output)
+        for i in range(1, 5):
+            self.assertIn(f'next-hop-index {i}', output)
+            self.assertIn(f'next-hop 10.20.1.{i}', output)
+
+
 # ---------------------------------------------------------------------------
 # DIRECT dispatch tests: instantiate the arcOS-specific nested ABC classes
 # directly (bypassing the Genie abstraction/attribute-mixing machinery), the
