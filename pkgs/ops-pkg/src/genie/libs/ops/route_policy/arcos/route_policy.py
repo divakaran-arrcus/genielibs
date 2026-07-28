@@ -20,10 +20,10 @@ class RoutePolicy(SuperRoutePolicy):
 
         info = {
             "defined_sets": {
-                "prefix_sets": {...},
-                "string_sets": {...},
-                "tag_sets": {...},
-                "next_hop_sets": {...},
+                "prefix-sets": {...},
+                "string-sets": {...},
+                "tag-sets": {...},
+                "next-hop-sets": {...},
             },
             "policy_definitions": {
                 "<policy_name>": {
@@ -32,7 +32,7 @@ class RoutePolicy(SuperRoutePolicy):
                         "<stmt_name>": {
                             "name": "<stmt_name>",
                             # optional
-                            "auto_seq_num": <int>,
+                            "auto-seq-num": <int>,
                             "conditions": {...},
                             "actions": {...},
                         },
@@ -59,8 +59,8 @@ class RoutePolicy(SuperRoutePolicy):
         # ------------------------------------------------------------------
         ds_parser = ShowRoutingPolicyDefinedSets(device=self.device)
         ds_result = ds_parser.parse()
-        ds_root = ds_result.get("routing_policy", {})
-        defined_sets = ds_root.get("defined_sets") or {}
+        ds_root = ds_result.get("routing-policy", {})
+        defined_sets = ds_root.get("defined-sets") or {}
         if defined_sets:
             info["defined_sets"] = defined_sets
 
@@ -69,8 +69,8 @@ class RoutePolicy(SuperRoutePolicy):
         # ------------------------------------------------------------------
         pd_parser = ShowRoutingPolicyPolicyDefinition(device=self.device)
         pd_result = pd_parser.parse()
-        pd_root = pd_result.get("routing_policy", {})
-        policy_definitions = pd_root.get("policy_definitions") or {}
+        pd_root = pd_result.get("routing-policy", {})
+        policy_definitions = pd_root.get("policy-definitions") or {}
         if policy_definitions:
             info["policy_definitions"] = policy_definitions
 
