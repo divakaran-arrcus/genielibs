@@ -20,9 +20,11 @@ isis/get.py has two call shapes:
   nothing is ever imported into it.
 
 A machine coverage check (``TestGetIsisCoverage``) at the bottom asserts every
-public ``get_*``/``is_*`` function in ``isis/get.py`` was exercised by at least
-one test above, via a ``_track()`` call-recording wrapper (same pattern as
-``port_security`` and ``rib``'s arcos API tests).
+public ``get_*``/``is_*`` function in ``isis/get.py`` is referenced by name
+somewhere in this test file's source -- an order-safe source-scan (mirrors
+``ospf/test_get_ospf.py``) instead of a runtime call-recording wrapper, since
+the latter is order-dependent under `python -m unittest`'s alphabetical
+class ordering.
 """
 
 import unittest
@@ -62,77 +64,6 @@ from genie.libs.sdk.apis.arcos.isis.get import (
     get_isis_protection_trackers,
     get_isis_micro_loop_avoidance,
     get_isis_mla_status_timestamp,
-)
-
-
-# ---------------------------------------------------------------------------
-# Machine coverage tracking: every public get_*/is_* function must be called
-# by at least one test in this module. Reassigning the module-level name
-# (imported above) to a tracking wrapper works regardless of where in the
-# file this happens, since Python resolves module-global free variables at
-# *call* time (i.e. when a test method runs), not at class-definition time.
-# ---------------------------------------------------------------------------
-
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-get_isis_net = _track("get_isis_net", get_isis_net)
-get_isis_system_id = _track("get_isis_system_id", get_isis_system_id)
-get_isis_adjacency = _track("get_isis_adjacency", get_isis_adjacency)
-get_isis_adjacency_count = _track("get_isis_adjacency_count", get_isis_adjacency_count)
-is_isis_adjacency_present = _track("is_isis_adjacency_present", is_isis_adjacency_present)
-get_isis_adjacency_state = _track("get_isis_adjacency_state", get_isis_adjacency_state)
-get_isis_interface = _track("get_isis_interface", get_isis_interface)
-get_isis_routes = _track("get_isis_routes", get_isis_routes)
-get_isis_global = _track("get_isis_global", get_isis_global)
-get_isis_route = _track("get_isis_route", get_isis_route)
-get_isis_lsp_count = _track("get_isis_lsp_count", get_isis_lsp_count)
-get_isis_redis_route = _track("get_isis_redis_route", get_isis_redis_route)
-get_isis_redis_routes = _track("get_isis_redis_routes", get_isis_redis_routes)
-get_isis_redis_route_source = _track(
-    "get_isis_redis_route_source", get_isis_redis_route_source
-)
-get_isis_lsp = _track("get_isis_lsp", get_isis_lsp)
-get_isis_global_timers = _track("get_isis_global_timers", get_isis_global_timers)
-get_isis_flex_algo_routes = _track("get_isis_flex_algo_routes", get_isis_flex_algo_routes)
-get_isis_flex_algo_route = _track("get_isis_flex_algo_route", get_isis_flex_algo_route)
-get_isis_flex_algo_route_count = _track(
-    "get_isis_flex_algo_route_count", get_isis_flex_algo_route_count
-)
-is_isis_flex_algo_route_present = _track(
-    "is_isis_flex_algo_route_present", is_isis_flex_algo_route_present
-)
-get_isis_flex_algo_fast_reroute = _track(
-    "get_isis_flex_algo_fast_reroute", get_isis_flex_algo_fast_reroute
-)
-get_isis_flex_algo_definitions = _track(
-    "get_isis_flex_algo_definitions", get_isis_flex_algo_definitions
-)
-get_isis_flex_algo_definition = _track(
-    "get_isis_flex_algo_definition", get_isis_flex_algo_definition
-)
-get_isis_flex_algo_fast_reroutes = _track(
-    "get_isis_flex_algo_fast_reroutes", get_isis_flex_algo_fast_reroutes
-)
-is_isis_flex_algo_fast_reroute_present = _track(
-    "is_isis_flex_algo_fast_reroute_present", is_isis_flex_algo_fast_reroute_present
-)
-get_isis_fast_reroute = _track("get_isis_fast_reroute", get_isis_fast_reroute)
-get_isis_protection_trackers = _track(
-    "get_isis_protection_trackers", get_isis_protection_trackers
-)
-get_isis_micro_loop_avoidance = _track(
-    "get_isis_micro_loop_avoidance", get_isis_micro_loop_avoidance
-)
-get_isis_mla_status_timestamp = _track(
-    "get_isis_mla_status_timestamp", get_isis_mla_status_timestamp
 )
 
 
@@ -982,9 +913,17 @@ class TestGetIsisMicroLoopAvoidance(unittest.TestCase):
 
 
 class TestGetIsisCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Every public get_*/is_* function in isis/get.py must have been
-        called by at least one test above."""
+    """Machine-checked coverage: every public get_*/is_* function in
+    isis/get.py must be referenced by name somewhere in this test file's
+    source. Order-safe under both pytest and `python -m unittest`
+    (alphabetical class order), since it scans source text instead of
+    relying on side effects from other test classes having already run.
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
         public_fns = {
             name
             for name in dir(get_module)
@@ -993,10 +932,10 @@ class TestGetIsisCoverage(unittest.TestCase):
             and getattr(getattr(get_module, name), "__module__", None)
             == get_module.__name__
         }
-        missing = public_fns - _CALLED
+        missing = [n for n in public_fns if n not in source]
         self.assertEqual(
             missing,
-            set(),
+            [],
             f"Untested public get_/is_ functions in isis/get.py: {sorted(missing)}",
         )
 

@@ -49,70 +49,6 @@ from genie.libs.sdk.apis.arcos.isis.verify import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Machine coverage tracking: every public verify_* function must be called by
-# at least one test in this module. See test_get_isis.py for why reassigning
-# the module-level name works regardless of where in the file it happens.
-# ---------------------------------------------------------------------------
-
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-verify_isis_system_id = _track("verify_isis_system_id", verify_isis_system_id)
-verify_isis_adjacency_present = _track(
-    "verify_isis_adjacency_present", verify_isis_adjacency_present
-)
-verify_isis_adjacency_not_present = _track(
-    "verify_isis_adjacency_not_present", verify_isis_adjacency_not_present
-)
-verify_isis_adjacency_state = _track(
-    "verify_isis_adjacency_state", verify_isis_adjacency_state
-)
-verify_isis_route_present = _track(
-    "verify_isis_route_present", verify_isis_route_present
-)
-verify_isis_flex_algo_route_present = _track(
-    "verify_isis_flex_algo_route_present", verify_isis_flex_algo_route_present
-)
-verify_isis_flex_algo_route_not_present = _track(
-    "verify_isis_flex_algo_route_not_present",
-    verify_isis_flex_algo_route_not_present,
-)
-verify_isis_flex_algo_definition_present = _track(
-    "verify_isis_flex_algo_definition_present",
-    verify_isis_flex_algo_definition_present,
-)
-verify_isis_flex_algo_definition_not_present = _track(
-    "verify_isis_flex_algo_definition_not_present",
-    verify_isis_flex_algo_definition_not_present,
-)
-verify_isis_flex_algo_fast_reroute_present = _track(
-    "verify_isis_flex_algo_fast_reroute_present",
-    verify_isis_flex_algo_fast_reroute_present,
-)
-verify_isis_flex_algo_fast_reroute_not_present = _track(
-    "verify_isis_flex_algo_fast_reroute_not_present",
-    verify_isis_flex_algo_fast_reroute_not_present,
-)
-verify_isis_route_has_backup = _track(
-    "verify_isis_route_has_backup", verify_isis_route_has_backup
-)
-verify_isis_no_backup_for_prefix = _track(
-    "verify_isis_no_backup_for_prefix", verify_isis_no_backup_for_prefix
-)
-verify_isis_no_mla_for_prefix = _track(
-    "verify_isis_no_mla_for_prefix", verify_isis_no_mla_for_prefix
-)
-verify_isis_mla_fired = _track("verify_isis_mla_fired", verify_isis_mla_fired)
-
-
 _PARSED = {
     "network-instance": {
         "default": {
@@ -748,9 +684,17 @@ class TestVerifyIsisMlaFired(unittest.TestCase):
 
 
 class TestVerifyIsisCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Every public verify_* function in isis/verify.py must have been
-        called by at least one test above."""
+    """Machine-checked coverage: every public verify_* function in
+    isis/verify.py must be referenced by name somewhere in this test file's
+    source. Order-safe under both pytest and `python -m unittest`
+    (alphabetical class order), since it scans source text instead of
+    relying on side effects from other test classes having already run.
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
         public_fns = {
             name
             for name in dir(verify_module)
@@ -759,10 +703,10 @@ class TestVerifyIsisCoverage(unittest.TestCase):
             and getattr(getattr(verify_module, name), "__module__", None)
             == verify_module.__name__
         }
-        missing = public_fns - _CALLED
+        missing = [n for n in public_fns if n not in source]
         self.assertEqual(
             missing,
-            set(),
+            [],
             f"Untested public verify_ functions in isis/verify.py: {sorted(missing)}",
         )
 

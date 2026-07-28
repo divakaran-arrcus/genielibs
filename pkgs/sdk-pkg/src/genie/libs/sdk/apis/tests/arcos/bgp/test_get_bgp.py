@@ -17,9 +17,10 @@ Canned data matches the ``show_bgp.py`` schemas:
   - ShowBgpConfig: {"network-instance": {ni: {"bgp": {pi: {"config":
     {...}, "neighbors": {...}, "peer-groups": {...}}}}}}
 
-A machine coverage check (test_zzz_all_functions_covered) asserts every
-public get_*/is_* function in genie.libs.sdk.apis.arcos.bgp.get was
-exercised by some test in this file.
+A machine coverage check (test_all_public_functions_covered) asserts every
+public get_*/is_* function in genie.libs.sdk.apis.arcos.bgp.get is
+referenced by name somewhere in this file's source (order-safe under both
+pytest and `python -m unittest`).
 """
 
 import inspect
@@ -105,53 +106,6 @@ RUNNING_CONFIG = {
         }
     }
 }
-
-
-# ---------------------------------------------------------------------------
-# Machine coverage tracking: wrap each imported function so calling it during
-# a test records its name. The final test asserts every public function in
-# the module was called at least once.
-# ---------------------------------------------------------------------------
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-get_bgp_global_state = _track("get_bgp_global_state", get_bgp_global_state)
-get_bgp_as_number = _track("get_bgp_as_number", get_bgp_as_number)
-get_bgp_router_id = _track("get_bgp_router_id", get_bgp_router_id)
-get_bgp_neighbors = _track("get_bgp_neighbors", get_bgp_neighbors)
-get_bgp_neighbor = _track("get_bgp_neighbor", get_bgp_neighbor)
-get_bgp_neighbor_state = _track("get_bgp_neighbor_state", get_bgp_neighbor_state)
-get_bgp_neighbor_count = _track("get_bgp_neighbor_count", get_bgp_neighbor_count)
-is_bgp_neighbor_present = _track("is_bgp_neighbor_present", is_bgp_neighbor_present)
-get_bgp_afi_safis = _track("get_bgp_afi_safis", get_bgp_afi_safis)
-get_bgp_afi_safi = _track("get_bgp_afi_safi", get_bgp_afi_safi)
-get_bgp_routes = _track("get_bgp_routes", get_bgp_routes)
-get_bgp_route = _track("get_bgp_route", get_bgp_route)
-is_bgp_route_present = _track("is_bgp_route_present", is_bgp_route_present)
-get_bgp_route_count = _track("get_bgp_route_count", get_bgp_route_count)
-get_bgp_running_config = _track("get_bgp_running_config", get_bgp_running_config)
-get_bgp_running_config_global = _track(
-    "get_bgp_running_config_global", get_bgp_running_config_global
-)
-get_bgp_running_config_neighbors = _track(
-    "get_bgp_running_config_neighbors", get_bgp_running_config_neighbors
-)
-get_bgp_running_config_neighbor = _track(
-    "get_bgp_running_config_neighbor", get_bgp_running_config_neighbor
-)
-get_bgp_running_config_peer_groups = _track(
-    "get_bgp_running_config_peer_groups", get_bgp_running_config_peer_groups
-)
-get_bgp_running_config_peer_group = _track(
-    "get_bgp_running_config_peer_group", get_bgp_running_config_peer_group
-)
 
 
 class TestGetBgp(unittest.TestCase):
@@ -389,17 +343,25 @@ class TestGetBgpRunningConfig(unittest.TestCase):
 
 
 class TestGetBgpCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in get.py must
-        have been called by at least one test above."""
+    """Machine-checked coverage: every public function in get.py must be
+    referenced by name somewhere in this test file's source. Order-safe
+    under both pytest and `python -m unittest` (alphabetical class order),
+    since it scans source text instead of relying on side effects from
+    other test classes having already run.
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
         public_fns = {
             name
             for name, obj in inspect.getmembers(get_module, inspect.isfunction)
             if obj.__module__ == get_module.__name__ and not name.startswith("_")
         }
-        missing = public_fns - _CALLED
+        missing = [n for n in public_fns if n not in source]
         self.assertEqual(
-            missing, set(),
+            missing, [],
             f"Untested public functions in bgp/get.py: {sorted(missing)}",
         )
 

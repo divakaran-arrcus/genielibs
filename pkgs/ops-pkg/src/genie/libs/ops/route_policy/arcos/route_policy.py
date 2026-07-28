@@ -20,10 +20,10 @@ class RoutePolicy(SuperRoutePolicy):
 
         info = {
             "defined_sets": {
-                "prefix_sets": {...},
-                "string_sets": {...},
-                "tag_sets": {...},
-                "next_hop_sets": {...},
+                "prefix-sets": {...},
+                "string-sets": {...},
+                "tag-sets": {...},
+                "next-hop-sets": {...},
             },
             "policy_definitions": {
                 "<policy_name>": {
@@ -32,7 +32,7 @@ class RoutePolicy(SuperRoutePolicy):
                         "<stmt_name>": {
                             "name": "<stmt_name>",
                             # optional
-                            "auto_seq_num": <int>,
+                            "auto-seq-num": <int>,
                             "conditions": {...},
                             "actions": {...},
                         },

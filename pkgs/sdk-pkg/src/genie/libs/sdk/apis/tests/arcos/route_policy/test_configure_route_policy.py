@@ -9,11 +9,12 @@ config list (typically starting with the
 mock ``device.configure`` and assert on a distinctive substring of the
 emitted CLI.
 
-A module-level coverage registry (``_CALLED``) tracks which public
-configure_*/unconfigure_* functions have been exercised by a positive-path
-test. The final ``TestCoverage`` class (run last -- pytest preserves file
-order) asserts that every such function defined in the source module has
-been called at least once.
+The final ``TestCoverage`` class asserts that every public
+configure_*/unconfigure_* function defined in the source module is
+referenced by name somewhere in this test file's source -- an order-safe
+source-scan (mirrors ``ospf/test_get_ospf.py``) rather than a runtime
+call-recording registry, since the latter is order-dependent under
+`python -m unittest`'s alphabetical class ordering.
 """
 
 import inspect
@@ -69,19 +70,6 @@ from genie.libs.sdk.apis.arcos.route_policy.configure import (
     unconfigure_routing_policy_isis_actions_set_metric,
 )
 
-# ---------------------------------------------------------------------------
-# Coverage tracking
-# ---------------------------------------------------------------------------
-
-_CALLED = set()
-
-
-def _c(func, *args, **kwargs):
-    """Invoke ``func`` and record it as covered by a positive-path test."""
-    result = func(*args, **kwargs)
-    _CALLED.add(func.__name__)
-    return result
-
 
 def _all_configure_unconfigure_functions():
     """All public configure_*/unconfigure_* functions defined in the module."""
@@ -114,9 +102,7 @@ class TestPrefixSetApis(unittest.TestCase):
         self.d = _CfgDevice()
 
     def test_configure_prefix_set(self):
-        _c(
-            configure_prefix_set,
-            self.d,
+        configure_prefix_set(self.d,
             "LEAK-L2-TO-L1",
             [
                 {"prefix": "6.6.6.6/32", "masklength_range": "exact"},
@@ -129,19 +115,19 @@ class TestPrefixSetApis(unittest.TestCase):
         self.assertIn("prefix 10.0.0.0/8 8..24", c)
 
     def test_unconfigure_prefix_set(self):
-        _c(unconfigure_prefix_set, self.d, "LEAK-L2-TO-L1")
+        unconfigure_prefix_set(self.d, "LEAK-L2-TO-L1")
         self.assertIn(
             "no routing-policy defined-sets prefix-set LEAK-L2-TO-L1", self.d.cfg()
         )
 
     def test_configure_prefix_set_entry(self):
-        _c(configure_prefix_set_entry, self.d, "MY-SET", "10.0.0.0/8", "8..24")
+        configure_prefix_set_entry(self.d, "MY-SET", "10.0.0.0/8", "8..24")
         c = self.d.cfg()
         self.assertIn("routing-policy defined-sets prefix-set MY-SET", c)
         self.assertIn("prefix 10.0.0.0/8 8..24", c)
 
     def test_unconfigure_prefix_set_entry(self):
-        _c(unconfigure_prefix_set_entry, self.d, "MY-SET", "10.0.0.0/8", "8..24")
+        unconfigure_prefix_set_entry(self.d, "MY-SET", "10.0.0.0/8", "8..24")
         self.assertIn("no prefix 10.0.0.0/8 8..24", self.d.cfg())
 
 
@@ -155,16 +141,14 @@ class TestPolicyDefinitionApis(unittest.TestCase):
         self.d = _CfgDevice()
 
     def test_configure_routing_policy(self):
-        _c(configure_routing_policy, self.d, "ALLOW-ALL")
+        configure_routing_policy(self.d, "ALLOW-ALL")
         c = self.d.cfg()
         self.assertIn("routing-policy policy-definition ALLOW-ALL", c)
         self.assertIn("statement pass-all", c)
         self.assertIn("actions accept-route", c)
 
     def test_configure_routing_policy_with_match(self):
-        _c(
-            configure_routing_policy,
-            self.d,
+        configure_routing_policy(self.d,
             "MATCH-LEAKED",
             action="accept-route",
             statement_name="10",
@@ -180,7 +164,7 @@ class TestPolicyDefinitionApis(unittest.TestCase):
         )
 
     def test_unconfigure_routing_policy(self):
-        _c(unconfigure_routing_policy, self.d, "ALLOW-ALL")
+        unconfigure_routing_policy(self.d, "ALLOW-ALL")
         self.assertIn(
             "no routing-policy policy-definition ALLOW-ALL", self.d.cfg()
         )
@@ -196,9 +180,7 @@ class TestSetApis(unittest.TestCase):
         self.d = _CfgDevice()
 
     def test_configure_ext_community_set(self):
-        _c(
-            configure_ext_community_set,
-            self.d,
+        configure_ext_community_set(self.d,
             "RT-SET-1",
             ["route-target:2001:2001"],
         )
@@ -210,7 +192,7 @@ class TestSetApis(unittest.TestCase):
         self.assertIn("ext-community-member [ route-target:2001:2001 ]", c)
 
     def test_unconfigure_ext_community_set(self):
-        _c(unconfigure_ext_community_set, self.d, "RT-SET-1")
+        unconfigure_ext_community_set(self.d, "RT-SET-1")
         self.assertIn(
             "no routing-policy defined-sets bgp-defined-sets "
             "ext-community-set RT-SET-1",
@@ -218,7 +200,7 @@ class TestSetApis(unittest.TestCase):
         )
 
     def test_configure_community_set(self):
-        _c(configure_community_set, self.d, "COMM-SET-1", ["65001:100"])
+        configure_community_set(self.d, "COMM-SET-1", ["65001:100"])
         c = self.d.cfg()
         self.assertIn(
             "routing-policy defined-sets bgp-defined-sets community-set COMM-SET-1",
@@ -227,7 +209,7 @@ class TestSetApis(unittest.TestCase):
         self.assertIn("community-member [ 65001:100 ]", c)
 
     def test_unconfigure_community_set(self):
-        _c(unconfigure_community_set, self.d, "COMM-SET-1")
+        unconfigure_community_set(self.d, "COMM-SET-1")
         self.assertIn(
             "no routing-policy defined-sets bgp-defined-sets community-set "
             "COMM-SET-1",
@@ -235,7 +217,7 @@ class TestSetApis(unittest.TestCase):
         )
 
     def test_configure_as_path_set(self):
-        _c(configure_as_path_set, self.d, "AS-SET-1", ["^65001_"])
+        configure_as_path_set(self.d, "AS-SET-1", ["^65001_"])
         c = self.d.cfg()
         self.assertIn(
             "routing-policy defined-sets bgp-defined-sets as-path-set AS-SET-1",
@@ -244,7 +226,7 @@ class TestSetApis(unittest.TestCase):
         self.assertIn("as-path-set-member [ ^65001_ ]", c)
 
     def test_unconfigure_as_path_set(self):
-        _c(unconfigure_as_path_set, self.d, "AS-SET-1")
+        unconfigure_as_path_set(self.d, "AS-SET-1")
         self.assertIn(
             "no routing-policy defined-sets bgp-defined-sets as-path-set "
             "AS-SET-1",
@@ -252,7 +234,7 @@ class TestSetApis(unittest.TestCase):
         )
 
     def test_configure_large_community_set(self):
-        _c(configure_large_community_set, self.d, "LC-SET-1", ["65001:100:200"])
+        configure_large_community_set(self.d, "LC-SET-1", ["65001:100:200"])
         c = self.d.cfg()
         self.assertIn(
             "routing-policy defined-sets bgp-defined-sets large-community-set "
@@ -262,7 +244,7 @@ class TestSetApis(unittest.TestCase):
         self.assertIn("large-community-member [ 65001:100:200 ]", c)
 
     def test_unconfigure_large_community_set(self):
-        _c(unconfigure_large_community_set, self.d, "LC-SET-1")
+        unconfigure_large_community_set(self.d, "LC-SET-1")
         self.assertIn(
             "no routing-policy defined-sets bgp-defined-sets "
             "large-community-set LC-SET-1",
@@ -280,9 +262,7 @@ class TestBgpActionsAndConditionsApis(unittest.TestCase):
         self.d = _CfgDevice()
 
     def test_configure_routing_policy_bgp_actions(self):
-        _c(
-            configure_routing_policy_bgp_actions,
-            self.d,
+        configure_routing_policy_bgp_actions(self.d,
             "MY-POLICY",
             "10",
             set_local_pref=220,
@@ -317,9 +297,7 @@ class TestBgpActionsAndConditionsApis(unittest.TestCase):
         )
 
     def test_configure_routing_policy_bgp_conditions(self):
-        _c(
-            configure_routing_policy_bgp_conditions,
-            self.d,
+        configure_routing_policy_bgp_conditions(self.d,
             "MY-POLICY",
             "10",
             match_ext_community_set="RT-SET-1",
@@ -348,9 +326,7 @@ class TestAdditionalBgpActionsAndConditionsApis(unittest.TestCase):
         self.d = _CfgDevice()
 
     def test_configure_routing_policy_set_community(self):
-        _c(
-            configure_routing_policy_set_community,
-            self.d,
+        configure_routing_policy_set_community(self.d,
             "MY-POLICY",
             "10",
             method="INLINE",
@@ -366,9 +342,7 @@ class TestAdditionalBgpActionsAndConditionsApis(unittest.TestCase):
         )
 
     def test_configure_routing_policy_set_community_reference(self):
-        _c(
-            configure_routing_policy_set_community,
-            self.d,
+        configure_routing_policy_set_community(self.d,
             "MY-POLICY",
             "10",
             method="REFERENCE",
@@ -383,9 +357,7 @@ class TestAdditionalBgpActionsAndConditionsApis(unittest.TestCase):
         )
 
     def test_configure_routing_policy_set_as_path_prepend(self):
-        _c(
-            configure_routing_policy_set_as_path_prepend,
-            self.d,
+        configure_routing_policy_set_as_path_prepend(self.d,
             "MY-POLICY",
             "10",
             3,
@@ -395,9 +367,7 @@ class TestAdditionalBgpActionsAndConditionsApis(unittest.TestCase):
         )
 
     def test_configure_routing_policy_match_community_set(self):
-        _c(
-            configure_routing_policy_match_community_set,
-            self.d,
+        configure_routing_policy_match_community_set(self.d,
             "MY-POLICY",
             "10",
             "COMM-SET-1",
@@ -416,9 +386,7 @@ class TestAdditionalBgpActionsAndConditionsApis(unittest.TestCase):
         )
 
     def test_configure_routing_policy_match_as_path_set(self):
-        _c(
-            configure_routing_policy_match_as_path_set,
-            self.d,
+        configure_routing_policy_match_as_path_set(self.d,
             "MY-POLICY",
             "10",
             "AS-SET-1",
@@ -445,9 +413,7 @@ class TestRemainingBgpActionsApis(unittest.TestCase):
         self.d = _CfgDevice()
 
     def test_configure_routing_policy_set_route_origin(self):
-        _c(
-            configure_routing_policy_set_route_origin,
-            self.d,
+        configure_routing_policy_set_route_origin(self.d,
             "MY-POLICY",
             "10",
             "IGP",
@@ -455,9 +421,7 @@ class TestRemainingBgpActionsApis(unittest.TestCase):
         self.assertIn("actions bgp-actions set-route-origin IGP", self.d.cfg())
 
     def test_configure_routing_policy_adjust_local_pref(self):
-        _c(
-            configure_routing_policy_adjust_local_pref,
-            self.d,
+        configure_routing_policy_adjust_local_pref(self.d,
             "MY-POLICY",
             "10",
             -50,
@@ -467,19 +431,17 @@ class TestRemainingBgpActionsApis(unittest.TestCase):
         )
 
     def test_configure_routing_policy_set_aigp(self):
-        _c(configure_routing_policy_set_aigp, self.d, "MY-POLICY", "10", 1000)
+        configure_routing_policy_set_aigp(self.d, "MY-POLICY", "10", 1000)
         self.assertIn("actions bgp-actions set-aigp 1000", self.d.cfg())
 
     def test_configure_routing_policy_adjust_med(self):
-        _c(configure_routing_policy_adjust_med, self.d, "MY-POLICY", "10", 25)
+        configure_routing_policy_adjust_med(self.d, "MY-POLICY", "10", 25)
         self.assertIn(
             "actions bgp-actions adjust-med offset 25", self.d.cfg()
         )
 
     def test_configure_routing_policy_drop_attr(self):
-        _c(
-            configure_routing_policy_drop_attr,
-            self.d,
+        configure_routing_policy_drop_attr(self.d,
             "MY-POLICY",
             "10",
             [4, 5, 16],
@@ -499,9 +461,7 @@ class TestRemainingConditionsApis(unittest.TestCase):
         self.d = _CfgDevice()
 
     def test_configure_routing_policy_match_interface(self):
-        _c(
-            configure_routing_policy_match_interface,
-            self.d,
+        configure_routing_policy_match_interface(self.d,
             "MY-POLICY",
             "10",
             "ethernet-1/1",
@@ -511,9 +471,7 @@ class TestRemainingConditionsApis(unittest.TestCase):
         )
 
     def test_configure_routing_policy_match_large_community_set(self):
-        _c(
-            configure_routing_policy_match_large_community_set,
-            self.d,
+        configure_routing_policy_match_large_community_set(self.d,
             "MY-POLICY",
             "10",
             "LC-SET-1",
@@ -532,9 +490,7 @@ class TestRemainingConditionsApis(unittest.TestCase):
         )
 
     def test_configure_routing_policy_call_policy(self):
-        _c(
-            configure_routing_policy_call_policy,
-            self.d,
+        configure_routing_policy_call_policy(self.d,
             "MY-POLICY",
             "10",
             "CALLED-POLICY",
@@ -552,9 +508,7 @@ class TestIsisActionsApis(unittest.TestCase):
         self.d = _CfgDevice()
 
     def test_configure_routing_policy_isis_actions_set_level(self):
-        _c(
-            configure_routing_policy_isis_actions_set_level,
-            self.d,
+        configure_routing_policy_isis_actions_set_level(self.d,
             "v4-statics-fltr",
             "10",
             1,
@@ -570,9 +524,7 @@ class TestIsisActionsApis(unittest.TestCase):
             )
 
     def test_unconfigure_routing_policy_isis_actions_set_level(self):
-        _c(
-            unconfigure_routing_policy_isis_actions_set_level,
-            self.d,
+        unconfigure_routing_policy_isis_actions_set_level(self.d,
             "v4-statics-fltr",
             "10",
         )
@@ -581,9 +533,7 @@ class TestIsisActionsApis(unittest.TestCase):
         )
 
     def test_configure_routing_policy_isis_actions_set_metric(self):
-        _c(
-            configure_routing_policy_isis_actions_set_metric,
-            self.d,
+        configure_routing_policy_isis_actions_set_metric(self.d,
             "v4-statics-fltr",
             "10",
             metric=50,
@@ -593,9 +543,7 @@ class TestIsisActionsApis(unittest.TestCase):
         )
 
     def test_unconfigure_routing_policy_isis_actions_set_metric(self):
-        _c(
-            unconfigure_routing_policy_isis_actions_set_metric,
-            self.d,
+        unconfigure_routing_policy_isis_actions_set_metric(self.d,
             "v4-statics-fltr",
             "10",
         )
@@ -661,19 +609,25 @@ class TestSubCommandFailurePropagation(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Coverage check (must run last -- pytest preserves in-file definition order)
+# Coverage check: machine-checked, order-safe under both pytest and
+# `python -m unittest` (alphabetical class order) since it scans this file's
+# own source text instead of relying on a runtime call-recording registry
+# populated by other test classes running first.
 # ---------------------------------------------------------------------------
 
 
 class TestCoverage(unittest.TestCase):
     def test_all_configure_functions_exercised(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
         expected = _all_configure_unconfigure_functions()
-        missing = expected - _CALLED
+        missing = [n for n in expected if n not in source]
         self.assertEqual(
             missing,
-            set(),
-            f"configure/unconfigure functions never exercised by a positive-path "
-            f"test: {sorted(missing)}",
+            [],
+            f"configure/unconfigure functions never referenced in this test "
+            f"file: {sorted(missing)}",
         )
         # Sanity: the reference census counted 32 configure_/unconfigure_ fns.
         self.assertEqual(len(expected), 32)

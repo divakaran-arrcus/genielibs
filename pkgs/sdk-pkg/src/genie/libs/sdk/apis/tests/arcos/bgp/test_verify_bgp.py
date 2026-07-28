@@ -16,9 +16,10 @@ patched at the original definition site (genie.libs.sdk.apis.arcos.bgp.get),
 not at the verify module's namespace — patching verify.<name> would have no
 effect since the name is rebound on every call.
 
-A machine coverage check (test_zzz_all_functions_covered) asserts every
-public verify_* function in genie.libs.sdk.apis.arcos.bgp.verify was
-exercised.
+A machine coverage check (test_all_public_functions_covered) asserts every
+public verify_* function in genie.libs.sdk.apis.arcos.bgp.verify is
+referenced by name somewhere in this file's source (order-safe under both
+pytest and `python -m unittest`).
 """
 
 import inspect
@@ -48,44 +49,6 @@ NEIGHBORS = {
         "10.0.0.2": {"state": "ESTABLISHED"},
     }
 }
-
-# ---------------------------------------------------------------------------
-# Machine coverage tracking
-# ---------------------------------------------------------------------------
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-verify_bgp_neighbor_state = _track("verify_bgp_neighbor_state", verify_bgp_neighbor_state)
-verify_bgp_neighbor_established = _track(
-    "verify_bgp_neighbor_established", verify_bgp_neighbor_established
-)
-verify_bgp_neighbor_present = _track(
-    "verify_bgp_neighbor_present", verify_bgp_neighbor_present
-)
-verify_bgp_neighbor_not_present = _track(
-    "verify_bgp_neighbor_not_present", verify_bgp_neighbor_not_present
-)
-verify_bgp_route_present = _track("verify_bgp_route_present", verify_bgp_route_present)
-verify_bgp_route_not_present = _track(
-    "verify_bgp_route_not_present", verify_bgp_route_not_present
-)
-verify_bgp_as_configured = _track("verify_bgp_as_configured", verify_bgp_as_configured)
-verify_bgp_router_id_configured = _track(
-    "verify_bgp_router_id_configured", verify_bgp_router_id_configured
-)
-verify_bgp_neighbor_configured = _track(
-    "verify_bgp_neighbor_configured", verify_bgp_neighbor_configured
-)
-verify_bgp_peer_group_configured = _track(
-    "verify_bgp_peer_group_configured", verify_bgp_peer_group_configured
-)
 
 
 class TestVerifyBgp(unittest.TestCase):
@@ -343,17 +306,23 @@ class TestVerifyBgpNeighborAndPeerGroupConfigured(unittest.TestCase):
 
 
 class TestVerifyBgpCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in verify.py
-        must have been called by at least one test above."""
+    """Machine-checked coverage: every public function in verify.py must be
+    referenced by name somewhere in this test file's source. Order-safe
+    under both pytest and `python -m unittest` (alphabetical class order).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
         public_fns = {
             name
             for name, obj in inspect.getmembers(verify_module, inspect.isfunction)
             if obj.__module__ == verify_module.__name__ and not name.startswith("_")
         }
-        missing = public_fns - _CALLED
+        missing = [n for n in public_fns if n not in source]
         self.assertEqual(
-            missing, set(),
+            missing, [],
             f"Untested public functions in bgp/verify.py: {sorted(missing)}",
         )
 

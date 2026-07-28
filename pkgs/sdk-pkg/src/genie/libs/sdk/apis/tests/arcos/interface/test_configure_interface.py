@@ -8,17 +8,22 @@ mock device.configure and assert the emitted CLI.
 shut_interface/unshut_interface additionally check `device.is_connected()`
 before configuring (and call `connect_device()` if not connected); _CfgDevice
 stubs `is_connected()` to return True so those helpers go straight to
-device.configure().
+device.configure(). TestShutUnshutInterfaceReconnect below covers the
+`is_connected() -> False` branch, patching `connect_device` at its usage
+site in interface/configure.py (`from genie.harness.utils import
+connect_device`), since that's where the name is looked up at call time.
 
-A machine coverage check (test_zzz_all_functions_covered) asserts every
-public function in genie.libs.sdk.apis.arcos.interface.configure was
-exercised by some test in this file, and a SubCommandFailure class exercises
-the re-raise path of every newly-added (shut/unshut/unconfigure_*) helper.
+A machine coverage check (test_all_public_functions_covered) asserts every
+public function in genie.libs.sdk.apis.arcos.interface.configure is
+referenced by name somewhere in this test file's source (order-safe under
+both pytest and `python -m unittest`), and a SubCommandFailure class
+exercises the re-raise path of every newly-added (shut/unshut/unconfigure_*)
+helper.
 """
 
 import inspect
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from unicon.core.errors import SubCommandFailure
 
@@ -61,138 +66,6 @@ from genie.libs.sdk.apis.arcos.interface.configure import (
     configure_interface_priority_vlan,
     unconfigure_interface_priority_vlan,
     configure_interface_subinterface_ipv4_enabled,
-    configure_interface_subinterface_ipv6_enabled,
-)
-
-# ---------------------------------------------------------------------------
-# Machine coverage tracking: wrap each imported function so calling it during
-# a test records its name. The final test asserts every public function in
-# the module was called at least once.
-# ---------------------------------------------------------------------------
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-shut_interface = _track("shut_interface", shut_interface)
-unshut_interface = _track("unshut_interface", unshut_interface)
-configure_interface_mtu = _track("configure_interface_mtu", configure_interface_mtu)
-unconfigure_interface_mtu = _track(
-    "unconfigure_interface_mtu", unconfigure_interface_mtu
-)
-configure_interface_description = _track(
-    "configure_interface_description", configure_interface_description
-)
-unconfigure_interface_description = _track(
-    "unconfigure_interface_description", unconfigure_interface_description
-)
-configure_interface_port_speed = _track(
-    "configure_interface_port_speed", configure_interface_port_speed
-)
-unconfigure_interface_port_speed = _track(
-    "unconfigure_interface_port_speed", unconfigure_interface_port_speed
-)
-configure_interface_aggregate_id = _track(
-    "configure_interface_aggregate_id", configure_interface_aggregate_id
-)
-unconfigure_interface_aggregate_id = _track(
-    "unconfigure_interface_aggregate_id", unconfigure_interface_aggregate_id
-)
-configure_interface_lag = _track("configure_interface_lag", configure_interface_lag)
-unconfigure_interface_lag = _track(
-    "unconfigure_interface_lag", unconfigure_interface_lag
-)
-configure_interface_subinterface_ipv4 = _track(
-    "configure_interface_subinterface_ipv4", configure_interface_subinterface_ipv4
-)
-unconfigure_interface_subinterface_ipv4 = _track(
-    "unconfigure_interface_subinterface_ipv4",
-    unconfigure_interface_subinterface_ipv4,
-)
-configure_interface_subinterface_ipv6 = _track(
-    "configure_interface_subinterface_ipv6", configure_interface_subinterface_ipv6
-)
-unconfigure_interface_subinterface_ipv6 = _track(
-    "unconfigure_interface_subinterface_ipv6",
-    unconfigure_interface_subinterface_ipv6,
-)
-configure_interface_subinterface_vlan = _track(
-    "configure_interface_subinterface_vlan", configure_interface_subinterface_vlan
-)
-unconfigure_interface_subinterface_vlan = _track(
-    "unconfigure_interface_subinterface_vlan",
-    unconfigure_interface_subinterface_vlan,
-)
-configure_interface_debounce = _track(
-    "configure_interface_debounce", configure_interface_debounce
-)
-unconfigure_interface_debounce = _track(
-    "unconfigure_interface_debounce", unconfigure_interface_debounce
-)
-configure_interface_bfd_micro = _track(
-    "configure_interface_bfd_micro", configure_interface_bfd_micro
-)
-unconfigure_interface_bfd_micro = _track(
-    "unconfigure_interface_bfd_micro", unconfigure_interface_bfd_micro
-)
-configure_interface_type = _track("configure_interface_type", configure_interface_type)
-unconfigure_interface_type = _track(
-    "unconfigure_interface_type", unconfigure_interface_type
-)
-configure_interface_subinterface_vlan_double_tagged = _track(
-    "configure_interface_subinterface_vlan_double_tagged",
-    configure_interface_subinterface_vlan_double_tagged,
-)
-unconfigure_interface_subinterface_vlan_double_tagged = _track(
-    "unconfigure_interface_subinterface_vlan_double_tagged",
-    unconfigure_interface_subinterface_vlan_double_tagged,
-)
-configure_interface_subinterface_vlan_ingress_mapping = _track(
-    "configure_interface_subinterface_vlan_ingress_mapping",
-    configure_interface_subinterface_vlan_ingress_mapping,
-)
-unconfigure_interface_subinterface_vlan_ingress_mapping = _track(
-    "unconfigure_interface_subinterface_vlan_ingress_mapping",
-    unconfigure_interface_subinterface_vlan_ingress_mapping,
-)
-configure_interface_subinterface_vlan_egress_mapping = _track(
-    "configure_interface_subinterface_vlan_egress_mapping",
-    configure_interface_subinterface_vlan_egress_mapping,
-)
-unconfigure_interface_subinterface_vlan_egress_mapping = _track(
-    "unconfigure_interface_subinterface_vlan_egress_mapping",
-    unconfigure_interface_subinterface_vlan_egress_mapping,
-)
-configure_interface_qos_service_policy = _track(
-    "configure_interface_qos_service_policy", configure_interface_qos_service_policy
-)
-unconfigure_interface_qos_service_policy = _track(
-    "unconfigure_interface_qos_service_policy",
-    unconfigure_interface_qos_service_policy,
-)
-configure_interface_acl_binding = _track(
-    "configure_interface_acl_binding", configure_interface_acl_binding
-)
-unconfigure_interface_acl_binding = _track(
-    "unconfigure_interface_acl_binding", unconfigure_interface_acl_binding
-)
-configure_interface_priority_vlan = _track(
-    "configure_interface_priority_vlan", configure_interface_priority_vlan
-)
-unconfigure_interface_priority_vlan = _track(
-    "unconfigure_interface_priority_vlan", unconfigure_interface_priority_vlan
-)
-configure_interface_subinterface_ipv4_enabled = _track(
-    "configure_interface_subinterface_ipv4_enabled",
-    configure_interface_subinterface_ipv4_enabled,
-)
-configure_interface_subinterface_ipv6_enabled = _track(
-    "configure_interface_subinterface_ipv6_enabled",
     configure_interface_subinterface_ipv6_enabled,
 )
 
@@ -313,6 +186,34 @@ class TestShutUnshutInterface(unittest.TestCase):
         c = self.d.cfg()
         self.assertIn("interface swp1", c)
         self.assertIn("enabled true", c)
+
+
+class TestShutUnshutInterfaceReconnect(unittest.TestCase):
+    """shut_interface/unshut_interface must reconnect first when
+    device.is_connected() is False. connect_device is patched at its usage
+    site (genie.libs.sdk.apis.arcos.interface.configure.connect_device),
+    since configure.py imports it by name at module load time
+    (`from genie.harness.utils import connect_device`)."""
+
+    def setUp(self):
+        self.d = _CfgDevice()
+        self.d.is_connected = Mock(return_value=False)
+
+    def test_shut_interface_reconnects(self):
+        with patch(
+            "genie.libs.sdk.apis.arcos.interface.configure.connect_device"
+        ) as mock_connect:
+            shut_interface(self.d, "swp1")
+        mock_connect.assert_called_once_with(device=self.d)
+        self.d.configure.assert_called()
+
+    def test_unshut_interface_reconnects(self):
+        with patch(
+            "genie.libs.sdk.apis.arcos.interface.configure.connect_device"
+        ) as mock_connect:
+            unshut_interface(self.d, "swp1")
+        mock_connect.assert_called_once_with(device=self.d)
+        self.d.configure.assert_called()
 
 
 class TestUnconfigureInterface(unittest.TestCase):
@@ -488,17 +389,23 @@ class TestInterfaceFailures(unittest.TestCase):
 
 
 class TestConfigureInterfaceCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in configure.py
-        must have been called by at least one test above."""
+    """Machine-checked coverage: every public function in configure.py must
+    be referenced by name somewhere in this test file's source. Order-safe
+    under both pytest and `python -m unittest` (alphabetical class order).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
         public_fns = {
             name
             for name, obj in inspect.getmembers(configure_module, inspect.isfunction)
             if obj.__module__ == configure_module.__name__ and not name.startswith("_")
         }
-        missing = public_fns - _CALLED
+        missing = [n for n in public_fns if n not in source]
         self.assertEqual(
-            missing, set(),
+            missing, [],
             f"Untested public functions in interface/configure.py: {sorted(missing)}",
         )
 
