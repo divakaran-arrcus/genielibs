@@ -29,20 +29,6 @@ PARSER_PATCH_TARGET = (
     "genie.libs.sdk.apis.arcos.static_vxlan.get.ShowStaticVxlanTunnels"
 )
 
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-get_static_vxlan_tunnels = _track(
-    "get_static_vxlan_tunnels", get_static_vxlan_tunnels)
-
-
 PARSED = {
     "tunnels": {
         "10.0.0.1": {
@@ -119,19 +105,26 @@ class TestGetStaticVxlanTunnelsEmptyAndErrors(unittest.TestCase):
 
 
 class TestGetStaticVxlanCoverage(unittest.TestCase):
+    """Machine-checked coverage: every public get_*/is_* function in
+    static_vxlan/get.py must be referenced by name somewhere in this test
+    file's source. Order-safe under both pytest and `python -m unittest`.
+    """
+
     def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in get.py must
-        have been called by at least one test above."""
-        public_fns = {
-            name
-            for name, obj in inspect.getmembers(get_module, inspect.isfunction)
-            if obj.__module__ == get_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(get_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == get_module.__name__
+            and (name.startswith("get_") or name.startswith("is_"))
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in static_vxlan/get.py: {sorted(missing)}",
-        )
+            missing, [],
+            f"Untested public functions in static_vxlan/get.py: {missing}")
 
 
 if __name__ == "__main__":

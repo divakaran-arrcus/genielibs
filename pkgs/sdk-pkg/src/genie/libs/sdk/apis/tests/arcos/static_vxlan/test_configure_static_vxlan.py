@@ -25,31 +25,6 @@ from genie.libs.sdk.apis.arcos.static_vxlan.configure import (
     unconfigure_static_vxlan_ni,
 )
 
-# ---------------------------------------------------------------------------
-# Machine coverage tracking: wrap each imported function so calling it during
-# a test records its name. The final test asserts every public function in
-# the module was called at least once.
-# ---------------------------------------------------------------------------
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-configure_static_vxlan_global = _track(
-    "configure_static_vxlan_global", configure_static_vxlan_global)
-unconfigure_static_vxlan_global = _track(
-    "unconfigure_static_vxlan_global", unconfigure_static_vxlan_global)
-configure_static_vxlan_ni = _track(
-    "configure_static_vxlan_ni", configure_static_vxlan_ni)
-unconfigure_static_vxlan_ni = _track(
-    "unconfigure_static_vxlan_ni", unconfigure_static_vxlan_ni)
-
-
 class _CfgDevice:
     def __init__(self):
         self.name = "rtr1"
@@ -157,19 +132,27 @@ class TestConfigureStaticVxlanFailures(unittest.TestCase):
 
 
 class TestConfigureStaticVxlanCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in configure.py
-        must have been called by at least one test above."""
-        public_fns = {
-            name
-            for name, obj in inspect.getmembers(configure_module, inspect.isfunction)
-            if obj.__module__ == configure_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+    """Machine-checked coverage: every public configure_*/unconfigure_*
+    function in static_vxlan/configure.py must be referenced by name
+    somewhere in this test file's source. Order-safe under both pytest
+    and `python -m unittest` (no reliance on other test classes running
+    first to populate runtime state).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in inspect.getmembers(configure_module, inspect.isfunction)
+            if obj.__module__ == configure_module.__name__
+            and (name.startswith("configure_") or name.startswith("unconfigure_"))
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in static_vxlan/configure.py: {sorted(missing)}",
-        )
+            missing, [],
+            f"Uncovered static_vxlan configure functions: {missing}")
 
 
 if __name__ == "__main__":

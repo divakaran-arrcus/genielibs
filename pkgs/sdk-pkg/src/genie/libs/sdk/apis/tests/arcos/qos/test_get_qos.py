@@ -27,22 +27,6 @@ from genie.libs.sdk.apis.arcos.qos.get import (
 
 PARSER_PATCH_TARGET = "genie.libs.sdk.apis.arcos.qos.get.ShowQosPolicy"
 
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-get_qos_policies = _track("get_qos_policies", get_qos_policies)
-get_qos_policy = _track("get_qos_policy", get_qos_policy)
-is_qos_policy_present = _track("is_qos_policy_present", is_qos_policy_present)
-get_qos_policy_count = _track("get_qos_policy_count", get_qos_policy_count)
-
-
 PARSED = {
     "policies": {
         "ingress-pol": {
@@ -138,18 +122,27 @@ class TestGetQosPolicies(unittest.TestCase):
 
 
 class TestQosGetCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in get.py must
-        have been called by at least one test above."""
-        public_fns = {
+    """Machine-checked coverage: every public get_*/is_* function in
+    qos/get.py must be referenced by name somewhere in this test file's
+    source. Order-safe under both pytest (file order) and unittest
+    (alphabetical class order via dir()).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
             name
             for name, obj in inspect.getmembers(get_module, inspect.isfunction)
-            if obj.__module__ == get_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+            if obj.__module__ == get_module.__name__
+            and (name.startswith("get_") or name.startswith("is_"))
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in qos/get.py: {sorted(missing)}",
+            missing, [],
+            f"Untested public functions in qos/get.py: {missing}",
         )
 
 

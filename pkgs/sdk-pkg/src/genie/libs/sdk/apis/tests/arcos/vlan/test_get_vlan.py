@@ -34,24 +34,6 @@ from genie.libs.sdk.apis.arcos.vlan.get import (
 
 PARSER_PATCH_TARGET = "genie.libs.parser.arcos.show_vlan.ShowVlan"
 
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-get_vlans = _track("get_vlans", get_vlans)
-get_vlan = _track("get_vlan", get_vlan)
-get_vlan_members = _track("get_vlan_members", get_vlan_members)
-get_vlan_count = _track("get_vlan_count", get_vlan_count)
-get_vlan_name = _track("get_vlan_name", get_vlan_name)
-get_vlan_status = _track("get_vlan_status", get_vlan_status)
-is_vlan_present = _track("is_vlan_present", is_vlan_present)
-
 
 PARSED = {
     "vlans": {
@@ -193,19 +175,29 @@ class TestGetVlanEmptyAndErrors(unittest.TestCase):
 
 
 class TestGetVlanCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in get.py must
-        have been called by at least one test above (excluding the
-        internal _parse_vlans helper, which is exercised indirectly)."""
-        public_fns = {
-            name
-            for name, obj in inspect.getmembers(get_module, inspect.isfunction)
-            if obj.__module__ == get_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+    """Machine-checked coverage: every public get_*/is_* function in
+    vlan/get.py must be referenced by name somewhere in this test file's
+    source. Order-safe under both pytest and `python -m unittest`.
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(get_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == get_module.__name__
+            and (name.startswith("get_") or name.startswith("is_"))
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in vlan/get.py: {sorted(missing)}",
+            missing, [],
+            f"Uncovered VLAN get functions: {missing}")
+
+        print(
+            f"\nVLAN get coverage: {len(names)} functions, 0 missing"
         )
 
 

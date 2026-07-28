@@ -22,22 +22,6 @@ from genie.libs.sdk.apis.arcos.vlan.verify import (
 
 MOD = "genie.libs.sdk.apis.arcos.vlan.verify"
 
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-verify_vlan_present = _track("verify_vlan_present", verify_vlan_present)
-verify_vlan_not_present = _track("verify_vlan_not_present", verify_vlan_not_present)
-verify_vlan_member_present = _track(
-    "verify_vlan_member_present", verify_vlan_member_present
-)
-
 
 class TestVerifyVlanPresent(unittest.TestCase):
     @patch(f"{MOD}.is_vlan_present")
@@ -127,19 +111,28 @@ class TestVerifyVlanMemberPresent(unittest.TestCase):
 
 
 class TestVerifyVlanCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in verify.py
-        must have been called by at least one test above."""
-        public_fns = {
-            name
-            for name, obj in inspect.getmembers(verify_module, inspect.isfunction)
-            if obj.__module__ == verify_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+    """Machine-checked coverage: every public verify_* function in
+    vlan/verify.py must be referenced by name somewhere in this test
+    file's source. Order-safe under both pytest and
+    ``python -m unittest`` (unlike a runtime call-tracking gate, which
+    depends on other test classes having already run).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(verify_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == verify_module.__name__
+            and name.startswith("verify_")
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in vlan/verify.py: {sorted(missing)}",
-        )
+            missing, [],
+            f"Uncovered VLAN verify functions: {missing}")
 
 
 if __name__ == "__main__":

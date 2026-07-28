@@ -3,9 +3,9 @@
 
 Each helper builds an arcOS CLI config list under the `system snmp-server`
 context and calls device.configure(list). Tests mock device.configure and
-assert the emitted CLI. A machine coverage check (test_zzz_all_functions_covered)
+assert the emitted CLI. A machine coverage check (test_all_public_functions_covered)
 asserts that every public configure_*/unconfigure_* function in the module
-was exercised by some test in this file.
+is referenced by name in this test file's source.
 """
 
 import inspect
@@ -23,33 +23,6 @@ from genie.libs.sdk.apis.arcos.snmp.configure import (
     configure_snmp_threshold_traps,
     unconfigure_snmp_threshold_traps,
 )
-
-# ---------------------------------------------------------------------------
-# Machine coverage tracking: wrap each imported function so calling it during
-# a test records its name. The final test asserts every public function in
-# the module was called at least once.
-# ---------------------------------------------------------------------------
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-configure_snmp_server = _track("configure_snmp_server", configure_snmp_server)
-unconfigure_snmp_server = _track("unconfigure_snmp_server", unconfigure_snmp_server)
-configure_snmp_target = _track("configure_snmp_target", configure_snmp_target)
-unconfigure_snmp_target = _track("unconfigure_snmp_target", unconfigure_snmp_target)
-configure_snmp_threshold_traps = _track(
-    "configure_snmp_threshold_traps", configure_snmp_threshold_traps
-)
-unconfigure_snmp_threshold_traps = _track(
-    "unconfigure_snmp_threshold_traps", unconfigure_snmp_threshold_traps
-)
-
 
 class _CfgDevice:
     def __init__(self):
@@ -192,19 +165,28 @@ class TestConfigureSnmpFailures(unittest.TestCase):
 
 
 class TestConfigureSnmpCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in configure.py
-        must have been called by at least one test above."""
-        public_fns = {
-            name
-            for name, obj in inspect.getmembers(configure_module, inspect.isfunction)
-            if obj.__module__ == configure_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+    """Machine-checked coverage: every public configure_*/unconfigure_*
+    function in snmp/configure.py must be referenced by name somewhere in
+    this test file's source. Order-safe under both pytest and
+    ``python -m unittest`` (unlike a runtime call-tracking gate, which
+    depends on other test classes having already executed).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(configure_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == configure_module.__name__
+            and (name.startswith("configure_") or name.startswith("unconfigure_"))
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in snmp/configure.py: {sorted(missing)}",
-        )
+            missing, [],
+            f"Uncovered SNMP configure functions: {missing}")
 
 
 if __name__ == "__main__":

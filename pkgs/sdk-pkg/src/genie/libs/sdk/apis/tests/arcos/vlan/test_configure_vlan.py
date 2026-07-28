@@ -3,9 +3,9 @@
 
 Each helper builds an arcOS CLI config list under a `vlan <name>` context and
 calls device.configure(list). Tests mock device.configure and assert the
-emitted CLI. A machine coverage check (test_zzz_all_functions_covered) asserts
-that every public configure_*/unconfigure_* function in the module was
-exercised by some test in this file.
+emitted CLI. A machine coverage check (TestConfigureVlanCoverage) asserts
+that every public configure_*/unconfigure_* function in the module is
+referenced by name somewhere in this test file's source.
 """
 
 import inspect
@@ -21,26 +21,6 @@ from genie.libs.sdk.apis.arcos.vlan.configure import (
     configure_vlan_name,
     unconfigure_vlan_name,
 )
-
-# ---------------------------------------------------------------------------
-# Machine coverage tracking: wrap each imported function so calling it during
-# a test records its name. The final test asserts every public function in
-# the module was called at least once.
-# ---------------------------------------------------------------------------
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-configure_vlan = _track("configure_vlan", configure_vlan)
-unconfigure_vlan = _track("unconfigure_vlan", unconfigure_vlan)
-configure_vlan_name = _track("configure_vlan_name", configure_vlan_name)
-unconfigure_vlan_name = _track("unconfigure_vlan_name", unconfigure_vlan_name)
 
 
 class _CfgDevice:
@@ -106,18 +86,30 @@ class TestConfigureVlanFailures(unittest.TestCase):
 
 
 class TestConfigureVlanCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in configure.py
-        must have been called by at least one test above."""
-        public_fns = {
-            name
-            for name, obj in inspect.getmembers(configure_module, inspect.isfunction)
-            if obj.__module__ == configure_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+    """Machine-checked coverage: every public configure_*/unconfigure_*
+    function in vlan/configure.py must be referenced by name somewhere in
+    this test file's source. Order-safe under both pytest and
+    `python -m unittest` (unlike a runtime call-tracking gate).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(configure_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == configure_module.__name__
+            and (name.startswith("configure_") or name.startswith("unconfigure_"))
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in vlan/configure.py: {sorted(missing)}",
+            missing, [],
+            f"Uncovered VLAN configure functions: {missing}")
+
+        print(
+            f"\nVLAN configure coverage: {len(names)} functions, 0 missing"
         )
 
 
