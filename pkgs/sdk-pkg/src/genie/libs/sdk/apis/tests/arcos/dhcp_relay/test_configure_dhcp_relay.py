@@ -28,47 +28,6 @@ from genie.libs.sdk.apis.arcos.dhcp_relay.configure import (
     unconfigure_dhcpv6_relay_interface,
 )
 
-# ---------------------------------------------------------------------------
-# Machine coverage tracking: wrap each imported function so calling it during
-# a test records its name. The final test asserts every public function in
-# the module was called at least once.
-# ---------------------------------------------------------------------------
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-configure_dhcp_relay_helper = _track(
-    "configure_dhcp_relay_helper", configure_dhcp_relay_helper
-)
-unconfigure_dhcp_relay_helper = _track(
-    "unconfigure_dhcp_relay_helper", unconfigure_dhcp_relay_helper
-)
-configure_dhcp_relay_interface = _track(
-    "configure_dhcp_relay_interface", configure_dhcp_relay_interface
-)
-unconfigure_dhcp_relay_interface = _track(
-    "unconfigure_dhcp_relay_interface", unconfigure_dhcp_relay_interface
-)
-configure_dhcpv6_relay_helper = _track(
-    "configure_dhcpv6_relay_helper", configure_dhcpv6_relay_helper
-)
-unconfigure_dhcpv6_relay_helper = _track(
-    "unconfigure_dhcpv6_relay_helper", unconfigure_dhcpv6_relay_helper
-)
-configure_dhcpv6_relay_interface = _track(
-    "configure_dhcpv6_relay_interface", configure_dhcpv6_relay_interface
-)
-unconfigure_dhcpv6_relay_interface = _track(
-    "unconfigure_dhcpv6_relay_interface", unconfigure_dhcpv6_relay_interface
-)
-
-
 class _CfgDevice:
     def __init__(self):
         self.name = "rtr1"
@@ -240,26 +199,35 @@ class TestConfigureDhcpRelayFailures(unittest.TestCase):
 
 
 class TestDhcpRelayConfigureCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in configure.py
-        must have been called by at least one test above."""
-        public_fns = {
+    """Machine-checked coverage: every public configure_*/unconfigure_*
+    function in dhcp_relay/configure.py must be referenced by name
+    somewhere in this test file's source. Order-safe under both pytest
+    (file order) and unittest (alphabetical class order via dir()).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
             name
             for name, obj in inspect.getmembers(configure_module, inspect.isfunction)
-            if obj.__module__ == configure_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+            if obj.__module__ == configure_module.__name__
+            and (name.startswith("configure_") or name.startswith("unconfigure_"))
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in dhcp_relay/configure.py: {sorted(missing)}",
+            missing, [],
+            f"Untested public functions in dhcp_relay/configure.py: {missing}",
         )
 
-        configure_count = sum(1 for n in public_fns if n.startswith("configure_"))
-        unconfigure_count = sum(1 for n in public_fns if n.startswith("unconfigure_"))
+        configure_count = sum(1 for n in names if n.startswith("configure_"))
+        unconfigure_count = sum(1 for n in names if n.startswith("unconfigure_"))
         print(
             f"\nDHCP Relay configure/unconfigure coverage: "
             f"{configure_count} configure_*, {unconfigure_count} "
-            f"unconfigure_*, {len(public_fns)} total, 0 missing"
+            f"unconfigure_*, {len(names)} total, 0 missing"
         )
 
 

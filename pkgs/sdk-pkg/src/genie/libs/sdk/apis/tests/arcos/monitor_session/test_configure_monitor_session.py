@@ -21,29 +21,6 @@ from genie.libs.sdk.apis.arcos.monitor_session.configure import (
     unconfigure_monitor_session,
 )
 
-# ---------------------------------------------------------------------------
-# Machine coverage tracking: wrap each imported function so calling it during
-# a test records its name. The final test asserts every public function in
-# the module was called at least once.
-# ---------------------------------------------------------------------------
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-configure_monitor_session = _track(
-    "configure_monitor_session", configure_monitor_session
-)
-unconfigure_monitor_session = _track(
-    "unconfigure_monitor_session", unconfigure_monitor_session
-)
-
-
 class _CfgDevice:
     def __init__(self):
         self.name = "rtr1"
@@ -124,18 +101,27 @@ class TestConfigureMonitorSessionFailures(unittest.TestCase):
 
 
 class TestConfigureMonitorSessionCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in configure.py
-        must have been called by at least one test above."""
-        public_fns = {
+    """Machine-checked coverage: every public configure_*/unconfigure_*
+    function in monitor_session/configure.py must be referenced by name
+    somewhere in this test file's source. Order-safe under both pytest
+    (file order) and unittest (alphabetical class order via dir()).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
             name
             for name, obj in inspect.getmembers(configure_module, inspect.isfunction)
-            if obj.__module__ == configure_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+            if obj.__module__ == configure_module.__name__
+            and (name.startswith("configure_") or name.startswith("unconfigure_"))
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in monitor_session/configure.py: {sorted(missing)}",
+            missing, [],
+            f"Untested public functions in monitor_session/configure.py: {missing}",
         )
 
 

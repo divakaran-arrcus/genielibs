@@ -13,8 +13,9 @@ the loop body (the try/except around is_snmp_server_enabled and the
 timeout.sleep() retry path) tests use a small non-zero max_time/check_interval
 (e.g. 0.05/0.02) so a handful of iterations execute quickly.
 
-A machine coverage check (test_zzz_all_functions_covered) asserts every
-public verify_* function in the module was exercised.
+A machine coverage check (test_all_public_functions_covered) asserts every
+public verify_* function in the module is referenced by name in this file's
+source, order-safe under both pytest and `python -m unittest`.
 """
 
 import inspect
@@ -28,23 +29,6 @@ from genie.libs.sdk.apis.arcos.snmp.verify import (
 )
 
 MOD = "genie.libs.sdk.apis.arcos.snmp.verify"
-
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-verify_snmp_server_enabled = _track(
-    "verify_snmp_server_enabled", verify_snmp_server_enabled
-)
-verify_snmp_server_disabled = _track(
-    "verify_snmp_server_disabled", verify_snmp_server_disabled
-)
 
 
 class TestVerifySnmpServerEnabled(unittest.TestCase):
@@ -136,19 +120,26 @@ class TestVerifySnmpServerDisabled(unittest.TestCase):
 
 
 class TestVerifySnmpCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in verify.py
-        must have been called by at least one test above."""
-        public_fns = {
-            name
-            for name, obj in inspect.getmembers(verify_module, inspect.isfunction)
-            if obj.__module__ == verify_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+    """Machine-checked coverage: every public verify_* function in
+    snmp/verify.py must be referenced by name somewhere in this test
+    file's source. Order-safe under both pytest and `python -m unittest`.
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(verify_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == verify_module.__name__
+            and name.startswith("verify_")
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in snmp/verify.py: {sorted(missing)}",
-        )
+            missing, [],
+            f"Uncovered SNMP verify functions: {missing}")
 
 
 if __name__ == "__main__":

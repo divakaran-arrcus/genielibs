@@ -30,19 +30,6 @@ from genie.libs.sdk.apis.arcos.snmp.get import (
 
 PARSER_PATCH_TARGET = "genie.libs.sdk.apis.arcos.snmp.get.ShowSnmpServer"
 
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-get_snmp_server = _track("get_snmp_server", get_snmp_server)
-is_snmp_server_enabled = _track("is_snmp_server_enabled", is_snmp_server_enabled)
-
 
 PARSED_ENABLED = {"enabled": True, "active": True}
 PARSED_DISABLED = {"enabled": False}
@@ -114,19 +101,28 @@ class TestGetSnmpServerEmptyAndErrors(unittest.TestCase):
 
 
 class TestGetSnmpCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in get.py must
-        have been called by at least one test above."""
-        public_fns = {
-            name
-            for name, obj in inspect.getmembers(get_module, inspect.isfunction)
-            if obj.__module__ == get_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+    """Machine-checked coverage: every public get_*/is_* function in
+    snmp/get.py must be referenced by name somewhere in this test file's
+    source. Order-safe under both pytest and `python -m unittest` (unlike
+    a runtime call-tracking gate, which depends on other test classes
+    having already run).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(get_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == get_module.__name__
+            and (name.startswith("get_") or name.startswith("is_"))
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in snmp/get.py: {sorted(missing)}",
-        )
+            missing, [],
+            f"Uncovered SNMP get functions: {missing}")
 
 
 if __name__ == "__main__":

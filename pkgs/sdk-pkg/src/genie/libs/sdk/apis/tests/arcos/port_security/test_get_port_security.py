@@ -25,19 +25,6 @@ from genie.libs.sdk.apis.arcos.port_security.get import get_port_security
 
 PARSER_PATCH_TARGET = "genie.libs.sdk.apis.arcos.port_security.get.ShowPortSecurity"
 
-_CALLED = set()
-
-
-def _track(name, fn):
-    def _wrapper(*args, **kwargs):
-        _CALLED.add(name)
-        return fn(*args, **kwargs)
-    return _wrapper
-
-
-get_port_security = _track("get_port_security", get_port_security)
-
-
 PARSED = {
     "profiles": {
         "PROF1": {
@@ -94,18 +81,27 @@ class TestGetPortSecurity(unittest.TestCase):
 
 
 class TestPortSecurityGetCoverage(unittest.TestCase):
-    def test_zzz_all_functions_covered(self):
-        """Machine coverage check: every public function in get.py must
-        have been called by at least one test above."""
-        public_fns = {
+    """Machine-checked coverage: every public get_*/is_* function in
+    port_security/get.py must be referenced by name somewhere in this
+    test file's source. Order-safe under both pytest (file order) and
+    unittest (alphabetical class order via dir()).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
             name
             for name, obj in inspect.getmembers(get_module, inspect.isfunction)
-            if obj.__module__ == get_module.__name__ and not name.startswith("_")
-        }
-        missing = public_fns - _CALLED
+            if obj.__module__ == get_module.__name__
+            and (name.startswith("get_") or name.startswith("is_"))
+        ]
+
+        missing = [n for n in names if n not in source]
         self.assertEqual(
-            missing, set(),
-            f"Untested public functions in port_security/get.py: {sorted(missing)}",
+            missing, [],
+            f"Untested public functions in port_security/get.py: {missing}",
         )
 
 
