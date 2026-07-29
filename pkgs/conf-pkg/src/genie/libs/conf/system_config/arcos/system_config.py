@@ -11,7 +11,6 @@ All commands are under ``system ...`` (global scope).
 
 from abc import ABC
 import logging
-from typing import Any, Dict, List
 
 from genie.decorator import managedattribute
 from genie.conf.base.attributes import AttributesHelper

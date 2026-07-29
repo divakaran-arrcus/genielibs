@@ -9,7 +9,7 @@ output that matches the ShowAclSet schema.
 """
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
 

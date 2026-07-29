@@ -2,7 +2,6 @@
 
 # Python
 import logging
-from typing import List, Optional
 
 # Unicon
 from unicon.core.errors import SubCommandFailure

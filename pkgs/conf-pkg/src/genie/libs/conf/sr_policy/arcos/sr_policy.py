@@ -14,7 +14,6 @@ Note: SR-Policy is only supported in the default network-instance.
 
 from abc import ABC
 import logging
-from typing import Any, Dict, List
 
 from genie.decorator import managedattribute
 from genie.conf.base.attributes import AttributesHelper

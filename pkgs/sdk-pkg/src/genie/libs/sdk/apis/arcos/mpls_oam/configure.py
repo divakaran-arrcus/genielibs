@@ -5,7 +5,6 @@ They execute ping/traceroute and return the output.
 """
 
 import logging
-from unicon.core.errors import SubCommandFailure
 
 log = logging.getLogger(__name__)
 

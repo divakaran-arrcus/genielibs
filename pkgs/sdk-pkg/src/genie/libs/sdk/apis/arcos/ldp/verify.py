@@ -10,7 +10,6 @@ and return a boolean result.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from genie.utils.timeout import Timeout
 

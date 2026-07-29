@@ -18,7 +18,6 @@ import inspect
 import unittest
 from unittest.mock import Mock
 
-from genie.libs.sdk.apis.arcos import mpls_oam as mpls_oam_pkg
 from genie.libs.sdk.apis.arcos.mpls_oam import configure as mpls_oam_configure
 from genie.libs.sdk.apis.arcos.mpls_oam.configure import (
     mpls_lsp_ping,

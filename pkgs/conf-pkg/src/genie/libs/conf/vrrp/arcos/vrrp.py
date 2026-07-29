@@ -20,7 +20,6 @@ CLI structure:
 
 from abc import ABC
 import logging
-from typing import Any, Dict
 
 from genie.decorator import managedattribute
 from genie.conf.base.attributes import AttributesHelper
