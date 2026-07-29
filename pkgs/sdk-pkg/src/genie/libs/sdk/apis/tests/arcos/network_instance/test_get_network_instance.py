@@ -12,7 +12,7 @@ ShowNetworkInstance.parse(), matching the ShowNetworkInstanceSchema.
 """
 
 import unittest
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
 from unicon.core.errors import SubCommandFailure

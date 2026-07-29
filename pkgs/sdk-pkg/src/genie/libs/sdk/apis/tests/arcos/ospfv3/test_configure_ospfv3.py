@@ -9,7 +9,7 @@ keyword is `OSPF3` (hierarchical), not `OSPFV3`.
 """
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from genie.libs.sdk.apis.arcos.ospfv3 import configure as ospfv3_configure
 from genie.libs.sdk.apis.arcos.ospfv3.configure import (

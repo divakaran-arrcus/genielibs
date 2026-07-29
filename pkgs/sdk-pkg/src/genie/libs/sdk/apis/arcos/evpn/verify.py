@@ -7,7 +7,6 @@ Verification helpers built on top of the ArcOS EVPN get APIs in
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from genie.utils.timeout import Timeout
 

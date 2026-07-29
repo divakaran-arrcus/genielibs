@@ -9,7 +9,7 @@ simplified dictionaries for common use cases.
 
 from __future__ import annotations
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import logging
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
 from unicon.core.errors import SubCommandFailure

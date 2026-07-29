@@ -9,7 +9,7 @@ imported into the ``get`` module and use a lightweight dummy device.
 """
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
 from unicon.core.errors import SubCommandFailure

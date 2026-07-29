@@ -1,4 +1,3 @@
-from .interface import *
 from .interface import Interface as _ArcosFeatureInterface
 
 # Enable abstraction using this directory name as the abstraction token

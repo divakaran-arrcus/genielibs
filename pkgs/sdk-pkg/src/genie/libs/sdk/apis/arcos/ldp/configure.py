@@ -207,8 +207,8 @@ def configure_ldp_interface(device, interface, ipv4_enabled=True):
     enabled_str = 'true' if ipv4_enabled else 'false'
     config = [
         f'{_LDP_CTX} interface-attributes interface {interface}',
-        f'link-hello true',
-        f'address-family IPV4',
+        'link-hello true',
+        'address-family IPV4',
         f'enabled {enabled_str}',
         '!',
         '!',

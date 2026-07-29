@@ -7,7 +7,7 @@ These functions wrap the BGP parsers and return simplified dictionaries
 for common use cases.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import logging
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
 from unicon.core.errors import SubCommandFailure
