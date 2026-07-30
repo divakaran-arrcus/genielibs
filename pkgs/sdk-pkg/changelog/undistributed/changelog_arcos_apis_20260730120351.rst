@@ -111,3 +111,34 @@
     * Added VRRP APIs:
         * configure/unconfigure, get, verify
     * Added unit tests for BGP, Interface, and ISIS get/verify/configure APIs
+
+--------------------------------------------------------------------------------
+                                Fix
+--------------------------------------------------------------------------------
+* ARCOS
+    * Fixed configure_isis_traffic_engineering_router_id /
+      unconfigure_isis_traffic_engineering_router_id emitting the wrong CLI
+      form (`global traffic-engineering {af} router-id ...`) instead of the
+      arcOS-required hyphenated token (`global traffic-engineering
+      {af}-router-id ...`); IPv6 TE router-id never landed on the device
+      under the old form.
+    * Fixed get_isis_flex_algo_definitions reading flexible-algorithms data
+      directly under the ISIS `global` key; ShowIsisConfig actually nests it
+      under `config.global.flexible-algorithms`, so the lookup always
+      returned empty.
+    * Fixed get_isis_route calling device.parse() with a trailing prefix
+      argument appended to the command string, which could not match the
+      registered parser command; switched to invoking the ShowIsisRoute
+      parser directly with a `prefix` parameter.
+    * Fixed get_interface_status and get_isis_system_id reading
+      admin_status/oper_status/system_id (underscore) instead of the
+      hyphenated OpenConfig keys (admin-status/oper-status/system-id) the
+      arcos parsers actually emit, so status/system-id lookups always
+      returned empty; also replaced get_isis_redis_route,
+      get_isis_redis_routes, and get_isis_lsp's fragile raw
+      device.execute()-plus-line-splitting logic with proper parser-backed
+      lookups.
+    * Fixed configure_static_route/unconfigure_static_route emitting
+      non-existent ArcOS CLI (`static-routes` / `route` / `next-hop`)
+      instead of the actual `protocol STATIC default` / `static-route` /
+      `next-hop-index` syntax.

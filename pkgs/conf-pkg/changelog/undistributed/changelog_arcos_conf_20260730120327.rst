@@ -24,8 +24,8 @@
     * Added Traffic Engineering configuration object (Te)
     * Added VLAN configuration object (Vlan)
     * Added VRRP configuration object (Vrrp)
-    * Added conf-object unit test coverage for the Interface and OSPF
-      config plugins.
+    * Added conf-object unit test coverage for the Interface, OSPF, and
+      OSPFv3 config plugins.
 
 --------------------------------------------------------------------------------
                                 Fix
