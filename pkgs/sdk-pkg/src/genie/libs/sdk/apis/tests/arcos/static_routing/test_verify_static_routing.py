@@ -27,6 +27,8 @@ from genie.libs.sdk.apis.arcos.static_routing.verify import (
 MOD = "genie.libs.sdk.apis.arcos.static_routing.verify"
 
 
+import inspect
+import genie.libs.sdk.apis.arcos.static_routing.verify as verify_module
 class _FakeTimeout:
     """Drop-in for genie.utils.timeout.Timeout with scripted iterate()
     results and an instant (no-op) sleep()."""
@@ -143,5 +145,30 @@ class TestVerifyStaticRouteTag(unittest.TestCase):
         self.assertEqual(m.call_count, 2)
 
 
+
+
+class TestStaticRoutingVerifyCoverage(unittest.TestCase):
+    """Machine-checked coverage: every public verify function in
+    static_routing/verify.py must be referenced by name somewhere in this test
+    file's source. Order-safe under both pytest and
+    ``python -m unittest`` (unlike a runtime call-tracking gate, which
+    depends on other test classes having already executed).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(verify_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == verify_module.__name__
+            and (name.startswith("verify_"))
+        ]
+
+        missing = [n for n in names if n not in source]
+        self.assertEqual(
+            missing, [],
+            f"Uncovered static_routing verify functions: {missing}")
 if __name__ == "__main__":
     unittest.main()

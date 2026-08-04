@@ -18,6 +18,8 @@ from genie.libs.sdk.apis.arcos.lag.verify import (
 MOD = "genie.libs.sdk.apis.arcos.lag.verify"
 
 
+import inspect
+import genie.libs.sdk.apis.arcos.lag.verify as verify_module
 class _DummyDevice:
     name = "rtr1"
 
@@ -125,5 +127,30 @@ class TestVerifyLagBondPresent(unittest.TestCase):
         )
 
 
+
+
+class TestLagVerifyCoverage(unittest.TestCase):
+    """Machine-checked coverage: every public verify function in
+    lag/verify.py must be referenced by name somewhere in this test
+    file's source. Order-safe under both pytest and
+    ``python -m unittest`` (unlike a runtime call-tracking gate, which
+    depends on other test classes having already executed).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(verify_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == verify_module.__name__
+            and (name.startswith("verify_"))
+        ]
+
+        missing = [n for n in names if n not in source]
+        self.assertEqual(
+            missing, [],
+            f"Uncovered lag verify functions: {missing}")
 if __name__ == "__main__":
     unittest.main()
