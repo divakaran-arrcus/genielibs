@@ -53,6 +53,7 @@ from genie.libs.sdk.apis.arcos.route_policy.verify import (
 )
 
 
+import genie.libs.sdk.apis.arcos.route_policy.verify as verify_module
 def _all_verify_functions():
     """All public verify_* functions defined in the module."""
     return {
@@ -288,5 +289,30 @@ class TestCoverage(unittest.TestCase):
         self.assertEqual(len(expected), 5)
 
 
+
+
+class TestRoutePolicyVerifyCoverage(unittest.TestCase):
+    """Machine-checked coverage: every public verify function in
+    route_policy/verify.py must be referenced by name somewhere in this test
+    file's source. Order-safe under both pytest and
+    ``python -m unittest`` (unlike a runtime call-tracking gate, which
+    depends on other test classes having already executed).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(verify_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == verify_module.__name__
+            and (name.startswith("verify_"))
+        ]
+
+        missing = [n for n in names if n not in source]
+        self.assertEqual(
+            missing, [],
+            f"Uncovered route_policy verify functions: {missing}")
 if __name__ == "__main__":
     unittest.main()

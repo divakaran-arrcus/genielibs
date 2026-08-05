@@ -64,6 +64,8 @@ PARSED_OUTPUT = {
 }
 
 
+import inspect
+import genie.libs.sdk.apis.arcos.static_routing.get as get_module
 def _device():
     d = Mock()
     d.name = "rtr1"
@@ -181,5 +183,30 @@ class TestGetStaticRoutesEmptyAndErrors(unittest.TestCase):
         self.assertEqual(get_static_routes(self.device, ni="vrf-missing"), {})
 
 
+
+
+class TestStaticRoutingGetCoverage(unittest.TestCase):
+    """Machine-checked coverage: every public get/is function in
+    static_routing/get.py must be referenced by name somewhere in this test
+    file's source. Order-safe under both pytest and
+    ``python -m unittest`` (unlike a runtime call-tracking gate, which
+    depends on other test classes having already executed).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(get_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == get_module.__name__
+            and (name.startswith("get_") or name.startswith("is_"))
+        ]
+
+        missing = [n for n in names if n not in source]
+        self.assertEqual(
+            missing, [],
+            f"Uncovered static_routing get functions: {missing}")
 if __name__ == "__main__":
     unittest.main()

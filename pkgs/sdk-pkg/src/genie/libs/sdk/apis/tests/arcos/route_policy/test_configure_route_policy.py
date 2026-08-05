@@ -71,6 +71,7 @@ from genie.libs.sdk.apis.arcos.route_policy.configure import (
 )
 
 
+import genie.libs.sdk.apis.arcos.route_policy.configure as configure_module
 def _all_configure_unconfigure_functions():
     """All public configure_*/unconfigure_* functions defined in the module."""
     return {
@@ -633,5 +634,30 @@ class TestCoverage(unittest.TestCase):
         self.assertEqual(len(expected), 32)
 
 
+
+
+class TestRoutePolicyConfigureCoverage(unittest.TestCase):
+    """Machine-checked coverage: every public configure/unconfigure function in
+    route_policy/configure.py must be referenced by name somewhere in this test
+    file's source. Order-safe under both pytest and
+    ``python -m unittest`` (unlike a runtime call-tracking gate, which
+    depends on other test classes having already executed).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(configure_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == configure_module.__name__
+            and (name.startswith("configure_") or name.startswith("unconfigure_"))
+        ]
+
+        missing = [n for n in names if n not in source]
+        self.assertEqual(
+            missing, [],
+            f"Uncovered route_policy configure functions: {missing}")
 if __name__ == "__main__":
     unittest.main()

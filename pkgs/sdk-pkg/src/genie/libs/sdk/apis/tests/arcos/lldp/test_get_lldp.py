@@ -80,6 +80,8 @@ INTERFACE_OUTPUT_SINGLE = {
 }
 
 
+import inspect
+import genie.libs.sdk.apis.arcos.lldp.get as get_module
 class _DummyDevice:
     def __init__(self):
         self.name = "rtr1"
@@ -191,5 +193,30 @@ class TestGetLldpNeighborCount(unittest.TestCase):
         self.assertEqual(get_lldp_neighbor_count(self.device), 0)
 
 
+
+
+class TestLldpGetCoverage(unittest.TestCase):
+    """Machine-checked coverage: every public get/is function in
+    lldp/get.py must be referenced by name somewhere in this test
+    file's source. Order-safe under both pytest and
+    ``python -m unittest`` (unlike a runtime call-tracking gate, which
+    depends on other test classes having already executed).
+    """
+
+    def test_all_public_functions_covered(self):
+        with open(__file__, "r") as f:
+            source = f.read()
+
+        names = [
+            name for name, obj in vars(get_module).items()
+            if inspect.isfunction(obj)
+            and obj.__module__ == get_module.__name__
+            and (name.startswith("get_") or name.startswith("is_"))
+        ]
+
+        missing = [n for n in names if n not in source]
+        self.assertEqual(
+            missing, [],
+            f"Uncovered lldp get functions: {missing}")
 if __name__ == "__main__":
     unittest.main()
