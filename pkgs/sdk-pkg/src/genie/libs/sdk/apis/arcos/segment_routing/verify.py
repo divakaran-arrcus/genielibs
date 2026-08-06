@@ -23,6 +23,7 @@ from genie.libs.sdk.apis.arcos.segment_routing.get import (
     get_srv6_locator_micro_segment_enabled,
     get_srv6_local_sids,
     get_srv6_local_sid_behavior,
+    get_mpls_reserved_label_block,
 )
 
 log = logging.getLogger(__name__)
@@ -511,4 +512,64 @@ def verify_srv6_local_sid_behavior(device, sid: str, behavior: str,
 
         timeout.sleep()
 
+    return False
+
+
+def verify_mpls_reserved_label_block(device, block_id: str,
+                                     lower_bound: Optional[int] = None,
+                                     upper_bound: Optional[int] = None,
+                                     usage: Optional[str] = None,
+                                     ni: str = 'default',
+                                     max_time: int = 30,
+                                     check_interval: int = 5) -> bool:
+    """Verify a reserved label block is present, optionally with given values.
+
+    Any of ``lower_bound`` / ``upper_bound`` / ``usage`` left as ``None`` is not
+    compared, so this doubles as a presence check.
+
+    ``usage`` comparison strips a YANG module prefix, because arcOS renders the
+    leaf as ``arcos-mpls:ISIS_SRGB`` while callers pass ``ISIS_SRGB``.
+
+    Args:
+        device: pyATS device object.
+        block_id: Label block local-id, e.g. ``'SRGB_BLOCK'``.
+        lower_bound: Expected lower bound, or ``None`` to skip.
+        upper_bound: Expected upper bound, or ``None`` to skip.
+        usage: Expected usage token, or ``None`` to skip.
+        ni: Network instance name (default: ``'default'``).
+        max_time: Maximum time to wait in seconds.
+        check_interval: Poll interval in seconds.
+
+    Returns:
+        True if the block matches within the timeout, False otherwise.
+    """
+    timeout = Timeout(max_time, check_interval)
+
+    while timeout.iterate():
+        try:
+            block = get_mpls_reserved_label_block(device, block_id, ni=ni)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error("reserved-label-block %s read failed: %s", block_id, exc)
+            block = None
+
+        if block:
+            checks = []
+            if lower_bound is not None:
+                checks.append(block.get("lower-bound") == lower_bound)
+            if upper_bound is not None:
+                checks.append(block.get("upper-bound") == upper_bound)
+            if usage is not None:
+                actual = str(block.get("usage") or "").split(":")[-1]
+                checks.append(actual == usage)
+            if all(checks):
+                log.info("reserved-label-block %s verified on %s",
+                         block_id, device.name)
+                return True
+            log.debug("reserved-label-block %s present but mismatched: %s",
+                      block_id, block)
+
+        timeout.sleep()
+
+    log.error("reserved-label-block %s not verified on %s within %ss",
+              block_id, device.name, max_time)
     return False
