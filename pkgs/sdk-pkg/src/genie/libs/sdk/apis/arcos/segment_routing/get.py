@@ -23,6 +23,9 @@ from genie.libs.parser.arcos.show_srv6 import (
 from genie.libs.parser.arcos.show_segment_routing import (
     ShowSrmsMappingsConfig,
 )
+from genie.libs.parser.arcos.show_mpls import (
+    ShowMplsReservedLabelBlockConfig,
+)
 
 log = logging.getLogger(__name__)
 
@@ -504,3 +507,67 @@ def get_srv6_local_sids_by_locator(device, locator_name: str,
         sid: entry for sid, entry in sids.items()
         if entry.get("locator_name") == locator_name
     }
+
+
+# ---------------------------------------------------------------------------
+# MPLS reserved label blocks (SRGB / SRLB)
+# ---------------------------------------------------------------------------
+
+def _parse_reserved_label_blocks(device, ni: str = 'default') -> Dict[str, Any]:
+    """Parse ``show running-config ... mpls global reserved-label-block``."""
+    try:
+        return ShowMplsReservedLabelBlockConfig(device=device).parse(
+            network_instance=ni
+        )
+    except SchemaEmptyParserError:
+        # No blocks configured. The device answers "% No entries found." here,
+        # which is a legitimate state, not an error.
+        log.debug("_parse_reserved_label_blocks: none configured for ni=%s", ni)
+        return {}
+    except SubCommandFailure as exc:
+        log.debug("_parse_reserved_label_blocks: SubCommandFailure - %s", exc)
+        return {}
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("_parse_reserved_label_blocks: unexpected error - %s", exc)
+        return {}
+
+
+def get_mpls_reserved_label_blocks(device, ni: str = 'default') -> Dict[str, Any]:
+    """Return ``{local_id: block_config}`` for every reserved label block.
+
+    Each value carries ``lower-bound`` / ``upper-bound`` and, when set, ``usage``,
+    ``protocol-identifier`` and ``protocol-name``.
+
+    ``usage`` is Optional in the parser schema for a real reason: arcOS rejects an
+    unknown usage token as ``syntax error: unknown element`` but still commits the
+    rest of the block, so a block created with a bad token exists WITHOUT a usage
+    leaf. An absent ``usage`` here means exactly that.
+
+    Args:
+        device: pyATS device object.
+        ni: Network instance name (default: ``'default'``).
+
+    Returns:
+        Mapping of local-id to the block's config dict; ``{}`` when none exist.
+    """
+    parsed = _parse_reserved_label_blocks(device, ni=ni)
+    return (
+        ((parsed.get("network-instance") or {}).get(ni) or {})
+        .get("mpls", {})
+        .get("reserved-label-blocks", {})
+    ) or {}
+
+
+def get_mpls_reserved_label_block(device, block_id: str,
+                                  ni: str = 'default') -> Optional[Dict[str, Any]]:
+    """Return one reserved label block's config, or ``None`` when absent.
+
+    Args:
+        device: pyATS device object.
+        block_id: Label block local-id, e.g. ``'SRGB_BLOCK'``.
+        ni: Network instance name (default: ``'default'``).
+
+    Returns:
+        The block's config dict, or ``None``.
+    """
+    return get_mpls_reserved_label_blocks(device, ni=ni).get(block_id)
