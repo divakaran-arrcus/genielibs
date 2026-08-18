@@ -9,16 +9,29 @@ _MPLS_TE_CTX = 'network-instance default mpls mpls-te'
 _RSVP_CTX = 'network-instance default protocol RSVP default'
 
 
-def configure_rsvp_te_interface(device, interface, metric=None):
+def configure_rsvp_te_interface(device, interface, metric=None, enabled=True):
     """Configure MPLS-TE on an interface.
 
     Args:
         device: Device object.
         interface: Interface name.
         metric: Optional TE metric (0-4294967295).
+        enabled: Enable or DISABLE MPLS-TE on the interface. Defaults to True.
+
+    Note:
+        The ``enabled`` parameter was added by missing-API batch T1-06. This
+        function previously hardcoded ``enable true``, so there was no way to
+        emit ``enable false`` — the gap the config-coverage audit flagged as a
+        partial API. The default is True, so existing callers are unaffected.
+        Device help confirms the leaf's own default is also true
+        (`mpls mpls-te interface <i> ?` on rtr1 2026-08-17).
     """
-    log.info(f"Configuring MPLS-TE interface {interface} on {device.name}")
-    config = [f'{_MPLS_TE_CTX} interface {interface}', 'enable true']
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} MPLS-TE interface {interface} "
+        f"on {device.name}"
+    )
+    config = [f'{_MPLS_TE_CTX} interface {interface}',
+              f'enable {str(enabled).lower()}']
     if metric is not None:
         config.append(f'metric {metric}')
     config.append('!')
