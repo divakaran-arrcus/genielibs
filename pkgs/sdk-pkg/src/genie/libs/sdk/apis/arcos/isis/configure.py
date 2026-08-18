@@ -8668,6 +8668,15 @@ def configure_isis_interface_ipv4_fast_reroute_ip(device, interface, enabled=Tru
     Distinct from :func:`configure_isis_interface_ipv4_ti_lfa_sr_mpls`, which
     sets ``fast-reroute ti-lfa sr-mpls enabled`` in the same submode.
 
+    Note:
+        Entering ``af <AF> UNICAST`` creates the AF container but does NOT
+        enable it — verified on rtr1 2026-08-18: after this call the interface
+        shows ``af IPV4 UNICAST`` with only ``fast-reroute ip enabled true``
+        under it, and no ``enabled`` leaf. IS-IS.adoc:1495 notes that an
+        address family which is not explicitly enabled under an interface is
+        not active for that interface, so enable the AF separately (e.g.
+        :func:`configure_isis_interface_ipv4`) for IP-FRR to take effect.
+
     Args:
         device (obj): Device object
         interface (str): Interface name (e.g. 'swp1', 'ethernet-1/1').
@@ -8770,6 +8779,15 @@ def configure_isis_interface_ipv6_fast_reroute_ip(device, interface, enabled=Tru
             fast-reroute ip enabled {true|false}
 
     adoc: IS-IS.adoc:1505 — ``(config-af-IPV6/UNICAST)# fast-reroute ip enabled true``.
+
+    Note:
+        Entering ``af <AF> UNICAST`` creates the AF container but does NOT
+        enable it — verified on rtr1 2026-08-18: after this call the interface
+        shows ``af IPV4 UNICAST`` with only ``fast-reroute ip enabled true``
+        under it, and no ``enabled`` leaf. IS-IS.adoc:1495 notes that an
+        address family which is not explicitly enabled under an interface is
+        not active for that interface, so enable the AF separately (e.g.
+        :func:`configure_isis_interface_ipv4`) for IP-FRR to take effect.
 
     Args:
         device (obj): Device object
