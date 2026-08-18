@@ -3479,3 +3479,3472 @@ def unconfigure_bgp_neighbor_max_prefix(device, neighbor, afi_safi,
             f"Could not remove BGP neighbor {neighbor} {afi_safi} "
             f"prefix-limit on {device.name}. Error:\n{e}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Missing-API backlog batch T1-01 — session, transport & security
+# (arcos_pyats_sanity/docs/config-coverage/02-bgp-policy-redist.md)
+#
+# Every CLI line traces to Command_Line_Interface/Border_Gateway_Protocol.adoc;
+# the cited line is in each docstring. Leaf names were additionally confirmed
+# against `neighbor <ip> ?` on rtr1 2026-08-17, which corrected three audit rows:
+# `ttl-security` is really the direct leaf `ttl-security-hops`; "fast-deactivation"
+# is really `disable-fast-deactivation` (inverted sense); and inbound
+# soft-reconfiguration lives under the neighbor's AFI/SAFI, not the neighbor.
+#
+# Every list is flat — no submode is entered, so nothing emits `exit`.
+# ---------------------------------------------------------------------------
+
+#: Accepted values for ``configure_bgp_neighbor_remove_private_as(mode=...)``.
+#: Device-confirmed enum (rtr1, `neighbor <ip> remove-private-as ?`).
+BGP_REMOVE_PRIVATE_AS_MODES = ('PRIVATE_AS_REMOVE_ALL', 'PRIVATE_AS_REPLACE_ALL')
+
+
+def configure_bgp_neighbor_ebgp_local_as(device, neighbor, local_as,
+                                         no_prepend=None, replace_as=None,
+                                         dual_as=None,
+                                         network_instance='default',
+                                         protocol_instance='default'):
+    """Configure the eBGP local-AS override for a neighbor.
+
+    adoc: Border_Gateway_Protocol.adoc:1508-1511
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        local_as (int): Local AS number advertised to this neighbor.
+        no_prepend (bool, optional): Suppress prepending the local AS. Defaults to None (unset).
+        replace_as (bool, optional): Replace the real AS with the local AS. Defaults to None.
+        dual_as (bool, optional): Accept the peer using either AS. Defaults to None.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the eBGP local-AS
+
+    Example:
+        >>> configure_bgp_neighbor_ebgp_local_as(
+        ...     device, neighbor='220.1.11.1', local_as=58067, replace_as=True)
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} ebgp-local-as {local_as} on "
+        f"{device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'ebgp-local-as local-as {local_as}']
+    if no_prepend is not None:
+        config.append(f'ebgp-local-as no-prepend {str(no_prepend).lower()}')
+    if replace_as is not None:
+        config.append(f'ebgp-local-as replace-as {str(replace_as).lower()}')
+    if dual_as is not None:
+        config.append(f'ebgp-local-as dual-as {str(dual_as).lower()}')
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} ebgp-local-as {local_as} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_ebgp_local_as(device, neighbor,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Remove the eBGP local-AS configuration from a neighbor.
+
+    Removes the whole ``ebgp-local-as`` container, including any no-prepend /
+    replace-as / dual-as sub-leaves set by the configure counterpart.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the eBGP local-AS
+
+    Example:
+        >>> unconfigure_bgp_neighbor_ebgp_local_as(device, neighbor='220.1.11.1')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} ebgp-local-as from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no ebgp-local-as', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} ebgp-local-as on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_remove_private_as(device, neighbor, mode,
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Configure removal of private AS numbers towards a neighbor.
+
+    adoc: Border_Gateway_Protocol.adoc:1521
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        mode (str): One of :data:`BGP_REMOVE_PRIVATE_AS_MODES` —
+            ``'PRIVATE_AS_REMOVE_ALL'`` or ``'PRIVATE_AS_REPLACE_ALL'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``mode`` is not one of the two accepted values
+        SubCommandFailure: Failed to configure remove-private-as
+
+    Example:
+        >>> configure_bgp_neighbor_remove_private_as(
+        ...     device, neighbor='10.1.1.2', mode='PRIVATE_AS_REMOVE_ALL')
+    """
+    if mode not in BGP_REMOVE_PRIVATE_AS_MODES:
+        raise ValueError(
+            f"Invalid remove-private-as mode '{mode}'. Must be one of: "
+            f"{', '.join(BGP_REMOVE_PRIVATE_AS_MODES)}"
+        )
+
+    log.info(
+        f"Configuring BGP neighbor {neighbor} remove-private-as {mode} on "
+        f"{device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'remove-private-as {mode}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} remove-private-as "
+            f"{mode} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_remove_private_as(device, neighbor,
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Remove the remove-private-as configuration from a neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove remove-private-as
+
+    Example:
+        >>> unconfigure_bgp_neighbor_remove_private_as(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} remove-private-as from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no remove-private-as', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} remove-private-as on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_as_path_options(device, neighbor, allow_own_as=None,
+                                           replace_peer_as=None,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Configure AS-path handling options for a neighbor.
+
+    adoc: Border_Gateway_Protocol.adoc:1545,1554
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        allow_own_as (int, optional): Times the local AS may appear in a received
+            AS-path before the route is rejected. Defaults to None (unset).
+        replace_peer_as (bool, optional): Replace the peer AS in outbound AS-paths.
+            Defaults to None (unset).
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If neither option is supplied
+        SubCommandFailure: Failed to configure as-path-options
+
+    Example:
+        >>> configure_bgp_neighbor_as_path_options(
+        ...     device, neighbor='220.1.11.1', allow_own_as=3)
+    """
+    if allow_own_as is None and replace_peer_as is None:
+        raise ValueError(
+            "configure_bgp_neighbor_as_path_options requires at least one of "
+            "'allow_own_as' or 'replace_peer_as'"
+        )
+
+    log.info(
+        f"Configuring BGP neighbor {neighbor} as-path-options on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context]
+    if allow_own_as is not None:
+        config.append(f'as-path-options allow-own-as {allow_own_as}')
+    if replace_peer_as is not None:
+        config.append(f'as-path-options replace-peer-as {str(replace_peer_as).lower()}')
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} as-path-options on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_as_path_options(device, neighbor,
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Remove AS-path options from a neighbor.
+
+    Removes the whole ``as-path-options`` container, covering both allow-own-as
+    and replace-peer-as.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove as-path-options
+
+    Example:
+        >>> unconfigure_bgp_neighbor_as_path_options(device, neighbor='220.1.11.1')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} as-path-options from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no as-path-options', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} as-path-options on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_ebgp_multihop(device, neighbor, multihop_ttl,
+                                         network_instance='default',
+                                         protocol_instance='default'):
+    """Configure the eBGP multihop TTL for a neighbor.
+
+    adoc: Border_Gateway_Protocol.adoc:1564
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        multihop_ttl (int): TTL for the eBGP session. Device default is 1, i.e.
+            directly-connected peers only.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the eBGP multihop TTL for a neighbor
+
+    Example:
+        >>> configure_bgp_neighbor_ebgp_multihop(
+        ...     device, neighbor='220.1.11.1', multihop_ttl=5)
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} ebgp-multihop on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'ebgp-multihop multihop-ttl {multihop_ttl}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} ebgp-multihop on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_ebgp_multihop(device, neighbor,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Remove the eBGP multihop TTL for a neighbor from a neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the eBGP multihop TTL for a neighbor
+
+    Example:
+        >>> unconfigure_bgp_neighbor_ebgp_multihop(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} ebgp-multihop from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no ebgp-multihop', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} ebgp-multihop on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_ttl_security_hops(device, neighbor, hops,
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Configure the GTSM ttl-security hop count for a neighbor.
+
+    adoc: Border_Gateway_Protocol.adoc:1575
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        hops (int): Maximum number of TTL hops to the neighbor.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the GTSM ttl-security hop count for a neighbor
+
+    Example:
+        >>> configure_bgp_neighbor_ttl_security_hops(
+        ...     device, neighbor='220.1.11.1', hops=1)
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} ttl-security-hops on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'ttl-security-hops {hops}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} ttl-security-hops on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_ttl_security_hops(device, neighbor,
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Remove the GTSM ttl-security hop count for a neighbor from a neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the GTSM ttl-security hop count for a neighbor
+
+    Example:
+        >>> unconfigure_bgp_neighbor_ttl_security_hops(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} ttl-security-hops from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no ttl-security-hops', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} ttl-security-hops on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_auth_password(device, neighbor, password,
+                                         network_instance='default',
+                                         protocol_instance='default'):
+    """Configure the MD5 authentication password for a neighbor.
+
+    adoc: Border_Gateway_Protocol.adoc:1586
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        password (str): Authentication password. Max 80 characters.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the MD5 authentication password for a neighbor
+
+    Note:
+        arcOS stores this ENCRYPTED — `show running-config` never displays the
+        plaintext (adoc:1593). Verification must assert the leaf's presence, not
+        its value.
+
+    Example:
+        >>> configure_bgp_neighbor_auth_password(
+        ...     device, neighbor='220.1.11.1', password='arrcus')
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} auth-password on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'auth-password {password}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} auth-password on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_auth_password(device, neighbor,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Remove the MD5 authentication password for a neighbor from a neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the MD5 authentication password for a neighbor
+
+    Example:
+        >>> unconfigure_bgp_neighbor_auth_password(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} auth-password from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no auth-password', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} auth-password on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_dscp(device, neighbor, dscp,
+                                network_instance='default',
+                                protocol_instance='default'):
+    """Configure the DSCP value for a neighbor's BGP packets.
+
+    adoc: Border_Gateway_Protocol.adoc:1602
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        dscp (int): DSCP value, 0..63.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``dscp`` is not an integer in 0..63
+        SubCommandFailure: Failed to configure the DSCP value for a neighbor's BGP packets
+
+    Example:
+        >>> configure_bgp_neighbor_dscp(
+        ...     device, neighbor='10.1.1.2', dscp=56)
+    """
+    if not isinstance(dscp, int) or isinstance(dscp, bool) or not 0 <= dscp <= 63:
+        raise ValueError(
+            f"Invalid DSCP value '{dscp}'. Must be an integer in 0..63."
+        )
+
+    log.info(
+        f"Configuring BGP neighbor {neighbor} dscp on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'dscp {dscp}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} dscp on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_dscp(device, neighbor,
+                                  network_instance='default',
+                                  protocol_instance='default'):
+    """Remove the DSCP value for a neighbor's BGP packets from a neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the DSCP value for a neighbor's BGP packets
+
+    Example:
+        >>> unconfigure_bgp_neighbor_dscp(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} dscp from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no dscp', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} dscp on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_transport_tcp_mss(device, neighbor, tcp_mss,
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Configure the TCP MSS for a neighbor's transport session.
+
+    adoc: Border_Gateway_Protocol.adoc:583
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        tcp_mss (int): TCP maximum segment size.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the TCP MSS for a neighbor's transport session
+
+    Example:
+        >>> configure_bgp_neighbor_transport_tcp_mss(
+        ...     device, neighbor='2.2.2.2', tcp_mss=1000)
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} transport tcp-mss on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'transport tcp-mss {tcp_mss}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} transport tcp-mss on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_transport_tcp_mss(device, neighbor,
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Remove the TCP MSS for a neighbor's transport session from a neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the TCP MSS for a neighbor's transport session
+
+    Example:
+        >>> unconfigure_bgp_neighbor_transport_tcp_mss(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} transport tcp-mss from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no transport tcp-mss', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} transport tcp-mss on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_transport_passive_mode(device, neighbor, enabled=True,
+                                                  network_instance='default',
+                                                  protocol_instance='default'):
+    """Configure passive-mode transport for a neighbor.
+
+    adoc: Border_Gateway_Protocol.adoc:1373
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        enabled (bool, optional): When True the local speaker does not initiate the
+            TCP connection; the peer must. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure passive-mode transport for a neighbor
+
+    Example:
+        >>> configure_bgp_neighbor_transport_passive_mode(
+        ...     device, neighbor='220.1.11.1', enabled=True)
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} transport passive-mode on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'transport passive-mode {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} transport passive-mode on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_transport_passive_mode(device, neighbor,
+                                                    network_instance='default',
+                                                    protocol_instance='default'):
+    """Remove passive-mode transport for a neighbor from a neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove passive-mode transport for a neighbor
+
+    Example:
+        >>> unconfigure_bgp_neighbor_transport_passive_mode(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} transport passive-mode from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no transport passive-mode', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} transport passive-mode on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_enforce_first_as(device, neighbor, enabled=True,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Configure enforce-first-AS checking for a neighbor.
+
+    adoc: Border_Gateway_Protocol.adoc:1139
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        enabled (bool, optional): Require the peer's AS to be first in the received
+            AS-path. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure enforce-first-AS checking for a neighbor
+
+    Example:
+        >>> configure_bgp_neighbor_enforce_first_as(
+        ...     device, neighbor='192.1.1.1', enabled=False)
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} enforce-first-as on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'enforce-first-as {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} enforce-first-as on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_enforce_first_as(device, neighbor,
+                                              network_instance='default',
+                                              protocol_instance='default'):
+    """Remove enforce-first-AS checking for a neighbor from a neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove enforce-first-AS checking for a neighbor
+
+    Example:
+        >>> unconfigure_bgp_neighbor_enforce_first_as(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} enforce-first-as from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no enforce-first-as', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} enforce-first-as on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_disable_fast_deactivation(device, neighbor, disabled=True,
+                                                     network_instance='default',
+                                                     protocol_instance='default'):
+    """Configure BGP fast session deactivation for a neighbor.
+
+    adoc: Border_Gateway_Protocol.adoc:1379
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        disabled (bool, optional): True DISABLES fast deactivation, so the session
+            survives a local interface going down until the hold timer expires.
+            Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP fast session deactivation for a neighbor
+
+    Note:
+        This leaf carries INVERTED sense. Fast deactivation is ON by default on
+        arcOS; this command turns it off. ``disabled=True`` therefore means "do
+        not deactivate fast". The config-coverage audit listed this knob as
+        `fast-deactivation`; the real leaf is `disable-fast-deactivation`
+        (confirmed on rtr1).
+
+    Example:
+        >>> configure_bgp_neighbor_disable_fast_deactivation(
+        ...     device, neighbor='10.1.1.2', disabled=True)
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} disable-fast-deactivation on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'disable-fast-deactivation {str(disabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} disable-fast-deactivation on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_disable_fast_deactivation(device, neighbor,
+                                                       network_instance='default',
+                                                       protocol_instance='default'):
+    """Remove BGP fast session deactivation for a neighbor from a neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove BGP fast session deactivation for a neighbor
+
+    Example:
+        >>> unconfigure_bgp_neighbor_disable_fast_deactivation(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} disable-fast-deactivation from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, 'no disable-fast-deactivation', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} disable-fast-deactivation on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_inbound_soft_reconfiguration(device, neighbor, afi_safi,
+                                                        enabled=True,
+                                                        network_instance='default',
+                                                        protocol_instance='default'):
+    """Enable or disable inbound soft-reconfiguration for a neighbor AFI/SAFI.
+
+    adoc: Border_Gateway_Protocol.adoc:1698-1704
+
+    Emitted as ONE line rather than entering the ``afi-safi`` submode, matching
+    this file's flat convention (cf. ``transport local-address``) and avoiding any
+    window in which a following leaf could land at neighbor scope.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        afi_safi (str): AFI/SAFI, e.g. ``'IPV4_UNICAST'`` or ``'IPV6_UNICAST'``.
+        enabled (bool, optional): Retain pre-policy routes received from the
+            neighbor. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure inbound soft-reconfiguration
+
+    Note:
+        Enabling triggers an automatic route refresh. DISABLING bounces the
+        session — it goes down for cleanup before returning to Established
+        (adoc:1695). Not a non-disruptive toggle.
+
+    Note:
+        PREREQUISITE (commit-time, not parse-time): the BGP *global* AF must
+        already exist or the commit aborts with::
+
+            Aborted: '... afi-safi IPV4_UNICAST afi-safi-name'
+            (value "oc-bgp-types:IPV4_UNICAST"): BGP global AF must be
+            configured first.
+
+        Call :func:`configure_bgp_global_afi_safi` for the same ``afi_safi``
+        first. Confirmed on rtr1 2026-08-17 — this line parses fine and fails
+        only at commit, so a caller gets no warning until the commit.
+
+    Example:
+        >>> configure_bgp_neighbor_inbound_soft_reconfiguration(
+        ...     device, neighbor='220.1.12.1', afi_safi='IPV4_UNICAST')
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} afi-safi {afi_safi} "
+        f"inbound-soft-reconfiguration on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [
+        nbr_context,
+        f'afi-safi {afi_safi} inbound-soft-reconfiguration {str(enabled).lower()}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} afi-safi {afi_safi} "
+            f"inbound-soft-reconfiguration on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_inbound_soft_reconfiguration(device, neighbor, afi_safi,
+                                                          network_instance='default',
+                                                          protocol_instance='default'):
+    """Remove inbound soft-reconfiguration from a neighbor AFI/SAFI.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        afi_safi (str): AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove inbound soft-reconfiguration
+
+    Note:
+        Removing this bounces the session, exactly as disabling it does — see the
+        configure counterpart.
+
+    Example:
+        >>> unconfigure_bgp_neighbor_inbound_soft_reconfiguration(
+        ...     device, neighbor='220.1.12.1', afi_safi='IPV4_UNICAST')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} afi-safi {afi_safi} "
+        f"inbound-soft-reconfiguration from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [
+        nbr_context,
+        f'no afi-safi {afi_safi} inbound-soft-reconfiguration',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} afi-safi {afi_safi} "
+            f"inbound-soft-reconfiguration on {device.name}. Error:\n{e}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Missing-API backlog batch T1-02 — route-reflection, dynamic peering & AF knobs
+# (arcos_pyats_sanity/docs/config-coverage/02-bgp-policy-redist.md)
+#
+# Scopes were confirmed against `?` completions on rtr1 2026-08-17, correcting
+# three audit rows:
+#   * `dynamic-neighbor-prefix` sits at PROTOCOL level, not under `global`.
+#   * `add-paths eligible-prefix-policy` sits under GLOBAL afi-safi, not the
+#     neighbor's afi-safi (the neighbor's add-paths has only send/receive).
+#   * `retain-route-target-all` is valid only under GLOBAL **VPN** AFI/SAFIs
+#     (L3VPN_IPV4_UNICAST / L3VPN_IPV6_UNICAST / L2VPN_EVPN) and is a bare
+#     presence leaf with no value.
+#
+# All lists are flat — no submode is entered, so nothing emits `exit`.
+# ---------------------------------------------------------------------------
+
+
+def configure_bgp_neighbor_route_reflector_client(device, neighbor, enabled=True,
+                                                  network_instance='default',
+                                                  protocol_instance='default'):
+    """Configure a neighbor as a route-reflector client.
+
+    adoc: Border_Gateway_Protocol.adoc:940,1092
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        enabled (bool, optional): Treat the peer as an RR client. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure a neighbor as a route-reflector client
+
+    Example:
+        >>> configure_bgp_neighbor_route_reflector_client(
+        ...     device, neighbor='192.1.1.2', enabled=True)
+    """
+    log.info(
+        f"Configuring BGP neighbor route reflector client on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, f'route-reflector route-reflector-client {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor route reflector client on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_route_reflector_client(device, neighbor, network_instance='default',
+                                                    protocol_instance='default'):
+    """Remove a neighbor as a route-reflector client.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove a neighbor as a route-reflector client
+
+    Example:
+        >>> unconfigure_bgp_neighbor_route_reflector_client(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor route reflector client from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, 'no route-reflector route-reflector-client', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor route reflector client from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_route_server_client(device, neighbor, enabled=True,
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Configure a neighbor as a route-server client.
+
+    adoc: Border_Gateway_Protocol.adoc:1128
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        enabled (bool, optional): Treat the peer as a route-server client. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure a neighbor as a route-server client
+
+    Example:
+        >>> configure_bgp_neighbor_route_server_client(
+        ...     device, neighbor='192.1.1.2', enabled=True)
+    """
+    log.info(
+        f"Configuring BGP neighbor route server client on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, f'route-server route-server-client {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor route server client on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_route_server_client(device, neighbor, network_instance='default',
+                                                 protocol_instance='default'):
+    """Remove a neighbor as a route-server client.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove a neighbor as a route-server client
+
+    Example:
+        >>> unconfigure_bgp_neighbor_route_server_client(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor route server client from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, 'no route-server route-server-client', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor route server client from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_peer_as_range(device, neighbor, ranges,
+                                         network_instance='default',
+                                         protocol_instance='default'):
+    """Configure the accepted peer-AS range for a dynamic neighbor.
+
+    adoc: Border_Gateway_Protocol.adoc:531-532
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        ranges (str): AS range or single AS, e.g. ``'65000..70000'`` or ``'71000'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the accepted peer-AS range for a dynamic neighbor
+
+    Example:
+        >>> configure_bgp_neighbor_peer_as_range(
+        ...     device, neighbor='220.1.11.1', ranges='65000..70000')
+    """
+    log.info(
+        f"Configuring BGP neighbor peer as range on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, f'peer-as-range inline ranges {ranges}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor peer as range on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_peer_as_range(device, neighbor, network_instance='default',
+                                           protocol_instance='default'):
+    """Remove the accepted peer-AS range for a dynamic neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the accepted peer-AS range for a dynamic neighbor
+
+    Example:
+        >>> unconfigure_bgp_neighbor_peer_as_range(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor peer as range from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, 'no peer-as-range', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor peer as range from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_cluster_id(device, cluster_id,
+                             network_instance='default',
+                             protocol_instance='default'):
+    """Configure the route-reflector cluster-id.
+
+    adoc: Border_Gateway_Protocol.adoc:1107
+
+    Args:
+        device (obj): Device object
+        cluster_id (str): Cluster identifier in dotted-quad form, e.g. ``'10.10.1.1'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the route-reflector cluster-id
+
+    Example:
+        >>> configure_bgp_cluster_id(
+        ...     device, cluster_id='10.10.1.1')
+    """
+    log.info(
+        f"Configuring BGP cluster id on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global cluster-id {cluster_id}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP cluster id on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_cluster_id(device, network_instance='default',
+                               protocol_instance='default'):
+    """Remove the route-reflector cluster-id.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the route-reflector cluster-id
+
+    Example:
+        >>> unconfigure_bgp_cluster_id(device)
+    """
+    log.info(
+        f"Removing BGP cluster id from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, 'no global cluster-id', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP cluster id from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_add_paths_eligible_prefix_policy(device, afi_safi, policy,
+                                                   network_instance='default',
+                                                   protocol_instance='default'):
+    """Configure the add-paths eligible-prefix policy for a global AFI/SAFI.
+
+    adoc: Border_Gateway_Protocol.adoc:n/a (device-confirmed)
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): Global AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        policy (str): Routing-policy name selecting add-paths-eligible prefixes.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the add-paths eligible-prefix policy for a global AFI/SAFI
+
+    Example:
+        >>> configure_bgp_add_paths_eligible_prefix_policy(
+        ...     device, afi_safi='IPV4_UNICAST', policy='ADDPATH_POL')
+    """
+    log.info(
+        f"Configuring BGP add paths eligible prefix policy on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global afi-safi {afi_safi} add-paths eligible-prefix-policy {policy}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP add paths eligible prefix policy on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_add_paths_eligible_prefix_policy(device, afi_safi, network_instance='default',
+                                                     protocol_instance='default'):
+    """Remove the add-paths eligible-prefix policy for a global AFI/SAFI.
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): Global AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the add-paths eligible-prefix policy for a global AFI/SAFI
+
+    Example:
+        >>> unconfigure_bgp_add_paths_eligible_prefix_policy(device)
+    """
+    log.info(
+        f"Removing BGP add paths eligible prefix policy from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'no global afi-safi {afi_safi} add-paths eligible-prefix-policy', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP add paths eligible prefix policy from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_default_information_originate(device, afi_safi, enabled=True,
+                                                network_instance='default',
+                                                protocol_instance='default'):
+    """Configure default-information originate for a global AFI/SAFI.
+
+    adoc: Border_Gateway_Protocol.adoc:958
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): Global AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        enabled (bool, optional): Originate a default route. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure default-information originate for a global AFI/SAFI
+
+    Example:
+        >>> configure_bgp_default_information_originate(
+        ...     device, afi_safi='IPV4_UNICAST', enabled=True)
+    """
+    log.info(
+        f"Configuring BGP default information originate on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global afi-safi {afi_safi} default-information originate enabled {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP default information originate on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_default_information_originate(device, afi_safi, network_instance='default',
+                                                  protocol_instance='default'):
+    """Remove default-information originate for a global AFI/SAFI.
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): Global AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove default-information originate for a global AFI/SAFI
+
+    Example:
+        >>> unconfigure_bgp_default_information_originate(device)
+    """
+    log.info(
+        f"Removing BGP default information originate from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'no global afi-safi {afi_safi} default-information originate', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP default information originate from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_network_rib_validation(device, afi_safi, prefix, enabled=True,
+                                         network_instance='default',
+                                         protocol_instance='default'):
+    """Configure RIB validation for an originated network prefix.
+
+    adoc: Border_Gateway_Protocol.adoc:1661
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): Global AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        prefix (str): The originated network prefix, e.g. ``'100.1.1.0/24'``.
+        enabled (bool, optional): Require the prefix to be present in the RIB before
+            it is advertised. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure RIB validation for an originated network prefix
+
+    Example:
+        >>> configure_bgp_network_rib_validation(
+        ...     device, afi_safi='IPV4_UNICAST', prefix='100.1.1.0/24')
+    """
+    log.info(
+        f"Configuring BGP network rib validation on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global afi-safi {afi_safi} network {prefix} rib-validation {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP network rib validation on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_network_rib_validation(device, afi_safi, prefix, network_instance='default',
+                                           protocol_instance='default'):
+    """Remove RIB validation for an originated network prefix.
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): Global AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        prefix (str): The originated network prefix, e.g. ``'100.1.1.0/24'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove RIB validation for an originated network prefix
+
+    Example:
+        >>> unconfigure_bgp_network_rib_validation(device)
+    """
+    log.info(
+        f"Removing BGP network rib validation from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'no global afi-safi {afi_safi} network {prefix} rib-validation', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP network rib validation from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_aigp(device, neighbor, afi_safi, enabled=True,
+                                network_instance='default',
+                                protocol_instance='default'):
+    """Configure the AIGP metric for a neighbor AFI/SAFI.
+
+    adoc: Border_Gateway_Protocol.adoc:1852
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        afi_safi (str): AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        enabled (bool, optional): Enable AIGP metric handling. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the AIGP metric for a neighbor AFI/SAFI
+
+    Example:
+        >>> configure_bgp_neighbor_aigp(
+        ...     device, neighbor='10.1.1.2', afi_safi='IPV4_UNICAST')
+    """
+    log.info(
+        f"Configuring BGP neighbor aigp on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, f'afi-safi {afi_safi} aigp enable {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor aigp on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_aigp(device, neighbor, afi_safi, network_instance='default',
+                                  protocol_instance='default'):
+    """Remove the AIGP metric for a neighbor AFI/SAFI.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        afi_safi (str): AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the AIGP metric for a neighbor AFI/SAFI
+
+    Example:
+        >>> unconfigure_bgp_neighbor_aigp(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor aigp from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, f'no afi-safi {afi_safi} aigp enable', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor aigp from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+#: Global AFI/SAFIs under which ``retain-route-target-all`` is valid.
+#: adoc:853 — "under global VPN AFI/SAFIs such as L3VPN_IPV4_UNICAST,
+#: L3VPN_IPV6_UNICAST, L2VPN_EVPN, etc, in the `default` network-instance".
+BGP_VPN_AFI_SAFIS = (
+    'L3VPN_IPV4_UNICAST',
+    'L3VPN_IPV6_UNICAST',
+    'L2VPN_EVPN',
+)
+
+
+def configure_bgp_dynamic_neighbor_prefix(device, prefix, peer_group=None,
+                                          neighbor_limit=None,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Configure a BGP dynamic-neighbor (listen) range.
+
+    adoc: Border_Gateway_Protocol.adoc:554-556, 1328
+
+    CLI emitted (all one context, no submode)::
+
+        network-instance {ni} protocol BGP {pi}
+          dynamic-neighbor-prefix {prefix}
+          dynamic-neighbor-prefix {prefix} peer-group {peer_group}
+          dynamic-neighbor-prefix {prefix} neighbor-limit {neighbor_limit}
+
+    Note:
+        This leaf sits at PROTOCOL level, a sibling of ``global`` — not under it.
+        Confirmed on rtr1 2026-08-17; the config-coverage audit implied global scope.
+
+    Note:
+        Dynamic neighbours only accept INCOMING connections — the remote speaker
+        must initiate. A dynamic peer therefore cannot also be in passive-mode
+        (adoc:1361).
+
+    Args:
+        device (obj): Device object
+        prefix (str): Listen range, e.g. ``'220.1.0.0/16'``.
+        peer_group (str, optional): Peer-group dynamic neighbours are placed in.
+            Defaults to None (leave unset).
+        neighbor_limit (int, optional): Maximum dynamic neighbours from this range.
+            Defaults to None (leave unset).
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the dynamic-neighbor prefix
+
+    Example:
+        >>> configure_bgp_dynamic_neighbor_prefix(
+        ...     device, prefix='220.1.0.0/16', peer_group='p1', neighbor_limit=32)
+    """
+    log.info(
+        f"Configuring BGP dynamic-neighbor-prefix {prefix} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'dynamic-neighbor-prefix {prefix}']
+    if peer_group is not None:
+        config.append(f'dynamic-neighbor-prefix {prefix} peer-group {peer_group}')
+    if neighbor_limit is not None:
+        config.append(f'dynamic-neighbor-prefix {prefix} neighbor-limit {neighbor_limit}')
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP dynamic-neighbor-prefix {prefix} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_dynamic_neighbor_prefix(device, prefix,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Remove a BGP dynamic-neighbor (listen) range.
+
+    Removes the whole range including its peer-group and neighbor-limit sub-leaves.
+
+    Args:
+        device (obj): Device object
+        prefix (str): Listen range, e.g. ``'220.1.0.0/16'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the dynamic-neighbor prefix
+
+    Example:
+        >>> unconfigure_bgp_dynamic_neighbor_prefix(device, prefix='220.1.0.0/16')
+    """
+    log.info(
+        f"Removing BGP dynamic-neighbor-prefix {prefix} from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'no dynamic-neighbor-prefix {prefix}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP dynamic-neighbor-prefix {prefix} from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_retain_route_target_all(device, afi_safi, enabled=True,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Retain VPN routes not imported by any VRF, for a global VPN AFI/SAFI.
+
+    adoc: Border_Gateway_Protocol.adoc:851-876
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): A global VPN AFI/SAFI — one of :data:`BGP_VPN_AFI_SAFIS`.
+        enabled (bool, optional): Retain VPN routes with all route-targets.
+            Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``afi_safi`` is not a VPN AFI/SAFI
+        SubCommandFailure: Failed to configure retain-route-target-all
+
+    Note:
+        Valid ONLY under global VPN AFI/SAFIs, and only in the ``default``
+        network-instance (adoc:853). It does not appear under IPV4_UNICAST —
+        confirmed on rtr1 2026-08-17, where `global afi-safi IPV4_UNICAST ?`
+        does not list it.
+
+    Note:
+        The adoc (:860,867,874) shows this as a bare presence leaf with no value.
+        That is WRONG for this build: `retain-route-target-all ?` offers
+        `true`/`false`, and the valueless form is rejected with
+        "syntax error: incomplete path". Confirmed on rtr1 2026-08-17.
+
+    Example:
+        >>> configure_bgp_retain_route_target_all(device, afi_safi='L3VPN_IPV4_UNICAST')
+    """
+    if afi_safi not in BGP_VPN_AFI_SAFIS:
+        raise ValueError(
+            f"retain-route-target-all is only valid under a global VPN AFI/SAFI. "
+            f"Got '{afi_safi}'; expected one of: {', '.join(BGP_VPN_AFI_SAFIS)}"
+        )
+
+    log.info(
+        f"Configuring BGP retain-route-target-all under global afi-safi {afi_safi} "
+        f"on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        ctx,
+        f'global afi-safi {afi_safi} retain-route-target-all {str(enabled).lower()}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP retain-route-target-all under global "
+            f"afi-safi {afi_safi} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_retain_route_target_all(device, afi_safi,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Stop retaining unimported VPN routes for a global VPN AFI/SAFI.
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): A global VPN AFI/SAFI — one of :data:`BGP_VPN_AFI_SAFIS`.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``afi_safi`` is not a VPN AFI/SAFI
+        SubCommandFailure: Failed to remove retain-route-target-all
+
+    Example:
+        >>> unconfigure_bgp_retain_route_target_all(device, afi_safi='L2VPN_EVPN')
+    """
+    if afi_safi not in BGP_VPN_AFI_SAFIS:
+        raise ValueError(
+            f"retain-route-target-all is only valid under a global VPN AFI/SAFI. "
+            f"Got '{afi_safi}'; expected one of: {', '.join(BGP_VPN_AFI_SAFIS)}"
+        )
+
+    log.info(
+        f"Removing BGP retain-route-target-all under global afi-safi {afi_safi} "
+        f"from {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'no global afi-safi {afi_safi} retain-route-target-all', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP retain-route-target-all under global "
+            f"afi-safi {afi_safi} from {device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_default_originate(device, neighbor, afi_safi,
+                                             enabled=True, export_policy=None,
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Configure default-route origination toward a neighbor AFI/SAFI.
+
+    adoc: Border_Gateway_Protocol.adoc:1940-1977
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        afi_safi (str): AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        enabled (bool, optional): Advertise a default route unconditionally.
+            Defaults to True.
+        export_policy (str or list, optional): Policy (or list of policies) gating
+            the default-route advertisement. Defaults to None (unset).
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure default-originate
+
+    Note:
+        PREREQUISITE (commit-time): the corresponding BGP *global* AF must exist
+        first, else the commit aborts with "BGP global AF must be configured
+        first" — see :func:`configure_bgp_global_afi_safi`.
+
+    Example:
+        >>> configure_bgp_neighbor_default_originate(
+        ...     device, neighbor='10.1.1.2', afi_safi='IPV4_UNICAST')
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} afi-safi {afi_safi} default-originate "
+        f"on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [
+        nbr_context,
+        f'afi-safi {afi_safi} default-originate enabled {str(enabled).lower()}',
+    ]
+    if export_policy is not None:
+        policies = ' '.join(export_policy) if isinstance(export_policy, (list, tuple)) \
+            else export_policy
+        config.append(
+            f'afi-safi {afi_safi} default-originate export-policy [ {policies} ]'
+        )
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} afi-safi {afi_safi} "
+            f"default-originate on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_default_originate(device, neighbor, afi_safi,
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Remove default-route origination from a neighbor AFI/SAFI.
+
+    Removes the whole ``default-originate`` container, covering both the
+    ``enabled`` leaf and any ``export-policy``.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        afi_safi (str): AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove default-originate
+
+    Example:
+        >>> unconfigure_bgp_neighbor_default_originate(
+        ...     device, neighbor='10.1.1.2', afi_safi='IPV4_UNICAST')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} afi-safi {afi_safi} default-originate "
+        f"from {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [nbr_context, f'no afi-safi {afi_safi} default-originate', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} afi-safi {afi_safi} "
+            f"default-originate from {device.name}. Error:\n{e}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Missing-API backlog batch T1-03 — operational & AFI-specific knobs
+# (arcos_pyats_sanity/docs/config-coverage/02-bgp-policy-redist.md)
+#
+# Scopes confirmed by `?` capture on rtr1 2026-08-17. Audit corrections:
+#   * `send-default-route` is under the NEIGHBOR's afi-safi RTFILTER (adoc:2145-2151),
+#     not the global one — `global afi-safi RTFILTER send-default-route` is rejected
+#     with "% Invalid input detected".
+#   * `graceful-shutdown` exists at BOTH global and neighbor scope, and its leaf is
+#     spelled `enable`, not `enabled` like most arcOS booleans.
+#   * `update-wait-data-plane` is under global afi-safi IPV4_UNICAST / IPV6_UNICAST
+#     (adoc:837-842), not directly under `global`.
+#
+# All lists flat; nothing emits `exit`.
+# ---------------------------------------------------------------------------
+
+
+def configure_bgp_shutdown_protocol(device, shutdown=True,
+                                    network_instance='default',
+                                    protocol_instance='default'):
+    """Configure administrative shutdown of the whole BGP protocol instance.
+
+    adoc / device source: Border_Gateway_Protocol.adoc:global ? (device)
+
+    Args:
+        device (obj): Device object
+        shutdown (bool, optional): Shut the protocol down. **Defaults to True** —
+            calling this with no arguments takes down the entire BGP instance.
+            Named ``shutdown`` rather than ``enabled`` to match
+            :func:`configure_bgp_neighbor_shutdown` and because ``enabled=True``
+            reads as "BGP enabled", the opposite of what it does.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure administrative shutdown of the whole BGP protocol instance
+
+    Example:
+        >>> configure_bgp_shutdown_protocol(device, enabled=True)
+    """
+    log.info(
+        f"Configuring BGP shutdown protocol on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global shutdown-protocol {str(shutdown).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP shutdown protocol on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_shutdown_protocol(device, network_instance='default',
+                                      protocol_instance='default'):
+    """Remove administrative shutdown of the whole BGP protocol instance.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove administrative shutdown of the whole BGP protocol instance
+
+    Example:
+        >>> unconfigure_bgp_shutdown_protocol(device)
+    """
+    log.info(
+        f"Removing BGP shutdown protocol from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, 'no global shutdown-protocol', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP shutdown protocol from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_shutdown_all_sessions(device, shutdown=True,
+                                        network_instance='default',
+                                        protocol_instance='default'):
+    """Configure administrative shutdown of all neighbor sessions.
+
+    adoc / device source: Border_Gateway_Protocol.adoc:global ? (device)
+
+    Args:
+        device (obj): Device object
+        shutdown (bool, optional): Shut all sessions down. **Defaults to True** —
+            calling this with no arguments drops every BGP session on the device.
+            Named ``shutdown`` rather than ``enabled`` for the same reason as
+            :func:`configure_bgp_shutdown_protocol`.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure administrative shutdown of all neighbor sessions
+
+    Example:
+        >>> configure_bgp_shutdown_all_sessions(device, enabled=True)
+    """
+    log.info(
+        f"Configuring BGP shutdown all sessions on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global shutdown-all-sessions {str(shutdown).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP shutdown all sessions on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_shutdown_all_sessions(device, network_instance='default',
+                                          protocol_instance='default'):
+    """Remove administrative shutdown of all neighbor sessions.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove administrative shutdown of all neighbor sessions
+
+    Example:
+        >>> unconfigure_bgp_shutdown_all_sessions(device)
+    """
+    log.info(
+        f"Removing BGP shutdown all sessions from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, 'no global shutdown-all-sessions', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP shutdown all sessions from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_silent_drop(device, enabled=True,
+                              network_instance='default',
+                              protocol_instance='default'):
+    """Configure silent-drop of unconfigured inbound BGP connections.
+
+    adoc / device source: Border_Gateway_Protocol.adoc:global ? (device)
+
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Silently drop. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure silent-drop of unconfigured inbound BGP connections
+
+    Example:
+        >>> configure_bgp_silent_drop(device, enabled=True)
+    """
+    log.info(
+        f"Configuring BGP silent drop on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global silent-drop {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP silent drop on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_silent_drop(device, network_instance='default',
+                                protocol_instance='default'):
+    """Remove silent-drop of unconfigured inbound BGP connections.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove silent-drop of unconfigured inbound BGP connections
+
+    Example:
+        >>> unconfigure_bgp_silent_drop(device)
+    """
+    log.info(
+        f"Removing BGP silent drop from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, 'no global silent-drop', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP silent drop from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_mandate_ebgp_policy(device, enabled=True,
+                                      network_instance='default',
+                                      protocol_instance='default'):
+    """Configure the requirement for an explicit eBGP policy (RFC 8212).
+
+    adoc / device source: Border_Gateway_Protocol.adoc:global ? (device)
+
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Require an explicit policy before eBGP routes
+            propagate. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the requirement for an explicit eBGP policy (RFC 8212)
+
+    Example:
+        >>> configure_bgp_mandate_ebgp_policy(device, enabled=True)
+    """
+    log.info(
+        f"Configuring BGP mandate ebgp policy on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global mandate-ebgp-policy {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP mandate ebgp policy on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_mandate_ebgp_policy(device, network_instance='default',
+                                        protocol_instance='default'):
+    """Remove the requirement for an explicit eBGP policy (RFC 8212).
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the requirement for an explicit eBGP policy (RFC 8212)
+
+    Example:
+        >>> unconfigure_bgp_mandate_ebgp_policy(device)
+    """
+    log.info(
+        f"Removing BGP mandate ebgp policy from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, 'no global mandate-ebgp-policy', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP mandate ebgp policy from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_compatibility_suppress_nexthop_attribute(device, enabled=True,
+                                                           network_instance='default',
+                                                           protocol_instance='default'):
+    """Configure suppression of the NEXT_HOP attribute in multi-protocol updates.
+
+    adoc / device source: Border_Gateway_Protocol.adoc:global compatibility ? (device)
+
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Suppress the attribute. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure suppression of the NEXT_HOP attribute in multi-protocol updates
+
+    Example:
+        >>> configure_bgp_compatibility_suppress_nexthop_attribute(device, enabled=True)
+    """
+    log.info(
+        f"Configuring BGP compatibility suppress nexthop attribute on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global compatibility suppress-nexthop-attribute {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP compatibility suppress nexthop attribute on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_compatibility_suppress_nexthop_attribute(device, network_instance='default',
+                                                             protocol_instance='default'):
+    """Remove suppression of the NEXT_HOP attribute in multi-protocol updates.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove suppression of the NEXT_HOP attribute in multi-protocol updates
+
+    Example:
+        >>> unconfigure_bgp_compatibility_suppress_nexthop_attribute(device)
+    """
+    log.info(
+        f"Removing BGP compatibility suppress nexthop attribute from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, 'no global compatibility suppress-nexthop-attribute', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP compatibility suppress nexthop attribute from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_compatibility_strict_common_afi_safi_check(device, enabled=True,
+                                                             network_instance='default',
+                                                             protocol_instance='default'):
+    """Configure the strict common AFI/SAFI check for BGP peering.
+
+    adoc / device source: Border_Gateway_Protocol.adoc:global compatibility ? (device)
+
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Require a common AFI/SAFI. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the strict common AFI/SAFI check for BGP peering
+
+    Example:
+        >>> configure_bgp_compatibility_strict_common_afi_safi_check(device, enabled=True)
+    """
+    log.info(
+        f"Configuring BGP compatibility strict common afi safi check on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global compatibility strict-common-afi-safi-check {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP compatibility strict common afi safi check on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_compatibility_strict_common_afi_safi_check(device, network_instance='default',
+                                                               protocol_instance='default'):
+    """Remove the strict common AFI/SAFI check for BGP peering.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the strict common AFI/SAFI check for BGP peering
+
+    Example:
+        >>> unconfigure_bgp_compatibility_strict_common_afi_safi_check(device)
+    """
+    log.info(
+        f"Removing BGP compatibility strict common afi safi check from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, 'no global compatibility strict-common-afi-safi-check', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP compatibility strict common afi safi check from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_update_wait_data_plane(device, afi_safi, enabled=True,
+                                         network_instance='default',
+                                         protocol_instance='default'):
+    """Configure deferral of BGP updates until the data plane acknowledges programming.
+
+    adoc / device source: Border_Gateway_Protocol.adoc:837-847
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): ``'IPV4_UNICAST'`` or ``'IPV6_UNICAST'`` (adoc:837).
+        enabled (bool, optional): Wait for the data plane. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure deferral of BGP updates until the data plane acknowledges programming
+
+    Example:
+        >>> configure_bgp_update_wait_data_plane(device, afi_safi='IPV4_UNICAST')
+    """
+    log.info(
+        f"Configuring BGP update wait data plane on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global afi-safi {afi_safi} update-wait-data-plane {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP update wait data plane on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_update_wait_data_plane(device, afi_safi, network_instance='default',
+                                           protocol_instance='default'):
+    """Remove deferral of BGP updates until the data plane acknowledges programming.
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): ``'IPV4_UNICAST'`` or ``'IPV6_UNICAST'`` (adoc:837).
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove deferral of BGP updates until the data plane acknowledges programming
+
+    Example:
+        >>> unconfigure_bgp_update_wait_data_plane(device)
+    """
+    log.info(
+        f"Removing BGP update wait data plane from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'no global afi-safi {afi_safi} update-wait-data-plane', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP update wait data plane from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_rtfilter_vpn_update_delay(device, delay,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Configure the RTFILTER End-of-RIB wait before sending updates.
+
+    adoc / device source: Border_Gateway_Protocol.adoc:RTFILTER ? (device)
+
+    Args:
+        device (obj): Device object
+        delay (int): Maximum seconds to wait for the RTFILTER End-of-RIB.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the RTFILTER End-of-RIB wait before sending updates
+
+    Example:
+        >>> configure_bgp_rtfilter_vpn_update_delay(device, delay=90)
+    """
+    log.info(
+        f"Configuring BGP rtfilter vpn update delay on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'global afi-safi RTFILTER vpn-update-delay {delay}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP rtfilter vpn update delay on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_rtfilter_vpn_update_delay(device, network_instance='default',
+                                              protocol_instance='default'):
+    """Remove the RTFILTER End-of-RIB wait before sending updates.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the RTFILTER End-of-RIB wait before sending updates
+
+    Example:
+        >>> unconfigure_bgp_rtfilter_vpn_update_delay(device)
+    """
+    log.info(
+        f"Removing BGP rtfilter vpn update delay from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, 'no global afi-safi RTFILTER vpn-update-delay', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP rtfilter vpn update delay from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_egress_peer_engineering(device, neighbor, enabled=True,
+                                                   network_instance='default',
+                                                   protocol_instance='default'):
+    """Configure BGP-LU based egress peer engineering for a neighbor.
+
+    adoc / device source: Border_Gateway_Protocol.adoc:egress-peer-engineering ? (device)
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        enabled (bool, optional): Enable BGP-LU EPE. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP-LU based egress peer engineering for a neighbor
+
+    Example:
+        >>> configure_bgp_neighbor_egress_peer_engineering(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Configuring BGP neighbor egress peer engineering on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, f'egress-peer-engineering labeled-unicast enable {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor egress peer engineering on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_egress_peer_engineering(device, neighbor, network_instance='default',
+                                                     protocol_instance='default'):
+    """Remove BGP-LU based egress peer engineering for a neighbor.
+
+    Note:
+        Emits ``no egress-peer-engineering``, removing the WHOLE container — not
+        just the ``labeled-unicast enable`` leaf its configure counterpart sets.
+        Lab-verified on rtr1 2026-08-17.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove BGP-LU based egress peer engineering for a neighbor
+
+    Example:
+        >>> unconfigure_bgp_neighbor_egress_peer_engineering(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor egress peer engineering from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, 'no egress-peer-engineering', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor egress peer engineering from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_rtfilter_send_default_route(device, neighbor, enabled=True,
+                                                       network_instance='default',
+                                                       protocol_instance='default'):
+    """Configure sending of the default Route Target to an RR client.
+
+    adoc / device source: Border_Gateway_Protocol.adoc:2145-2151
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        enabled (bool, optional): Send the default RT (prefix 0, length 0) to this
+            client. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure sending of the default Route Target to an RR client
+
+    Example:
+        >>> configure_bgp_neighbor_rtfilter_send_default_route(device, neighbor='12.1.1.2', enabled=False)
+    """
+    log.info(
+        f"Configuring BGP neighbor rtfilter send default route on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, f'afi-safi RTFILTER send-default-route {str(enabled).lower()}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor rtfilter send default route on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_rtfilter_send_default_route(device, neighbor, network_instance='default',
+                                                         protocol_instance='default'):
+    """Remove sending of the default Route Target to an RR client.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove sending of the default Route Target to an RR client
+
+    Example:
+        >>> unconfigure_bgp_neighbor_rtfilter_send_default_route(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor rtfilter send default route from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, 'no afi-safi RTFILTER send-default-route', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor rtfilter send default route from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+#: Next-hop treatment values for a neighbor AFI/SAFI.
+#: Device-confirmed enum (`neighbor <ip> afi-safi <af> next-hop ?`).
+BGP_NEXT_HOP_TYPES = ('SELF', 'UNCHANGED')
+
+#: Flowspec AFI/SAFIs carrying `sample-and-drop` and `rt-redirect` (adoc:297).
+BGP_FLOWSPEC_AFI_SAFIS = ('IPV4_FLOWSPEC', 'IPV6_FLOWSPEC')
+
+#: `rt-redirect next-hop` values (adoc:314,324).
+BGP_RT_REDIRECT_NEXT_HOPS = ('DEFAULT', 'BGP_NLRI')
+
+
+def _graceful_shutdown_lines(prefix, enable, set_local_preference_zero, set_med_maximum):
+    """Build the graceful-shutdown leaf lines shared by the global and neighbor forms.
+
+    Note:
+        The leaf is spelled ``enable``, NOT ``enabled`` — unlike most arcOS
+        booleans. Confirmed on rtr1 2026-08-17.
+    """
+    lines = [f'{prefix}graceful-shutdown enable {str(enable).lower()}']
+    if set_local_preference_zero is not None:
+        lines.append(
+            f'{prefix}graceful-shutdown set-local-preference-zero '
+            f'{str(set_local_preference_zero).lower()}')
+    if set_med_maximum is not None:
+        lines.append(
+            f'{prefix}graceful-shutdown set-med-maximum '
+            f'{str(set_med_maximum).lower()}')
+    return lines
+
+
+def configure_bgp_graceful_shutdown(device, enable=True,
+                                    set_local_preference_zero=None,
+                                    set_med_maximum=None,
+                                    network_instance='default',
+                                    protocol_instance='default'):
+    """Configure BGP graceful shutdown (RFC 8326) for the whole instance.
+
+    Args:
+        device (obj): Device object
+        enable (bool, optional): Enable graceful shutdown. Defaults to True.
+        set_local_preference_zero (bool, optional): Advertise LOCAL_PREF 0 on
+            affected paths. Defaults to None (leave unset).
+        set_med_maximum (bool, optional): Advertise maximum MED on affected paths.
+            Defaults to None (leave unset).
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure graceful shutdown
+
+    Example:
+        >>> configure_bgp_graceful_shutdown(device, set_local_preference_zero=True)
+    """
+    log.info(
+        f"Configuring BGP global graceful-shutdown on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx] + _graceful_shutdown_lines(
+        'global ', enable, set_local_preference_zero, set_med_maximum) + ['!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP global graceful-shutdown on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_graceful_shutdown(device, network_instance='default',
+                                      protocol_instance='default'):
+    """Remove instance-wide BGP graceful shutdown.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove graceful shutdown
+
+    Example:
+        >>> unconfigure_bgp_graceful_shutdown(device)
+    """
+    log.info(
+        f"Removing BGP global graceful-shutdown from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, 'no global graceful-shutdown', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP global graceful-shutdown from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_graceful_shutdown(device, neighbor, enable=True,
+                                             set_local_preference_zero=None,
+                                             set_med_maximum=None,
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Configure BGP graceful shutdown for a single neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        enable (bool, optional): Enable graceful shutdown. Defaults to True.
+        set_local_preference_zero (bool, optional): Advertise LOCAL_PREF 0.
+            Defaults to None (leave unset).
+        set_med_maximum (bool, optional): Advertise maximum MED. Defaults to None.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure neighbor graceful shutdown
+
+    Example:
+        >>> configure_bgp_neighbor_graceful_shutdown(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Configuring BGP neighbor {neighbor} graceful-shutdown on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx] + _graceful_shutdown_lines(
+        '', enable, set_local_preference_zero, set_med_maximum) + ['!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} graceful-shutdown on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_graceful_shutdown(device, neighbor,
+                                               network_instance='default',
+                                               protocol_instance='default'):
+    """Remove graceful shutdown from a single neighbor.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove neighbor graceful shutdown
+
+    Example:
+        >>> unconfigure_bgp_neighbor_graceful_shutdown(device, neighbor='10.1.1.2')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} graceful-shutdown from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, 'no graceful-shutdown', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} graceful-shutdown from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_neighbor_next_hop(device, neighbor, afi_safi, next_hop,
+                                    network_instance='default',
+                                    protocol_instance='default'):
+    """Configure next-hop treatment for a neighbor AFI/SAFI.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        afi_safi (str): AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        next_hop (str): One of :data:`BGP_NEXT_HOP_TYPES` — ``'SELF'`` or ``'UNCHANGED'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``next_hop`` is not SELF or UNCHANGED
+        SubCommandFailure: Failed to configure the next-hop type
+
+    Example:
+        >>> configure_bgp_neighbor_next_hop(
+        ...     device, neighbor='10.1.1.2', afi_safi='IPV4_UNICAST', next_hop='SELF')
+    """
+    if next_hop not in BGP_NEXT_HOP_TYPES:
+        raise ValueError(
+            f"Invalid next-hop type '{next_hop}'. Must be one of: "
+            f"{', '.join(BGP_NEXT_HOP_TYPES)}"
+        )
+
+    log.info(
+        f"Configuring BGP neighbor {neighbor} afi-safi {afi_safi} next-hop "
+        f"{next_hop} on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, f'afi-safi {afi_safi} next-hop {next_hop}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP neighbor {neighbor} afi-safi {afi_safi} "
+            f"next-hop on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_neighbor_next_hop(device, neighbor, afi_safi,
+                                      network_instance='default',
+                                      protocol_instance='default'):
+    """Remove next-hop treatment from a neighbor AFI/SAFI.
+
+    Args:
+        device (obj): Device object
+        neighbor (str): Neighbor address.
+        afi_safi (str): AFI/SAFI, e.g. ``'IPV4_UNICAST'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the next-hop type
+
+    Example:
+        >>> unconfigure_bgp_neighbor_next_hop(
+        ...     device, neighbor='10.1.1.2', afi_safi='IPV4_UNICAST')
+    """
+    log.info(
+        f"Removing BGP neighbor {neighbor} afi-safi {afi_safi} next-hop from "
+        f"{device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
+    config = [ctx, f'no afi-safi {afi_safi} next-hop', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP neighbor {neighbor} afi-safi {afi_safi} "
+            f"next-hop from {device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_flowspec_sample_and_drop(device, afi_safi, enabled=True,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Configure Flowspec sample-and-drop for a Flowspec AFI/SAFI.
+
+    adoc: Border_Gateway_Protocol.adoc:295-297
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): One of :data:`BGP_FLOWSPEC_AFI_SAFIS`.
+        enabled (bool, optional): Sample matched traffic before dropping.
+            Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``afi_safi`` is not a Flowspec AFI/SAFI
+        SubCommandFailure: Failed to configure sample-and-drop
+
+    Example:
+        >>> configure_bgp_flowspec_sample_and_drop(device, afi_safi='IPV4_FLOWSPEC')
+    """
+    if afi_safi not in BGP_FLOWSPEC_AFI_SAFIS:
+        raise ValueError(
+            f"sample-and-drop is only available for Flowspec AFI/SAFIs. Got "
+            f"'{afi_safi}'; expected one of: {', '.join(BGP_FLOWSPEC_AFI_SAFIS)}"
+        )
+
+    log.info(
+        f"Configuring BGP flowspec sample-and-drop under global afi-safi {afi_safi} "
+        f"on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        ctx,
+        f'global afi-safi {afi_safi} sample-and-drop {str(enabled).lower()}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP flowspec sample-and-drop under global "
+            f"afi-safi {afi_safi} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_flowspec_sample_and_drop(device, afi_safi,
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Remove Flowspec sample-and-drop from a Flowspec AFI/SAFI.
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): One of :data:`BGP_FLOWSPEC_AFI_SAFIS`.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``afi_safi`` is not a Flowspec AFI/SAFI
+        SubCommandFailure: Failed to remove sample-and-drop
+
+    Example:
+        >>> unconfigure_bgp_flowspec_sample_and_drop(device, afi_safi='IPV4_FLOWSPEC')
+    """
+    if afi_safi not in BGP_FLOWSPEC_AFI_SAFIS:
+        raise ValueError(
+            f"sample-and-drop is only available for Flowspec AFI/SAFIs. Got "
+            f"'{afi_safi}'; expected one of: {', '.join(BGP_FLOWSPEC_AFI_SAFIS)}"
+        )
+
+    log.info(
+        f"Removing BGP flowspec sample-and-drop from global afi-safi {afi_safi} "
+        f"on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'no global afi-safi {afi_safi} sample-and-drop', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP flowspec sample-and-drop from global "
+            f"afi-safi {afi_safi} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_flowspec_rt_redirect_next_hop(device, afi_safi, next_hop,
+                                                network_instance='default',
+                                                protocol_instance='default'):
+    """Configure the Flowspec rt-redirect next-hop selection.
+
+    adoc: Border_Gateway_Protocol.adoc:305-324
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): One of :data:`BGP_FLOWSPEC_AFI_SAFIS`.
+        next_hop (str): One of :data:`BGP_RT_REDIRECT_NEXT_HOPS` — ``'DEFAULT'``
+            or ``'BGP_NLRI'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``afi_safi`` or ``next_hop`` is invalid
+        SubCommandFailure: Failed to configure rt-redirect next-hop
+
+    Example:
+        >>> configure_bgp_flowspec_rt_redirect_next_hop(
+        ...     device, afi_safi='IPV4_FLOWSPEC', next_hop='DEFAULT')
+    """
+    if afi_safi not in BGP_FLOWSPEC_AFI_SAFIS:
+        raise ValueError(
+            f"rt-redirect is only available for Flowspec AFI/SAFIs. Got "
+            f"'{afi_safi}'; expected one of: {', '.join(BGP_FLOWSPEC_AFI_SAFIS)}"
+        )
+    if next_hop not in BGP_RT_REDIRECT_NEXT_HOPS:
+        raise ValueError(
+            f"Invalid rt-redirect next-hop '{next_hop}'. Must be one of: "
+            f"{', '.join(BGP_RT_REDIRECT_NEXT_HOPS)}"
+        )
+
+    log.info(
+        f"Configuring BGP flowspec rt-redirect next-hop {next_hop} under global "
+        f"afi-safi {afi_safi} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        ctx,
+        f'global afi-safi {afi_safi} rt-redirect next-hop {next_hop}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP flowspec rt-redirect next-hop under global "
+            f"afi-safi {afi_safi} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_flowspec_rt_redirect_next_hop(device, afi_safi,
+                                                  network_instance='default',
+                                                  protocol_instance='default'):
+    """Remove the Flowspec rt-redirect next-hop selection.
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): One of :data:`BGP_FLOWSPEC_AFI_SAFIS`.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``afi_safi`` is not a Flowspec AFI/SAFI
+        SubCommandFailure: Failed to remove rt-redirect next-hop
+
+    Example:
+        >>> unconfigure_bgp_flowspec_rt_redirect_next_hop(
+        ...     device, afi_safi='IPV4_FLOWSPEC')
+    """
+    if afi_safi not in BGP_FLOWSPEC_AFI_SAFIS:
+        raise ValueError(
+            f"rt-redirect is only available for Flowspec AFI/SAFIs. Got "
+            f"'{afi_safi}'; expected one of: {', '.join(BGP_FLOWSPEC_AFI_SAFIS)}"
+        )
+
+    log.info(
+        f"Removing BGP flowspec rt-redirect next-hop from global afi-safi "
+        f"{afi_safi} on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'no global afi-safi {afi_safi} rt-redirect', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP flowspec rt-redirect from global afi-safi "
+            f"{afi_safi} on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_telemetry(device, neighbor_stream=None, prefix_stream=None,
+                            network_instance='default',
+                            protocol_instance='default'):
+    """Configure BGP telemetry streaming.
+
+    Args:
+        device (obj): Device object
+        neighbor_stream (bool, optional): Stream neighbor information.
+            Defaults to None (leave unset).
+        prefix_stream (bool, optional): Stream prefix information.
+            Defaults to None (leave unset).
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If neither stream is specified
+        SubCommandFailure: Failed to configure telemetry
+
+    Example:
+        >>> configure_bgp_telemetry(device, neighbor_stream=True, prefix_stream=True)
+    """
+    if neighbor_stream is None and prefix_stream is None:
+        raise ValueError(
+            "configure_bgp_telemetry requires at least one of 'neighbor_stream' "
+            "or 'prefix_stream'"
+        )
+
+    log.info(
+        f"Configuring BGP global telemetry on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx]
+    if neighbor_stream is not None:
+        config.append(
+            f'global telemetry neighbor-stream-enabled {str(neighbor_stream).lower()}')
+    if prefix_stream is not None:
+        config.append(
+            f'global telemetry prefix-stream-enabled {str(prefix_stream).lower()}')
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP global telemetry on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_telemetry(device, network_instance='default',
+                              protocol_instance='default'):
+    """Remove BGP telemetry streaming configuration.
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove telemetry
+
+    Example:
+        >>> unconfigure_bgp_telemetry(device)
+    """
+    log.info(
+        f"Removing BGP global telemetry from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, 'no global telemetry', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP global telemetry from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_bgp_rtr_server(device, server_name, address=None, port=None,
+                             preference=None, local_address=None,
+                             network_instance='default',
+                             protocol_instance='default'):
+    """Configure an RPKI RTR server for origin validation.
+
+    Args:
+        device (obj): Device object
+        server_name (str): RTR server name, e.g. ``'rpki-rtr'``.
+        address (str, optional): Server IP address. Defaults to None (unset).
+        port (int, optional): Server TCP port. Defaults to None (unset).
+        preference (int, optional): Server preference. Defaults to None (unset).
+        local_address (str, optional): Local transport address or interface name.
+            Defaults to None (unset).
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the RTR server
+
+    Note:
+        ``rtr-server`` sits at PROTOCOL level, a sibling of ``global`` — confirmed
+        on rtr1 2026-08-17.
+
+    Example:
+        >>> configure_bgp_rtr_server(
+        ...     device, server_name='rpki-rtr', address='10.1.1.9', port=3323)
+    """
+    log.info(
+        f"Configuring BGP rtr-server {server_name} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'rtr-server {server_name}']
+    if address is not None:
+        config.append(f'rtr-server {server_name} address {address}')
+    if port is not None:
+        config.append(f'rtr-server {server_name} port {port}')
+    if preference is not None:
+        config.append(f'rtr-server {server_name} preference {preference}')
+    if local_address is not None:
+        config.append(f'rtr-server {server_name} local-address {local_address}')
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP rtr-server {server_name} on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_rtr_server(device, server_name,
+                               network_instance='default',
+                               protocol_instance='default'):
+    """Remove an RPKI RTR server.
+
+    Args:
+        device (obj): Device object
+        server_name (str): RTR server name, e.g. ``'rpki-rtr'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the RTR server
+
+    Example:
+        >>> unconfigure_bgp_rtr_server(device, server_name='rpki-rtr')
+    """
+    log.info(
+        f"Removing BGP rtr-server {server_name} from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    ctx = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [ctx, f'no rtr-server {server_name}', '!']
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP rtr-server {server_name} from {device.name}. "
+            f"Error:\n{e}"
+        )
