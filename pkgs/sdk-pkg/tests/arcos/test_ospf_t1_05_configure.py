@@ -53,13 +53,21 @@ class TestLogAdjacencyChanges(Base):
                 self.assertEqual(self.emitted(), [
                     ctx, "global log-adjacency-changes LOG_ADJ_ENABLE_DETAILED", "!"])
 
-    def test_all_documented_modes_accepted(self):
-        for modes, fn in ((OSPF_LOG_ADJ_MODES, configure_ospf_log_adjacency_changes),
-                          (OSPFV3_LOG_ADJ_MODES, configure_ospfv3_log_adjacency_changes)):
+    def test_all_documented_modes_reach_the_wire(self):
+        """H3: this loop previously asserted nothing — hardcoding the emitted
+        mode in BOTH modules left the suite green, since the one emission test
+        uses that same mode. Two of three modes were never verified."""
+        for modes, fn, ctx in (
+            (OSPF_LOG_ADJ_MODES, configure_ospf_log_adjacency_changes, V2),
+            (OSPFV3_LOG_ADJ_MODES, configure_ospfv3_log_adjacency_changes, V3),
+        ):
+            self.assertEqual(len(modes), 3)
             for m in modes:
                 with self.subTest(fn=fn.__name__, mode=m):
                     self.device.configure.reset_mock()
                     fn(self.device, mode=m)
+                    self.assertEqual(self.emitted(), [
+                        ctx, f"global log-adjacency-changes {m}", "!"])
 
     def test_invalid_mode_rejected(self):
         for fn in (configure_ospf_log_adjacency_changes,
@@ -95,11 +103,19 @@ class TestSpfLogging(Base):
 
     def test_leaf_name_is_maximum_triggers_per_log(self):
         """The audit called it `triggers-per-log`; the device leaf is
-        `maximum-triggers-per-log`."""
-        configure_ospf_spf_logging(self.device, maximum_triggers_per_log=8)
-        joined = " ".join(self.emitted())
-        self.assertIn("maximum-triggers-per-log", joined)
-        self.assertNotIn("logging triggers-per-log", joined)
+        `maximum-triggers-per-log`.
+
+        M4: this guard covered only OSPFv2 — renaming the leaf in the v3 copy of
+        _spf_logging_lines passed the whole suite. The two copies are identical
+        today precisely because nothing enforced it, so loop over both.
+        """
+        for fn, ctx in ((configure_ospf_spf_logging, V2),
+                        (configure_ospfv3_spf_logging, V3)):
+            with self.subTest(fn=fn.__name__):
+                self.device.configure.reset_mock()
+                fn(self.device, maximum_triggers_per_log=8)
+                self.assertEqual(self.emitted(), [
+                    ctx, "global spf logging maximum-triggers-per-log 8", "!"])
 
     def test_requires_at_least_one(self):
         for fn in (configure_ospf_spf_logging, configure_ospfv3_spf_logging):
@@ -167,12 +183,24 @@ class TestSnmpSendTrap(Base):
         self.assertEqual(self.emitted(), [
             V2, "global snmp send-trap if-state-change true", "!"])
 
-    def test_all_ten_traps_accepted(self):
+    def test_all_ten_traps_reach_the_wire(self):
+        """H2: this loop previously asserted nothing — hardcoding the emitted
+        token to `if-state-change` left the whole suite green, because the one
+        emission test happens to use that same trap."""
         self.assertEqual(len(OSPF_SNMP_TRAPS), 10)
         for t in OSPF_SNMP_TRAPS:
             with self.subTest(trap=t):
                 self.device.configure.reset_mock()
                 configure_ospf_snmp_send_trap(self.device, trap=t)
+                self.assertEqual(self.emitted(), [
+                    V2, f"global snmp send-trap {t} true", "!"])
+
+    def test_m5_trap_enabled_false(self):
+        """M5: the `enabled` parameter was never exercised at False."""
+        configure_ospf_snmp_send_trap(
+            self.device, trap="nbr-state-change", enabled=False)
+        self.assertEqual(self.emitted(), [
+            V2, "global snmp send-trap nbr-state-change false", "!"])
 
     def test_invalid_trap_rejected_both_directions(self):
         for fn in (configure_ospf_snmp_send_trap, unconfigure_ospf_snmp_send_trap):

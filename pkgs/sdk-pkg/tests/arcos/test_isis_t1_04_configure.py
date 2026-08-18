@@ -143,6 +143,16 @@ class TestIsisInterfaceIpv4FastRerouteIp(ArcosIsisConfigureTestCase):
              "exit", "!"],
         )
 
+    def test_configure_disabled(self):
+        """H4: enabled=False was never exercised. Forcing a literal `true` in
+        both IP-FRR functions passed all IS-IS tests, so a caller asking to
+        DISABLE IP-FRR would silently have enabled it."""
+        configure_isis_interface_ipv4_fast_reroute_ip(
+            self.device, interface="swp1", enabled=False)
+        self.assertEqual(self.emitted(), [
+            INTF_CTX, "af IPV4 UNICAST", "fast-reroute ip enabled false",
+            "exit", "!"])
+
     def test_unconfigure(self):
         unconfigure_isis_interface_ipv4_fast_reroute_ip(
             self.device, interface="swp1")
@@ -170,6 +180,14 @@ class TestIsisInterfaceIpv6FastRerouteIp(ArcosIsisConfigureTestCase):
             self.emitted(),
             [INTF_CTX, "af IPV6 UNICAST", "no fast-reroute ip", "exit", "!"],
         )
+
+    def test_configure_disabled(self):
+        """H4, IPv6 half — see the IPv4 case."""
+        configure_isis_interface_ipv6_fast_reroute_ip(
+            self.device, interface="swp1", enabled=False)
+        self.assertEqual(self.emitted(), [
+            INTF_CTX, "af IPV6 UNICAST", "fast-reroute ip enabled false",
+            "exit", "!"])
 
     def test_af_does_not_leak_between_v4_and_v6(self):
         """The v6 API must never emit the IPV4 submode."""

@@ -8456,7 +8456,7 @@ def configure_isis_graceful_restart_helper_only(device, enabled=True,
         network-instance {ni} protocol ISIS {pi}
           global graceful-restart helper-only {true|false}
 
-    adoc: IS-IS.adoc:779-784 — ``helper-only`` is a sibling leaf of ``enabled``
+    adoc: IS-IS.adoc:781, 788 — ``helper-only`` is a sibling leaf of ``enabled``
     under ``global graceful-restart``: "the local IS-IS router will be in
     graceful restart helper mode if the remote IS-IS router restarts; but
     forwarding state will not be preserved if restart occurs locally."

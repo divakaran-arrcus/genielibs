@@ -821,7 +821,12 @@ def configure_ospfv3_spf_logging(device, maximum_logs=None, maximum_triggers_per
 
 def unconfigure_ospfv3_spf_logging(device, network_instance='default',
                                    protocol_instance='default'):
-    """Remove OSPFv3 global SPF logging."""
+    """Remove OSPFv3 global SPF logging.
+
+    Emits the container form ``no global spf logging``, which clears BOTH
+    ``maximum-logs`` and ``maximum-triggers-per-log`` regardless of which the
+    caller set.
+    """
     log.info(f"Removing OSPFv3 global SPF logging from {device.name}")
     ctx = _build_ospfv3_context(network_instance, protocol_instance)
     try:

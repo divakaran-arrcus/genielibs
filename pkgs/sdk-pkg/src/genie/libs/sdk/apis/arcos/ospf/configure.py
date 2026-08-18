@@ -1128,7 +1128,7 @@ def configure_ospf_snmp_send_trap(device, trap, enabled=True,
     try:
         device.configure([
             ctx,
-            f'global snmp send-trap {trap} {str(enabled).lower()}',
+            f'global snmp send-trap {trap} {"true" if enabled else "false"}',
             '!',
         ])
     except SubCommandFailure as e:
