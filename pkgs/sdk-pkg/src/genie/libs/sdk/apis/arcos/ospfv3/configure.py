@@ -705,3 +705,162 @@ def unconfigure_ospfv3_maintenance_mode_trigger(device,
         raise SubCommandFailure(
             f"OSPFv3 maintenance-mode trigger removal failed on {device.name}: {e}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Missing-API backlog batch T1-05 — OSPFv3 logging, SPF-log and LSA timers
+# (arcos_pyats_sanity/docs/config-coverage/03-ospf-ldp-bfd-static.md)
+#
+# Leaf names and enums confirmed by `?` capture on rtr1 2026-08-17. The audit's
+# "triggers-per-log" is really `maximum-triggers-per-log`.
+# ---------------------------------------------------------------------------
+
+
+#: Accepted values for ``configure_ospfv3_log_adjacency_changes(mode=...)``.
+#: Device-confirmed enum (`global log-adjacency-changes ?` on rtr1 2026-08-17).
+OSPFV3_LOG_ADJ_MODES = (
+    'LOG_ADJ_DISABLE',
+    'LOG_ADJ_ENABLE_LIMITED',
+    'LOG_ADJ_ENABLE_DETAILED',
+)
+
+
+def _spf_logging_lines(maximum_logs, maximum_triggers_per_log):
+    """Build the `global spf logging` leaf lines. Raises if both are None."""
+    if maximum_logs is None and maximum_triggers_per_log is None:
+        raise ValueError(
+            "spf_logging requires at least one of 'maximum_logs' or "
+            "'maximum_triggers_per_log'"
+        )
+    lines = []
+    if maximum_logs is not None:
+        lines.append(f'global spf logging maximum-logs {maximum_logs}')
+    if maximum_triggers_per_log is not None:
+        lines.append(
+            f'global spf logging maximum-triggers-per-log {maximum_triggers_per_log}')
+    return lines
+
+
+def _lsa_timer_lines(min_arrival):
+    """Build the `global timers lsa` leaf lines.
+
+    Only ``min-arrival`` is settable. ``origination-delay`` appears in the CLI's
+    own `?` completions with a value type (`<unsignedInt, 0..600000>[50]`), but
+    the device REJECTS every assignment to it:
+
+        global timers lsa origination-delay 50   -> syntax error: unknown argument
+        global timers lsa origination-delay 50 60 -> syntax error: incomplete path
+
+    Confirmed on rtr1 2026-08-17 for BOTH OSPF and OSPF3, on a clean instance
+    with no config lock held. No API is offered for it rather than one that
+    always fails.
+    """
+    if min_arrival is None:
+        raise ValueError("timers_lsa requires 'min_arrival'")
+    return [f'global timers lsa min-arrival {min_arrival}']
+
+
+def configure_ospfv3_log_adjacency_changes(device, mode, network_instance='default',
+                                           protocol_instance='default'):
+    """Configure OSPFv3 global log-adjacency-changes.
+
+    ``mode`` is one of :data:`OSPFV3_LOG_ADJ_MODES`.
+    """
+    if mode not in OSPFV3_LOG_ADJ_MODES:
+        raise ValueError(
+            f"Invalid mode '{mode}'. Must be one of: "
+            f"{', '.join(OSPFV3_LOG_ADJ_MODES)}"
+        )
+    log.info(f"Configuring OSPFv3 global log-adjacency-changes on {device.name}")
+    ctx = _build_ospfv3_context(network_instance, protocol_instance)
+    try:
+        device.configure([
+            ctx,
+            f'global log-adjacency-changes {mode}',
+            '!',
+        ])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"OSPFv3 global log-adjacency-changes failed on {device.name}: {e}"
+        )
+
+
+def unconfigure_ospfv3_log_adjacency_changes(device, network_instance='default',
+                                             protocol_instance='default'):
+    """Remove OSPFv3 global log-adjacency-changes."""
+    log.info(f"Removing OSPFv3 global log-adjacency-changes from {device.name}")
+    ctx = _build_ospfv3_context(network_instance, protocol_instance)
+    try:
+        device.configure([ctx, 'no global log-adjacency-changes', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Removing OSPFv3 global log-adjacency-changes failed on {device.name}: {e}"
+        )
+
+
+def configure_ospfv3_spf_logging(device, maximum_logs=None, maximum_triggers_per_log=None, network_instance='default',
+                                 protocol_instance='default'):
+    """Configure OSPFv3 global SPF logging.
+
+    At least one of ``maximum_logs`` (device default 16) or
+    ``maximum_triggers_per_log`` (device default 8) must be given.
+    """
+    log.info(f"Configuring OSPFv3 global SPF logging on {device.name}")
+    ctx = _build_ospfv3_context(network_instance, protocol_instance)
+    try:
+        device.configure([
+            ctx,
+            *_spf_logging_lines(maximum_logs, maximum_triggers_per_log),
+            '!',
+        ])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"OSPFv3 global SPF logging failed on {device.name}: {e}"
+        )
+
+
+def unconfigure_ospfv3_spf_logging(device, network_instance='default',
+                                   protocol_instance='default'):
+    """Remove OSPFv3 global SPF logging."""
+    log.info(f"Removing OSPFv3 global SPF logging from {device.name}")
+    ctx = _build_ospfv3_context(network_instance, protocol_instance)
+    try:
+        device.configure([ctx, 'no global spf logging', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Removing OSPFv3 global SPF logging failed on {device.name}: {e}"
+        )
+
+
+def configure_ospfv3_timers_lsa(device, min_arrival, network_instance='default',
+                                protocol_instance='default'):
+    """Configure OSPFv3 global LSA timers.
+
+    Only ``min_arrival`` is offered — ``origination-delay`` is advertised by the
+    CLI's `?` output but rejected on assignment (see :func:`_lsa_timer_lines`).
+    """
+    log.info(f"Configuring OSPFv3 global LSA timers on {device.name}")
+    ctx = _build_ospfv3_context(network_instance, protocol_instance)
+    try:
+        device.configure([
+            ctx,
+            *_lsa_timer_lines(min_arrival),
+            '!',
+        ])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"OSPFv3 global LSA timers failed on {device.name}: {e}"
+        )
+
+
+def unconfigure_ospfv3_timers_lsa(device, network_instance='default',
+                                  protocol_instance='default'):
+    """Remove OSPFv3 global LSA timers."""
+    log.info(f"Removing OSPFv3 global LSA timers from {device.name}")
+    ctx = _build_ospfv3_context(network_instance, protocol_instance)
+    try:
+        device.configure([ctx, 'no global timers lsa', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Removing OSPFv3 global LSA timers failed on {device.name}: {e}"
+        )

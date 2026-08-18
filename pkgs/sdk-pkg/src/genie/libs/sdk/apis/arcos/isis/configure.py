@@ -8326,3 +8326,772 @@ def unconfigure_isis_srv6_locator(device, locator, network_instance='default',
             f"(network-instance: {network_instance}, protocol-instance: {protocol_instance}). "
             f"Error:\n{e}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Missing-API backlog batch T1-04 — config-coverage audit
+# (arcos_pyats_sanity/docs/config-coverage/01-isis-sr-srv6.md)
+#
+# Every CLI line below traces to Command_Line_Interface/IS-IS.adoc; the cited
+# line number is in each function's docstring.
+#
+# Lab-verified 2026-08-17 on rtr1 (arcOS docker, 10.27.168.246:10001): every
+# configure AND unconfigure path below was applied, committed, and confirmed by
+# running-config read-back in both directions.
+#
+# NOT implemented here: the audit also listed `default-metric` at the
+# protocol-instance level (IS-IS.adoc:87). That leaf does not exist on this
+# arcOS build — `default-metric ?` returns "% Invalid input detected" and the
+# ISIS context offers only `global`, `interface`, `level`. An API for it would
+# emit a command the device rejects, so it is deliberately absent.
+# ---------------------------------------------------------------------------
+
+
+def configure_isis_timers_fast_reroute_interval(device, interval,
+                                                network_instance='default',
+                                                protocol_instance='default'):
+    """Configure the ISIS FRR/TI-LFA start interval.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+          global timers fast-reroute-interval {interval}
+
+    adoc: IS-IS.adoc:637 — ``(config-protocol-ISIS/p1)# global timers ?`` lists
+    ``fast-reroute-interval   FRR/TI-LFA start interval``.
+
+    Units confirmed on-device (rtr1, 2026-08-17) — the CLI help reads: "The
+    delay (in **milliseconds**) before FRR/TI-LFA calculation starts", default
+    **500**. The adoc does not state the unit or the default.
+
+    Args:
+        device (obj): Device object
+        interval (int): FRR/TI-LFA start delay in milliseconds. Device default
+            is 500.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure the fast-reroute interval
+
+    Example:
+        >>> configure_isis_timers_fast_reroute_interval(device, interval=100)
+    """
+    log.info(
+        f"Configuring ISIS global timers fast-reroute-interval {interval} on "
+        f"{device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global timers fast-reroute-interval {interval}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS global timers fast-reroute-interval "
+            f"{interval} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_timers_fast_reroute_interval(device, network_instance='default',
+                                                  protocol_instance='default'):
+    """Remove the ISIS FRR/TI-LFA start interval configuration.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+          no global timers fast-reroute-interval
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove the fast-reroute interval
+
+    Example:
+        >>> unconfigure_isis_timers_fast_reroute_interval(device)
+    """
+    log.info(
+        f"Removing ISIS global timers fast-reroute-interval from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global timers fast-reroute-interval',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS global timers fast-reroute-interval from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_graceful_restart_helper_only(device, enabled=True,
+                                                network_instance='default',
+                                                protocol_instance='default'):
+    """Enable or disable the ISIS graceful-restart helper function.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+          global graceful-restart helper-only {true|false}
+
+    adoc: IS-IS.adoc:779-784 — ``helper-only`` is a sibling leaf of ``enabled``
+    under ``global graceful-restart``: "the local IS-IS router will be in
+    graceful restart helper mode if the remote IS-IS router restarts; but
+    forwarding state will not be preserved if restart occurs locally."
+
+    This is a separate function from :func:`configure_isis_graceful_restart`,
+    which sets the sibling ``enabled`` leaf. The two are independently settable.
+
+    Args:
+        device (obj): Device object
+        enabled (bool, optional): Enable or disable helper-only mode. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure graceful-restart helper-only
+
+    Example:
+        >>> configure_isis_graceful_restart_helper_only(device, enabled=True)
+    """
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} ISIS graceful-restart helper-only "
+        f"on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        f'global graceful-restart helper-only {str(enabled).lower()}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS graceful-restart helper-only on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_graceful_restart_helper_only(device, network_instance='default',
+                                                  protocol_instance='default'):
+    """Remove the ISIS graceful-restart helper-only configuration.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi}
+          no global graceful-restart helper-only
+
+    Args:
+        device (obj): Device object
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove graceful-restart helper-only
+
+    Example:
+        >>> unconfigure_isis_graceful_restart_helper_only(device)
+    """
+    log.info(
+        f"Removing ISIS graceful-restart helper-only from {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    config = [
+        isis_context,
+        'no global graceful-restart helper-only',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS graceful-restart helper-only from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_mpls_ldp_sync(device, interface, enabled=True,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Enable or disable ISIS MPLS LDP synchronization on a single interface.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi} interface {interface}
+          mpls igp-ldp-sync enabled {true|false}
+
+    adoc: IS-IS.adoc:809 — ``(config-interface-swp54)# mpls igp-ldp-sync ?``.
+    Per the adoc, per-interface configuration matters only when global LDP sync
+    is NOT enabled: with global sync on, every ISIS interface participates
+    regardless of its own setting.
+
+    Not to be confused with :func:`configure_isis_mpls_ldp_sync`, which sets the
+    instance-wide ``global mpls igp-ldp-sync enabled`` leaf.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name (e.g. 'swp1', 'ethernet-1/1').
+        enabled (bool, optional): Enable or disable LDP sync on the interface.
+            Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure interface LDP sync
+
+    Example:
+        >>> configure_isis_interface_mpls_ldp_sync(device, interface='swp1', enabled=True)
+    """
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} ISIS MPLS igp-ldp-sync on "
+        f"interface {interface} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'mpls igp-ldp-sync enabled {str(enabled).lower()}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS MPLS igp-ldp-sync on interface {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_mpls_ldp_sync(device, interface,
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Remove per-interface ISIS MPLS LDP synchronization configuration.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi} interface {interface}
+          no mpls igp-ldp-sync
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove interface LDP sync
+
+    Example:
+        >>> unconfigure_isis_interface_mpls_ldp_sync(device, interface='swp1')
+    """
+    log.info(
+        f"Removing ISIS MPLS igp-ldp-sync from interface {interface} on "
+        f"{device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'no mpls igp-ldp-sync',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS MPLS igp-ldp-sync from interface {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_ipv4_fast_reroute_ip(device, interface, enabled=True,
+                                                  network_instance='default',
+                                                  protocol_instance='default'):
+    """Enable or disable IPv4 IP fast-reroute (IP-FRR, RFC 5286) on an interface.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi} interface {interface}
+          af IPV4 UNICAST
+            fast-reroute ip enabled {true|false}
+
+    adoc: IS-IS.adoc:1499-1512 — "IP fast reroute (IP-FRR), as described in
+    RFC 5286 may be enabled for an interface under address family
+    configuration." The worked example is ``(config-interface-swp2)# af IPV6
+    UNICAST`` then ``fast-reroute ip enabled true``.
+
+    Distinct from :func:`configure_isis_interface_ipv4_ti_lfa_sr_mpls`, which
+    sets ``fast-reroute ti-lfa sr-mpls enabled`` in the same submode.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name (e.g. 'swp1', 'ethernet-1/1').
+        enabled (bool, optional): Enable or disable IPv4 IP-FRR. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure IPv4 IP-FRR
+
+    Example:
+        >>> configure_isis_interface_ipv4_fast_reroute_ip(
+        ...     device, interface='swp2', enabled=True)
+    """
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} IPv4 IP-FRR on interface "
+        f"{interface} on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'af IPV4 UNICAST',
+        f'fast-reroute ip enabled {str(enabled).lower()}',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure IPv4 IP-FRR on interface {interface} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_ipv4_fast_reroute_ip(device, interface,
+                                                    network_instance='default',
+                                                    protocol_instance='default'):
+    """Remove IPv4 IP fast-reroute configuration from an interface.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi} interface {interface}
+          af IPV4 UNICAST
+            no fast-reroute ip
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove IPv4 IP-FRR
+
+    Example:
+        >>> unconfigure_isis_interface_ipv4_fast_reroute_ip(device, interface='swp2')
+    """
+    log.info(
+        f"Removing IPv4 IP-FRR from interface {interface} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'af IPV4 UNICAST',
+        'no fast-reroute ip',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove IPv4 IP-FRR from interface {interface} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_ipv6_fast_reroute_ip(device, interface, enabled=True,
+                                                  network_instance='default',
+                                                  protocol_instance='default'):
+    """Enable or disable IPv6 IP fast-reroute (IP-FRR, RFC 5286) on an interface.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi} interface {interface}
+          af IPV6 UNICAST
+            fast-reroute ip enabled {true|false}
+
+    adoc: IS-IS.adoc:1505 — ``(config-af-IPV6/UNICAST)# fast-reroute ip enabled true``.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name (e.g. 'swp1', 'ethernet-1/1').
+        enabled (bool, optional): Enable or disable IPv6 IP-FRR. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure IPv6 IP-FRR
+
+    Example:
+        >>> configure_isis_interface_ipv6_fast_reroute_ip(
+        ...     device, interface='swp2', enabled=True)
+    """
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} IPv6 IP-FRR on interface "
+        f"{interface} on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'af IPV6 UNICAST',
+        f'fast-reroute ip enabled {str(enabled).lower()}',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure IPv6 IP-FRR on interface {interface} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_ipv6_fast_reroute_ip(device, interface,
+                                                    network_instance='default',
+                                                    protocol_instance='default'):
+    """Remove IPv6 IP fast-reroute configuration from an interface.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi} interface {interface}
+          af IPV6 UNICAST
+            no fast-reroute ip
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove IPv6 IP-FRR
+
+    Example:
+        >>> unconfigure_isis_interface_ipv6_fast_reroute_ip(device, interface='swp2')
+    """
+    log.info(
+        f"Removing IPv6 IP-FRR from interface {interface} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'af IPV6 UNICAST',
+        'no fast-reroute ip',
+        'exit',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove IPv6 IP-FRR from interface {interface} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_csnp_enabled(device, interface, enabled=True,
+                                          network_instance='default',
+                                          protocol_instance='default'):
+    """Enable or disable CSNP transmission on an ISIS interface.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi} interface {interface}
+          csnp enabled {true|false}
+
+    adoc: IS-IS.adoc:1783-1789 — ``(config-interface-swp1)# csnp ?`` gives
+    ``enabled   When set to false, CSNPs will not be sent out via this
+    interface``, and "By default CSNP is enabled on all interfaces." The
+    meaningful call is therefore ``enabled=False``.
+
+    Distinct from :func:`configure_isis_csnp_authentication` (level-scoped
+    ``authentication csnp-authentication``) and
+    :func:`configure_isis_interface_csnp_interval` (``timers csnp-interval``).
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name (e.g. 'swp1', 'ethernet-1/1').
+        enabled (bool, optional): Send CSNPs on this interface. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure interface CSNP enable
+
+    Example:
+        >>> configure_isis_interface_csnp_enabled(device, interface='swp1', enabled=False)
+    """
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} CSNP transmission on interface "
+        f"{interface} on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'csnp enabled {str(enabled).lower()}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure CSNP enable on interface {interface} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_csnp_enabled(device, interface,
+                                            network_instance='default',
+                                            protocol_instance='default'):
+    """Remove the per-interface CSNP enable configuration.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi} interface {interface}
+          no csnp enabled
+
+    Note:
+        CSNP is enabled by default on all interfaces, so removing this leaf
+        restores CSNP transmission — absence of the leaf is NOT equivalent to
+        ``enabled false``.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove interface CSNP enable
+
+    Example:
+        >>> unconfigure_isis_interface_csnp_enabled(device, interface='swp1')
+    """
+    log.info(
+        f"Removing CSNP enable from interface {interface} on {device.name} "
+        f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        'no csnp enabled',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove CSNP enable from interface {interface} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_isis_interface_level_enabled(device, interface, level, enabled=True,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Enable or disable a specific ISIS level on an interface.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi} interface {interface}
+          level {level_num} enabled {true|false}
+
+    adoc: IS-IS.adoc:575, 612 — ``(config-interface-loopback0)# level 2 enabled true``.
+
+    Emitted as ONE line rather than entering the ``level`` submode (which is how
+    :func:`configure_isis_interface_level_priority` and its siblings do it). The
+    deviation is deliberate and is about blast radius, not style: in the submode
+    form the unconfigure pair sends a bare ``no enabled``, and if the ``level``
+    line were ever accepted-and-ignored — a documented arcOS failure mode — that
+    ``no enabled`` would land at INTERFACE scope and shut ISIS off the whole
+    interface, dropping the adjacency. The single-line form has no such window.
+    Both directions lab-verified on rtr1 2026-08-17.
+
+    Distinct from :func:`configure_isis_interface_enabled`, which sets the
+    interface-scoped ``enabled`` leaf across all levels.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name (e.g. 'swp1', 'loopback0').
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        enabled (bool, optional): Enable or disable the level. Defaults to True.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``level`` is not 'level_1' or 'level_2'
+        SubCommandFailure: Failed to configure the interface level enable
+
+    Example:
+        >>> configure_isis_interface_level_enabled(
+        ...     device, interface='loopback0', level='level_2', enabled=True)
+    """
+    lvl = _get_level_number(level)
+
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} ISIS level {lvl} on interface "
+        f"{interface} on {device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'level {lvl} enabled {str(enabled).lower()}',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure ISIS level {lvl} enable on interface {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_isis_interface_level_enabled(device, interface, level,
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Remove the per-interface per-level enable configuration.
+
+    CLI emitted::
+
+        network-instance {ni} protocol ISIS {pi} interface {interface}
+          no level {level_num} enabled
+
+    Note:
+        Confirmed on-device (rtr1, 2026-08-17): this removes the ``enabled``
+        leaf but leaves an EMPTY ``level {level_num}`` container in the running
+        config. Assert on the absence of the ``enabled`` leaf, not on the
+        absence of the ``level`` block. The interface-scoped ``enabled`` leaf is
+        left untouched — verified explicitly, since the submode spelling of this
+        command could disable ISIS on the whole interface. See the configure
+        counterpart for why this is one line.
+
+    Args:
+        device (obj): Device object
+        interface (str): Interface name.
+        level (str): ISIS level — ``'level_1'`` or ``'level_2'``.
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``level`` is not 'level_1' or 'level_2'
+        SubCommandFailure: Failed to remove the interface level enable
+
+    Example:
+        >>> unconfigure_isis_interface_level_enabled(
+        ...     device, interface='loopback0', level='level_2')
+    """
+    lvl = _get_level_number(level)
+
+    log.info(
+        f"Removing ISIS level {lvl} enable from interface {interface} on "
+        f"{device.name} (network-instance: {network_instance}, "
+        f"protocol-instance: {protocol_instance})"
+    )
+
+    intf_context = _build_interface_context(interface, network_instance, protocol_instance)
+    config = [
+        intf_context,
+        f'no level {lvl} enabled',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove ISIS level {lvl} enable from interface {interface} "
+            f"on {device.name}. Error:\n{e}"
+        )
