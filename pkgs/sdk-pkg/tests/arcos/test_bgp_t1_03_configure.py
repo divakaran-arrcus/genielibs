@@ -83,7 +83,9 @@ ALL_FUNCS = [
     (unconfigure_bgp_flowspec_rt_redirect_next_hop, {"afi_safi": "IPV4_FLOWSPEC"}, P),
     (configure_bgp_telemetry, {"neighbor_stream": True}, P),
     (unconfigure_bgp_telemetry, {}, P),
-    (configure_bgp_rtr_server, {"server_name": "rpki-rtr"}, P),
+    (configure_bgp_rtr_server,
+     {"server_name": "rpki-rtr", "address": "10.1.1.9", "port": 3323,
+      "preference": 1}, P),
     (unconfigure_bgp_rtr_server, {"server_name": "rpki-rtr"}, P),
 ]
 
@@ -299,9 +301,30 @@ class TestTelemetryAndRtrServer(Base):
             "!",
         ])
 
-    def test_rtr_server_name_only(self):
-        configure_bgp_rtr_server(self.device, server_name="rpki-rtr")
-        self.assertEqual(self.emitted(), [P, "rtr-server rpki-rtr", "!"])
+    def test_rtr_server_mandatory_leaves_are_required(self):
+        """R5: address/port/preference are mandatory at commit time. A bare
+        `rtr-server <name>` aborts, so the earlier signature that made all three
+        optional could emit a call that always failed — and this test used to
+        pin that emission as correct."""
+        import inspect
+        p = inspect.signature(configure_bgp_rtr_server).parameters
+        for req in ("address", "port", "preference"):
+            with self.subTest(param=req):
+                self.assertIs(p[req].default, inspect.Parameter.empty)
+        with self.assertRaises(TypeError):
+            configure_bgp_rtr_server(self.device, server_name="rpki-rtr")
+
+    def test_rtr_server_minimal_emits_all_three(self):
+        configure_bgp_rtr_server(self.device, server_name="rpki-rtr",
+                                 address="10.1.1.9", port=3323, preference=1)
+        self.assertEqual(self.emitted(), [
+            P,
+            "rtr-server rpki-rtr",
+            "rtr-server rpki-rtr address 10.1.1.9",
+            "rtr-server rpki-rtr port 3323",
+            "rtr-server rpki-rtr preference 1",
+            "!",
+        ])
 
     def test_rtr_server_all_options(self):
         configure_bgp_rtr_server(
@@ -319,7 +342,8 @@ class TestTelemetryAndRtrServer(Base):
 
     def test_rtr_server_is_protocol_scoped(self):
         """Sibling of `global`, not under it."""
-        configure_bgp_rtr_server(self.device, server_name="rpki-rtr")
+        configure_bgp_rtr_server(self.device, server_name="rpki-rtr",
+                                 address="10.1.1.9", port=3323, preference=1)
         for line in self.emitted():
             self.assertFalse(line.startswith("global "))
 

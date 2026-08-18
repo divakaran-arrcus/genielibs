@@ -6927,8 +6927,8 @@ def unconfigure_bgp_telemetry(device, network_instance='default',
         )
 
 
-def configure_bgp_rtr_server(device, server_name, address=None, port=None,
-                             preference=None, local_address=None,
+def configure_bgp_rtr_server(device, server_name, address, port, preference,
+                             local_address=None,
                              network_instance='default',
                              protocol_instance='default'):
     """Configure an RPKI RTR server for origin validation.
@@ -6936,9 +6936,9 @@ def configure_bgp_rtr_server(device, server_name, address=None, port=None,
     Args:
         device (obj): Device object
         server_name (str): RTR server name, e.g. ``'rpki-rtr'``.
-        address (str, optional): Server IP address. Defaults to None (unset).
-        port (int, optional): Server TCP port. Defaults to None (unset).
-        preference (int, optional): Server preference. Defaults to None (unset).
+        address (str): Server IP address. **Mandatory** — see the Note.
+        port (int): Server TCP port. **Mandatory** — see the Note.
+        preference (int): Server preference. **Mandatory** — see the Note.
         local_address (str, optional): Local transport address or interface name.
             Defaults to None (unset).
         network_instance (str, optional): Network instance name. Defaults to 'default'.
@@ -6954,9 +6954,25 @@ def configure_bgp_rtr_server(device, server_name, address=None, port=None,
         ``rtr-server`` sits at PROTOCOL level, a sibling of ``global`` — confirmed
         on rtr1 2026-08-17.
 
+    Note:
+        ``address``, ``port`` and ``preference`` are all MANDATORY at commit
+        time, so they are required parameters rather than optional ones. Omitting
+        any of them aborts, and the device reports them one at a time
+        (verified on rtr1 2026-08-18)::
+
+            rtr-server t1                       -> Aborted: '... t1 port' is not configured
+            rtr-server t1 port 3323             -> Aborted: '... t1 preference' is not configured
+            rtr-server t1 port .. preference .. -> Aborted: '... t1 address' is not configured
+            all three set                       -> Commit complete.
+
+        An earlier revision made all three optional, so
+        ``configure_bgp_rtr_server(device, server_name='x')`` emitted only the
+        bare key line and always aborted.
+
     Example:
         >>> configure_bgp_rtr_server(
-        ...     device, server_name='rpki-rtr', address='10.1.1.9', port=3323)
+        ...     device, server_name='rpki-rtr', address='10.1.1.9', port=3323,
+        ...     preference=1)
     """
     log.info(
         f"Configuring BGP rtr-server {server_name} on {device.name} "
@@ -6964,13 +6980,13 @@ def configure_bgp_rtr_server(device, server_name, address=None, port=None,
     )
 
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
-    config = [ctx, f'rtr-server {server_name}']
-    if address is not None:
-        config.append(f'rtr-server {server_name} address {address}')
-    if port is not None:
-        config.append(f'rtr-server {server_name} port {port}')
-    if preference is not None:
-        config.append(f'rtr-server {server_name} preference {preference}')
+    config = [
+        ctx,
+        f'rtr-server {server_name}',
+        f'rtr-server {server_name} address {address}',
+        f'rtr-server {server_name} port {port}',
+        f'rtr-server {server_name} preference {preference}',
+    ]
     if local_address is not None:
         config.append(f'rtr-server {server_name} local-address {local_address}')
     config.append('!')
