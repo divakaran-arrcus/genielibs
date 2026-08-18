@@ -697,7 +697,15 @@ def unconfigure_ldp_session_protection(device):
 
 
 def _ldp_hello_lines(prefix, hello_holdtime, hello_interval):
-    """Build `<prefix> hello-holdtime/hello-interval` lines. Raises if both None."""
+    """Build `<prefix> hello-holdtime/hello-interval` lines.
+
+    Raises ``ValueError`` - not ``SubCommandFailure`` - when neither timer is
+    given. This is a caller-side programming error caught before the device is
+    touched, so it is deliberately a different class from the device-failure
+    path that every other error site in this module raises. It is raised inside
+    the caller's ``try:`` but escapes the ``except SubCommandFailure``, which is
+    the intended behaviour.
+    """
     if hello_holdtime is None and hello_interval is None:
         raise ValueError(
             "at least one of 'hello_holdtime' or 'hello_interval' is required")
@@ -716,9 +724,11 @@ def configure_ldp_fec_filter_export_policy(device, policy):
     ``default-export-policy`` leaf that :func:`configure_ldp_global` sets.
     """
     log.info(f"Configuring LDP global fec-filter export-policy on {device.name}")
+    names = ' '.join(str(p) for p in policy) \
+        if isinstance(policy, (list, tuple)) else policy
     try:
         device.configure([
-            f'{_LDP_CTX} global fec-filter export-policy [ ' + (' '.join(policy) if isinstance(policy, (list, tuple)) else policy) + ' ]',
+            f'{_LDP_CTX} global fec-filter export-policy [ {names} ]',
             '!',
         ])
     except SubCommandFailure as e:
@@ -880,12 +890,12 @@ def unconfigure_ldp_interface_attributes_hello_interval(device):
     own unconfigure clears only ``hello-holdtime``. This exists so the
     hello-interval leaf has an inverse without a second way to set it.
     """
-    log.info(f"Removing LDP global interface-attributes hello-interval reset from {device.name}")
+    log.info(f"Removing LDP global interface-attributes hello-interval from {device.name}")
     try:
         device.configure([f'no {_LDP_CTX} interface-attributes hello-interval', '!'])
     except SubCommandFailure as e:
         raise SubCommandFailure(
-            f"Removing LDP global interface-attributes hello-interval reset failed on {device.name}: {e}"
+            f"Removing LDP global interface-attributes hello-interval failed on {device.name}: {e}"
         )
 
 
@@ -910,7 +920,11 @@ def unconfigure_ldp_interface_hello(device, interface):
     """Remove LDP per-interface hello timers."""
     log.info(f"Removing LDP per-interface hello timers from {device.name}")
     try:
-        device.configure([f'no {_LDP_CTX} interface-attributes interface {interface} hello-holdtime', '!'])
+        device.configure([
+            f'no {_LDP_CTX} interface-attributes interface {interface} hello-holdtime',
+            f'no {_LDP_CTX} interface-attributes interface {interface} hello-interval',
+            '!',
+        ])
     except SubCommandFailure as e:
         raise SubCommandFailure(
             f"Removing LDP per-interface hello timers failed on {device.name}: {e}"
@@ -968,7 +982,11 @@ def unconfigure_ldp_neighbor_targeted_hello(device, lsr_id, label_space_id=0):
     """Remove LDP neighbor targeted hello timers."""
     log.info(f"Removing LDP neighbor targeted hello timers from {device.name}")
     try:
-        device.configure([f'no {_LDP_CTX} neighbor {lsr_id} {label_space_id} targeted hello-holdtime', '!'])
+        device.configure([
+            f'no {_LDP_CTX} neighbor {lsr_id} {label_space_id} targeted hello-holdtime',
+            f'no {_LDP_CTX} neighbor {lsr_id} {label_space_id} targeted hello-interval',
+            '!',
+        ])
     except SubCommandFailure as e:
         raise SubCommandFailure(
             f"Removing LDP neighbor targeted hello timers failed on {device.name}: {e}"

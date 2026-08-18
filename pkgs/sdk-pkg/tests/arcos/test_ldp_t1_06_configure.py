@@ -27,12 +27,16 @@ from genie.libs.sdk.apis.arcos.ldp.configure import (
     configure_ldp_maximum_local_binding, unconfigure_ldp_maximum_local_binding,
     configure_ldp_interface_attributes_hello,
     unconfigure_ldp_interface_attributes_hello,
+    unconfigure_ldp_interface_attributes_hello_interval,
     configure_ldp_interface_hello, unconfigure_ldp_interface_hello,
     configure_ldp_neighbor_maximum_remote_binding,
     unconfigure_ldp_neighbor_maximum_remote_binding,
     configure_ldp_neighbor_targeted_hello, unconfigure_ldp_neighbor_targeted_hello,
 )
-from genie.libs.sdk.apis.arcos.rsvp_te.configure import configure_rsvp_te_interface
+from genie.libs.sdk.apis.arcos.rsvp_te.configure import (
+    configure_rsvp_te_interface,
+    configure_rsvp_interface,
+)
 
 L = "network-instance default mpls signaling-protocols ldp"
 TE = "network-instance default mpls mpls-te"
@@ -160,6 +164,54 @@ class TestHelloTimers(Base):
                 self.device.configure.assert_not_called()
 
 
+class TestHelloUnconfigureClearsBothLeaves(Base):
+    """H1 regression guard.
+
+    The configure halves set hello-holdtime AND hello-interval via
+    _ldp_hello_lines, so the unconfigure must clear both. Shipping only the
+    holdtime line left an interval-only call surviving its own documented
+    removal — and the original lab check missed it because the verification
+    script hand-wrote both `no` lines rather than emitting what the API emits.
+    """
+
+    def test_per_interface_clears_both(self):
+        unconfigure_ldp_interface_hello(self.device, interface="swp1")
+        self.assertEqual(self.emitted(), [
+            f"no {L} interface-attributes interface swp1 hello-holdtime",
+            f"no {L} interface-attributes interface swp1 hello-interval",
+            "!",
+        ])
+
+    def test_neighbor_targeted_clears_both(self):
+        unconfigure_ldp_neighbor_targeted_hello(self.device, lsr_id="2.2.2.2")
+        self.assertEqual(self.emitted(), [
+            f"no {L} neighbor 2.2.2.2 0 targeted hello-holdtime",
+            f"no {L} neighbor 2.2.2.2 0 targeted hello-interval",
+            "!",
+        ])
+
+    def test_every_leaf_a_configure_can_set_has_an_inverse(self):
+        """Generic form of H1: for each hello pair, the leaves the configure
+        emits must all appear in its unconfigure."""
+        pairs = [
+            (configure_ldp_interface_hello, unconfigure_ldp_interface_hello,
+             {"interface": "swp1"}, {"interface": "swp1"}),
+            (configure_ldp_neighbor_targeted_hello,
+             unconfigure_ldp_neighbor_targeted_hello,
+             {"lsr_id": "2.2.2.2"}, {"lsr_id": "2.2.2.2"}),
+        ]
+        for cfg_fn, unc_fn, cfg_kw, unc_kw in pairs:
+            with self.subTest(fn=cfg_fn.__name__):
+                self.device.configure.reset_mock()
+                cfg_fn(self.device, hello_holdtime=15, hello_interval=5, **cfg_kw)
+                set_leaves = {l.rsplit(" ", 1)[0] for l in self.emitted()
+                              if "hello-" in l}
+                self.device.configure.reset_mock()
+                unc_fn(self.device, **unc_kw)
+                cleared = {l[len("no "):] for l in self.emitted() if l.startswith("no ")}
+                self.assertEqual(set_leaves, cleared)
+
+
 class TestNeighborKeyIsTwoTokens(Base):
     """The LDP neighbor key is `{lsr_id} {label_space_id}`, matching
     configure_ldp_neighbor — NOT a colon-joined `lsr:space` form, which the
@@ -208,6 +260,18 @@ class TestRsvpTeInterfaceExtension(Base):
         self.assertEqual(
             self.emitted(), [f"{TE} interface swp1", "enable false", "!"])
 
+    def test_rsvp_proper_interface_can_also_disable(self):
+        """H2: configure_rsvp_interface is the function the audit flags as a
+        partial API; it hardcoded `enable true` until T1-06."""
+        p = inspect.signature(configure_rsvp_interface).parameters
+        self.assertIn("enabled", p)
+        self.assertIs(p["enabled"].default, True)
+        configure_rsvp_interface(self.device, interface="swp1", enabled=False)
+        self.assertEqual(self.emitted()[:2], [
+            "network-instance default protocol RSVP default interface swp1",
+            "enable false",
+        ])
+
     def test_metric_still_works_with_enabled(self):
         configure_rsvp_te_interface(
             self.device, interface="swp1", metric=100, enabled=False)
@@ -228,6 +292,7 @@ ALL = [
     (unconfigure_ldp_maximum_local_binding, {}),
     (configure_ldp_interface_attributes_hello, {"hello_holdtime": 15}),
     (unconfigure_ldp_interface_attributes_hello, {}),
+    (unconfigure_ldp_interface_attributes_hello_interval, {}),
     (configure_ldp_interface_hello, {"interface": "swp1", "hello_holdtime": 15}),
     (unconfigure_ldp_interface_hello, {"interface": "swp1"}),
     (configure_ldp_neighbor_maximum_remote_binding, {"lsr_id": "2.2.2.2", "maximum": 1}),
