@@ -198,6 +198,20 @@ class TestRetainRouteTargetAll(Base):
                         fn(self.device, afi_safi=bad)
                     self.device.configure.assert_not_called()
 
+    def test_m5_non_default_instance_rejected(self):
+        """adoc:855 restricts this to the `default` network-instance. The claim
+        was documented but unenforced, and the custom-instance sweep asserted
+        `red` renders — encoding an invalid config as expected behaviour."""
+        for fn in (configure_bgp_retain_route_target_all,
+                   unconfigure_bgp_retain_route_target_all):
+            for ni in ("red", "vrf-a", ""):
+                with self.subTest(fn=fn.__name__, ni=ni):
+                    self.device.configure.reset_mock()
+                    with self.assertRaises(ValueError):
+                        fn(self.device, afi_safi="L3VPN_IPV4_UNICAST",
+                           network_instance=ni)
+                    self.device.configure.assert_not_called()
+
     def test_unconfigure(self):
         unconfigure_bgp_retain_route_target_all(
             self.device, afi_safi="L3VPN_IPV6_UNICAST")
@@ -242,8 +256,16 @@ class TestNoSubmodeExits(Base):
 
 
 class TestCustomInstanceRendering(Base):
+    #: retain-route-target-all is valid only in the `default` network-instance
+    #: (adoc:855), so it must NOT render a custom one — see
+    #: TestRetainRouteTargetAll.test_m5_non_default_instance_rejected.
+    EXEMPT = {"configure_bgp_retain_route_target_all",
+              "unconfigure_bgp_retain_route_target_all"}
+
     def test_all(self):
         for fn, kwargs, ctx in ALL_FUNCS:
+            if fn.__name__ in self.EXEMPT:
+                continue
             with self.subTest(fn=fn.__name__):
                 self.device.configure.reset_mock()
                 fn(self.device, network_instance="red",

@@ -3538,11 +3538,11 @@ def configure_bgp_neighbor_ebgp_local_as(device, neighbor, local_as,
     nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
     config = [nbr_context, f'ebgp-local-as local-as {local_as}']
     if no_prepend is not None:
-        config.append(f'ebgp-local-as no-prepend {str(no_prepend).lower()}')
+        config.append(f'ebgp-local-as no-prepend {"true" if no_prepend else "false"}')
     if replace_as is not None:
-        config.append(f'ebgp-local-as replace-as {str(replace_as).lower()}')
+        config.append(f'ebgp-local-as replace-as {"true" if replace_as else "false"}')
     if dual_as is not None:
-        config.append(f'ebgp-local-as dual-as {str(dual_as).lower()}')
+        config.append(f'ebgp-local-as dual-as {"true" if dual_as else "false"}')
     config.append('!')
 
     try:
@@ -3726,7 +3726,7 @@ def configure_bgp_neighbor_as_path_options(device, neighbor, allow_own_as=None,
     if allow_own_as is not None:
         config.append(f'as-path-options allow-own-as {allow_own_as}')
     if replace_peer_as is not None:
-        config.append(f'as-path-options replace-peer-as {str(replace_peer_as).lower()}')
+        config.append(f'as-path-options replace-peer-as {"true" if replace_peer_as else "false"}')
     config.append('!')
 
     try:
@@ -3823,7 +3823,7 @@ def configure_bgp_neighbor_ebgp_multihop(device, neighbor, multihop_ttl,
 def unconfigure_bgp_neighbor_ebgp_multihop(device, neighbor,
                                            network_instance='default',
                                            protocol_instance='default'):
-    """Remove the eBGP multihop TTL for a neighbor from a neighbor.
+    """Remove the eBGP multihop TTL from a neighbor.
 
     Args:
         device (obj): Device object
@@ -3901,7 +3901,7 @@ def configure_bgp_neighbor_ttl_security_hops(device, neighbor, hops,
 def unconfigure_bgp_neighbor_ttl_security_hops(device, neighbor,
                                                network_instance='default',
                                                protocol_instance='default'):
-    """Remove the GTSM ttl-security hop count for a neighbor from a neighbor.
+    """Remove the GTSM ttl-security hop count from a neighbor.
 
     Args:
         device (obj): Device object
@@ -3984,7 +3984,7 @@ def configure_bgp_neighbor_auth_password(device, neighbor, password,
 def unconfigure_bgp_neighbor_auth_password(device, neighbor,
                                            network_instance='default',
                                            protocol_instance='default'):
-    """Remove the MD5 authentication password for a neighbor from a neighbor.
+    """Remove the MD5 authentication password from a neighbor.
 
     Args:
         device (obj): Device object
@@ -4211,7 +4211,7 @@ def configure_bgp_neighbor_transport_passive_mode(device, neighbor, enabled=True
     )
 
     nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
-    config = [nbr_context, f'transport passive-mode {str(enabled).lower()}', '!']
+    config = [nbr_context, f'transport passive-mode {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -4225,7 +4225,7 @@ def configure_bgp_neighbor_transport_passive_mode(device, neighbor, enabled=True
 def unconfigure_bgp_neighbor_transport_passive_mode(device, neighbor,
                                                     network_instance='default',
                                                     protocol_instance='default'):
-    """Remove passive-mode transport for a neighbor from a neighbor.
+    """Remove passive-mode transport from a neighbor.
 
     Args:
         device (obj): Device object
@@ -4290,7 +4290,7 @@ def configure_bgp_neighbor_enforce_first_as(device, neighbor, enabled=True,
     )
 
     nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
-    config = [nbr_context, f'enforce-first-as {str(enabled).lower()}', '!']
+    config = [nbr_context, f'enforce-first-as {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -4304,7 +4304,7 @@ def configure_bgp_neighbor_enforce_first_as(device, neighbor, enabled=True,
 def unconfigure_bgp_neighbor_enforce_first_as(device, neighbor,
                                               network_instance='default',
                                               protocol_instance='default'):
-    """Remove enforce-first-AS checking for a neighbor from a neighbor.
+    """Remove enforce-first-AS checking from a neighbor.
 
     Args:
         device (obj): Device object
@@ -4377,7 +4377,7 @@ def configure_bgp_neighbor_disable_fast_deactivation(device, neighbor, disabled=
     )
 
     nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
-    config = [nbr_context, f'disable-fast-deactivation {str(disabled).lower()}', '!']
+    config = [nbr_context, f'disable-fast-deactivation {"true" if disabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -4391,7 +4391,17 @@ def configure_bgp_neighbor_disable_fast_deactivation(device, neighbor, disabled=
 def unconfigure_bgp_neighbor_disable_fast_deactivation(device, neighbor,
                                                        network_instance='default',
                                                        protocol_instance='default'):
-    """Remove BGP fast session deactivation for a neighbor from a neighbor.
+    """Re-enable BGP fast session deactivation for a neighbor.
+
+    Emits ``no disable-fast-deactivation``, which removes the *disable* and
+    therefore RESTORES arcOS's default fast teardown - the session will again
+    drop immediately when its local interface goes down, rather than waiting
+    for the hold timer.
+
+    Note:
+        This leaf carries INVERTED sense; see
+        :func:`configure_bgp_neighbor_disable_fast_deactivation`. "Unconfigure"
+        here means restoring fast deactivation, not removing it.
 
     Args:
         device (obj): Device object
@@ -4482,7 +4492,7 @@ def configure_bgp_neighbor_inbound_soft_reconfiguration(device, neighbor, afi_sa
     nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
     config = [
         nbr_context,
-        f'afi-safi {afi_safi} inbound-soft-reconfiguration {str(enabled).lower()}',
+        f'afi-safi {afi_safi} inbound-soft-reconfiguration {"true" if enabled else "false"}',
         '!'
     ]
 
@@ -4590,7 +4600,7 @@ def configure_bgp_neighbor_route_reflector_client(device, neighbor, enabled=True
     )
 
     ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
-    config = [ctx, f'route-reflector route-reflector-client {str(enabled).lower()}', '!']
+    config = [ctx, f'route-reflector route-reflector-client {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -4667,7 +4677,7 @@ def configure_bgp_neighbor_route_server_client(device, neighbor, enabled=True,
     )
 
     ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
-    config = [ctx, f'route-server route-server-client {str(enabled).lower()}', '!']
+    config = [ctx, f'route-server route-server-client {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -4725,6 +4735,9 @@ def configure_bgp_neighbor_peer_as_range(device, neighbor, ranges,
         device (obj): Device object
         neighbor (str): Neighbor address.
         ranges (str): AS range or single AS, e.g. ``'65000..70000'`` or ``'71000'``.
+            One range per call — the leaf is a list, and adoc:531-532 adds a
+            second range with a second command. Call this repeatedly to build up
+            more than one; a single call does not replace previously-set ranges.
         network_instance (str, optional): Network instance name. Defaults to 'default'.
         protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
 
@@ -4973,7 +4986,7 @@ def configure_bgp_default_information_originate(device, afi_safi, enabled=True,
     )
 
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
-    config = [ctx, f'global afi-safi {afi_safi} default-information originate enabled {str(enabled).lower()}', '!']
+    config = [ctx, f'global afi-safi {afi_safi} default-information originate enabled {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -5052,7 +5065,7 @@ def configure_bgp_network_rib_validation(device, afi_safi, prefix, enabled=True,
     )
 
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
-    config = [ctx, f'global afi-safi {afi_safi} network {prefix} rib-validation {str(enabled).lower()}', '!']
+    config = [ctx, f'global afi-safi {afi_safi} network {prefix} rib-validation {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -5131,7 +5144,7 @@ def configure_bgp_neighbor_aigp(device, neighbor, afi_safi, enabled=True,
     )
 
     ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
-    config = [ctx, f'afi-safi {afi_safi} aigp enable {str(enabled).lower()}', '!']
+    config = [ctx, f'afi-safi {afi_safi} aigp enable {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -5318,7 +5331,7 @@ def configure_bgp_retain_route_target_all(device, afi_safi, enabled=True,
 
     Note:
         Valid ONLY under global VPN AFI/SAFIs, and only in the ``default``
-        network-instance (adoc:853). It does not appear under IPV4_UNICAST —
+        network-instance (adoc:855) — both halves are now enforced. It does not appear under IPV4_UNICAST —
         confirmed on rtr1 2026-08-17, where `global afi-safi IPV4_UNICAST ?`
         does not list it.
 
@@ -5336,6 +5349,11 @@ def configure_bgp_retain_route_target_all(device, afi_safi, enabled=True,
             f"retain-route-target-all is only valid under a global VPN AFI/SAFI. "
             f"Got '{afi_safi}'; expected one of: {', '.join(BGP_VPN_AFI_SAFIS)}"
         )
+    if network_instance != 'default':
+        raise ValueError(
+            "retain-route-target-all is valid only in the 'default' "
+            f"network-instance (adoc:855). Got '{network_instance}'."
+        )
 
     log.info(
         f"Configuring BGP retain-route-target-all under global afi-safi {afi_safi} "
@@ -5346,7 +5364,7 @@ def configure_bgp_retain_route_target_all(device, afi_safi, enabled=True,
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
     config = [
         ctx,
-        f'global afi-safi {afi_safi} retain-route-target-all {str(enabled).lower()}',
+        f'global afi-safi {afi_safi} retain-route-target-all {"true" if enabled else "false"}',
         '!'
     ]
 
@@ -5384,6 +5402,11 @@ def unconfigure_bgp_retain_route_target_all(device, afi_safi,
         raise ValueError(
             f"retain-route-target-all is only valid under a global VPN AFI/SAFI. "
             f"Got '{afi_safi}'; expected one of: {', '.join(BGP_VPN_AFI_SAFIS)}"
+        )
+    if network_instance != 'default':
+        raise ValueError(
+            "retain-route-target-all is valid only in the 'default' "
+            f"network-instance (adoc:855). Got '{network_instance}'."
         )
 
     log.info(
@@ -5447,10 +5470,11 @@ def configure_bgp_neighbor_default_originate(device, neighbor, afi_safi,
     nbr_context = _build_neighbor_context(neighbor, network_instance, protocol_instance)
     config = [
         nbr_context,
-        f'afi-safi {afi_safi} default-originate enabled {str(enabled).lower()}',
+        f'afi-safi {afi_safi} default-originate enabled {"true" if enabled else "false"}',
     ]
     if export_policy is not None:
-        policies = ' '.join(export_policy) if isinstance(export_policy, (list, tuple)) \
+        policies = ' '.join(str(x) for x in export_policy) \
+            if isinstance(export_policy, (list, tuple)) \
             else export_policy
         config.append(
             f'afi-safi {afi_safi} default-originate export-policy [ {policies} ]'
@@ -5550,7 +5574,7 @@ def configure_bgp_shutdown_protocol(device, shutdown=True,
         SubCommandFailure: Failed to configure administrative shutdown of the whole BGP protocol instance
 
     Example:
-        >>> configure_bgp_shutdown_protocol(device, enabled=True)
+        >>> configure_bgp_shutdown_protocol(device, shutdown=True)
     """
     log.info(
         f"Configuring BGP shutdown protocol on {device.name} "
@@ -5558,7 +5582,7 @@ def configure_bgp_shutdown_protocol(device, shutdown=True,
     )
 
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
-    config = [ctx, f'global shutdown-protocol {str(shutdown).lower()}', '!']
+    config = [ctx, f'global shutdown-protocol {"true" if shutdown else "false"}', '!']
 
     try:
         device.configure(config)
@@ -5627,7 +5651,7 @@ def configure_bgp_shutdown_all_sessions(device, shutdown=True,
         SubCommandFailure: Failed to configure administrative shutdown of all neighbor sessions
 
     Example:
-        >>> configure_bgp_shutdown_all_sessions(device, enabled=True)
+        >>> configure_bgp_shutdown_all_sessions(device, shutdown=True)
     """
     log.info(
         f"Configuring BGP shutdown all sessions on {device.name} "
@@ -5635,7 +5659,7 @@ def configure_bgp_shutdown_all_sessions(device, shutdown=True,
     )
 
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
-    config = [ctx, f'global shutdown-all-sessions {str(shutdown).lower()}', '!']
+    config = [ctx, f'global shutdown-all-sessions {"true" if shutdown else "false"}', '!']
 
     try:
         device.configure(config)
@@ -5709,7 +5733,7 @@ def configure_bgp_silent_drop(device, enabled=True,
     )
 
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
-    config = [ctx, f'global silent-drop {str(enabled).lower()}', '!']
+    config = [ctx, f'global silent-drop {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -5784,7 +5808,7 @@ def configure_bgp_mandate_ebgp_policy(device, enabled=True,
     )
 
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
-    config = [ctx, f'global mandate-ebgp-policy {str(enabled).lower()}', '!']
+    config = [ctx, f'global mandate-ebgp-policy {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -5858,7 +5882,7 @@ def configure_bgp_compatibility_suppress_nexthop_attribute(device, enabled=True,
     )
 
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
-    config = [ctx, f'global compatibility suppress-nexthop-attribute {str(enabled).lower()}', '!']
+    config = [ctx, f'global compatibility suppress-nexthop-attribute {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -5932,7 +5956,7 @@ def configure_bgp_compatibility_strict_common_afi_safi_check(device, enabled=Tru
     )
 
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
-    config = [ctx, f'global compatibility strict-common-afi-safi-check {str(enabled).lower()}', '!']
+    config = [ctx, f'global compatibility strict-common-afi-safi-check {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -5987,7 +6011,8 @@ def configure_bgp_update_wait_data_plane(device, afi_safi, enabled=True,
 
     Args:
         device (obj): Device object
-        afi_safi (str): ``'IPV4_UNICAST'`` or ``'IPV6_UNICAST'`` (adoc:837).
+        afi_safi (str): ``'IPV4_UNICAST'`` or ``'IPV6_UNICAST'`` — see
+            :data:`BGP_UPDATE_WAIT_AFI_SAFIS` (adoc:837). Enforced.
         enabled (bool, optional): Wait for the data plane. Defaults to True.
         network_instance (str, optional): Network instance name. Defaults to 'default'.
         protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
@@ -6001,13 +6026,19 @@ def configure_bgp_update_wait_data_plane(device, afi_safi, enabled=True,
     Example:
         >>> configure_bgp_update_wait_data_plane(device, afi_safi='IPV4_UNICAST')
     """
+    if afi_safi not in BGP_UPDATE_WAIT_AFI_SAFIS:
+        raise ValueError(
+            f"update-wait-data-plane is only available under "
+            f"{', '.join(BGP_UPDATE_WAIT_AFI_SAFIS)}. Got '{afi_safi}'."
+        )
+
     log.info(
         f"Configuring BGP update wait data plane on {device.name} "
         f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
     )
 
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
-    config = [ctx, f'global afi-safi {afi_safi} update-wait-data-plane {str(enabled).lower()}', '!']
+    config = [ctx, f'global afi-safi {afi_safi} update-wait-data-plane {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -6024,7 +6055,8 @@ def unconfigure_bgp_update_wait_data_plane(device, afi_safi, network_instance='d
 
     Args:
         device (obj): Device object
-        afi_safi (str): ``'IPV4_UNICAST'`` or ``'IPV6_UNICAST'`` (adoc:837).
+        afi_safi (str): ``'IPV4_UNICAST'`` or ``'IPV6_UNICAST'`` — see
+            :data:`BGP_UPDATE_WAIT_AFI_SAFIS` (adoc:837). Enforced.
         network_instance (str, optional): Network instance name. Defaults to 'default'.
         protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
 
@@ -6037,6 +6069,12 @@ def unconfigure_bgp_update_wait_data_plane(device, afi_safi, network_instance='d
     Example:
         >>> unconfigure_bgp_update_wait_data_plane(device)
     """
+    if afi_safi not in BGP_UPDATE_WAIT_AFI_SAFIS:
+        raise ValueError(
+            f"update-wait-data-plane is only available under "
+            f"{', '.join(BGP_UPDATE_WAIT_AFI_SAFIS)}. Got '{afi_safi}'."
+        )
+
     log.info(
         f"Removing BGP update wait data plane from {device.name} "
         f"(network-instance: {network_instance}, protocol-instance: {protocol_instance})"
@@ -6157,7 +6195,7 @@ def configure_bgp_neighbor_egress_peer_engineering(device, neighbor, enabled=Tru
     )
 
     ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
-    config = [ctx, f'egress-peer-engineering labeled-unicast enable {str(enabled).lower()}', '!']
+    config = [ctx, f'egress-peer-engineering labeled-unicast enable {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -6239,7 +6277,7 @@ def configure_bgp_neighbor_rtfilter_send_default_route(device, neighbor, enabled
     )
 
     ctx = _build_neighbor_context(neighbor, network_instance, protocol_instance)
-    config = [ctx, f'afi-safi RTFILTER send-default-route {str(enabled).lower()}', '!']
+    config = [ctx, f'afi-safi RTFILTER send-default-route {"true" if enabled else "false"}', '!']
 
     try:
         device.configure(config)
@@ -6286,6 +6324,9 @@ def unconfigure_bgp_neighbor_rtfilter_send_default_route(device, neighbor, netwo
         )
 
 
+#: Global AFI/SAFIs that carry ``update-wait-data-plane`` (adoc:837).
+BGP_UPDATE_WAIT_AFI_SAFIS = ('IPV4_UNICAST', 'IPV6_UNICAST')
+
 #: Next-hop treatment values for a neighbor AFI/SAFI.
 #: Device-confirmed enum (`neighbor <ip> afi-safi <af> next-hop ?`).
 BGP_NEXT_HOP_TYPES = ('SELF', 'UNCHANGED')
@@ -6303,16 +6344,32 @@ def _graceful_shutdown_lines(prefix, enable, set_local_preference_zero, set_med_
     Note:
         The leaf is spelled ``enable``, NOT ``enabled`` — unlike most arcOS
         booleans. Confirmed on rtr1 2026-08-17.
+
+    Raises:
+        ValueError: If a sub-leaf is requested with ``enable=False``.
+            ``Border_Gateway_Protocol.adoc:1182``: "graceful-shutdown must be
+            enabled first to allow the other parameters to be configured." The
+            batch previously emitted ``enable false`` followed by the sub-leaves,
+            an ordering the adoc forbids; refusing is safer than emitting it,
+            since arcOS accepts-and-ignores some malformed input.
     """
-    lines = [f'{prefix}graceful-shutdown enable {str(enable).lower()}']
+    if not enable and (set_local_preference_zero is not None
+                       or set_med_maximum is not None):
+        raise ValueError(
+            "graceful-shutdown sub-leaves (set_local_preference_zero, "
+            "set_med_maximum) require enable=True; adoc:1182 states "
+            "graceful-shutdown must be enabled before the other parameters "
+            "can be configured"
+        )
+    lines = [f'{prefix}graceful-shutdown enable {"true" if enable else "false"}']
     if set_local_preference_zero is not None:
         lines.append(
             f'{prefix}graceful-shutdown set-local-preference-zero '
-            f'{str(set_local_preference_zero).lower()}')
+            f'{"true" if set_local_preference_zero else "false"}')
     if set_med_maximum is not None:
         lines.append(
             f'{prefix}graceful-shutdown set-med-maximum '
-            f'{str(set_med_maximum).lower()}')
+            f'{"true" if set_med_maximum else "false"}')
     return lines
 
 
@@ -6363,6 +6420,11 @@ def configure_bgp_graceful_shutdown(device, enable=True,
 def unconfigure_bgp_graceful_shutdown(device, network_instance='default',
                                       protocol_instance='default'):
     """Remove instance-wide BGP graceful shutdown.
+
+    Note:
+        Emits ``no global graceful-shutdown``, removing the WHOLE container —
+        ``enable``, ``set-local-preference-zero`` and ``set-med-maximum``
+        together — not only the leaves a given configure call set.
 
     Args:
         device (obj): Device object
@@ -6443,6 +6505,10 @@ def unconfigure_bgp_neighbor_graceful_shutdown(device, neighbor,
                                                network_instance='default',
                                                protocol_instance='default'):
     """Remove graceful shutdown from a single neighbor.
+
+    Note:
+        Emits ``no graceful-shutdown``, removing the WHOLE container, not only
+        the leaves a given configure call set.
 
     Args:
         device (obj): Device object
@@ -6604,7 +6670,7 @@ def configure_bgp_flowspec_sample_and_drop(device, afi_safi, enabled=True,
     ctx = _build_bgp_config_context(network_instance, protocol_instance)
     config = [
         ctx,
-        f'global afi-safi {afi_safi} sample-and-drop {str(enabled).lower()}',
+        f'global afi-safi {afi_safi} sample-and-drop {"true" if enabled else "false"}',
         '!'
     ]
 
@@ -6806,10 +6872,10 @@ def configure_bgp_telemetry(device, neighbor_stream=None, prefix_stream=None,
     config = [ctx]
     if neighbor_stream is not None:
         config.append(
-            f'global telemetry neighbor-stream-enabled {str(neighbor_stream).lower()}')
+            f'global telemetry neighbor-stream-enabled {"true" if neighbor_stream else "false"}')
     if prefix_stream is not None:
         config.append(
-            f'global telemetry prefix-stream-enabled {str(prefix_stream).lower()}')
+            f'global telemetry prefix-stream-enabled {"true" if prefix_stream else "false"}')
     config.append('!')
 
     try:
@@ -6824,6 +6890,11 @@ def configure_bgp_telemetry(device, neighbor_stream=None, prefix_stream=None,
 def unconfigure_bgp_telemetry(device, network_instance='default',
                               protocol_instance='default'):
     """Remove BGP telemetry streaming configuration.
+
+    Note:
+        Emits ``no global telemetry``, removing the WHOLE container — both
+        ``neighbor-stream-enabled`` and ``prefix-stream-enabled`` — even if the
+        caller only ever set one of them.
 
     Args:
         device (obj): Device object

@@ -17,6 +17,7 @@ from unicon.core.errors import SubCommandFailure
 
 from genie.libs.sdk.apis.arcos.bgp.configure import (
     BGP_NEXT_HOP_TYPES,
+    BGP_UPDATE_WAIT_AFI_SAFIS,
     BGP_FLOWSPEC_AFI_SAFIS,
     BGP_RT_REDIRECT_NEXT_HOPS,
     configure_bgp_shutdown_protocol, unconfigure_bgp_shutdown_protocol,
@@ -240,6 +241,46 @@ class TestEnumValidation(Base):
                         self.device, afi_safi="IPV4_FLOWSPEC", next_hop=bad)
                 self.device.configure.assert_not_called()
         self.assertEqual(set(BGP_RT_REDIRECT_NEXT_HOPS), {"DEFAULT", "BGP_NLRI"})
+
+
+class TestReviewGuards(Base):
+    """Guards added for review findings M4, M5 and M7."""
+
+    def test_m4_update_wait_af_is_enforced(self):
+        """The docstring restricted the AF to two values; nothing checked it."""
+        self.assertEqual(set(BGP_UPDATE_WAIT_AFI_SAFIS),
+                         {"IPV4_UNICAST", "IPV6_UNICAST"})
+        for fn in (configure_bgp_update_wait_data_plane,
+                   unconfigure_bgp_update_wait_data_plane):
+            for good in BGP_UPDATE_WAIT_AFI_SAFIS:
+                with self.subTest(fn=fn.__name__, af=good):
+                    self.device.configure.reset_mock()
+                    fn(self.device, afi_safi=good)
+            for bad in ("L2VPN_EVPN", "L3VPN_IPV4_UNICAST", "RTFILTER", ""):
+                with self.subTest(fn=fn.__name__, af=bad):
+                    self.device.configure.reset_mock()
+                    with self.assertRaises(ValueError):
+                        fn(self.device, afi_safi=bad)
+                    self.device.configure.assert_not_called()
+
+    def test_m7_sub_leaves_require_enable_true(self):
+        """adoc:1182 — graceful-shutdown must be enabled before the other
+        parameters can be configured. Emitting `enable false` then a sub-leaf
+        is an ordering the adoc forbids."""
+        for fn, kw in ((configure_bgp_graceful_shutdown, {}),
+                       (configure_bgp_neighbor_graceful_shutdown, {"neighbor": NBR})):
+            for extra in ({"set_local_preference_zero": True},
+                          {"set_med_maximum": True}):
+                with self.subTest(fn=fn.__name__, extra=extra):
+                    self.device.configure.reset_mock()
+                    with self.assertRaises(ValueError):
+                        fn(self.device, enable=False, **kw, **extra)
+                    self.device.configure.assert_not_called()
+
+    def test_m7_enable_false_alone_is_still_allowed(self):
+        configure_bgp_graceful_shutdown(self.device, enable=False)
+        self.assertEqual(
+            self.emitted(), [P, "global graceful-shutdown enable false", "!"])
 
 
 class TestTelemetryAndRtrServer(Base):
