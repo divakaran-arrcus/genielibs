@@ -189,6 +189,21 @@ from .configure import (
     unconfigure_isis_micro_loop_avoidance_srv6,
     configure_isis_micro_loop_avoidance_rib_update_delay,
     unconfigure_isis_micro_loop_avoidance_rib_update_delay,
+    # Missing-API backlog batch T1-04
+    configure_isis_timers_fast_reroute_interval,
+    unconfigure_isis_timers_fast_reroute_interval,
+    configure_isis_graceful_restart_helper_only,
+    unconfigure_isis_graceful_restart_helper_only,
+    configure_isis_interface_mpls_ldp_sync,
+    unconfigure_isis_interface_mpls_ldp_sync,
+    configure_isis_interface_ipv4_fast_reroute_ip,
+    unconfigure_isis_interface_ipv4_fast_reroute_ip,
+    configure_isis_interface_ipv6_fast_reroute_ip,
+    unconfigure_isis_interface_ipv6_fast_reroute_ip,
+    configure_isis_interface_csnp_enabled,
+    unconfigure_isis_interface_csnp_enabled,
+    configure_isis_interface_level_enabled,
+    unconfigure_isis_interface_level_enabled,
 )
 
 __all__ = [
@@ -381,4 +396,19 @@ __all__ = [
     "unconfigure_isis_micro_loop_avoidance_srv6",
     "configure_isis_micro_loop_avoidance_rib_update_delay",
     "unconfigure_isis_micro_loop_avoidance_rib_update_delay",
+    # Configure APIs - Missing-API backlog batch T1-04
+    "configure_isis_timers_fast_reroute_interval",
+    "unconfigure_isis_timers_fast_reroute_interval",
+    "configure_isis_graceful_restart_helper_only",
+    "unconfigure_isis_graceful_restart_helper_only",
+    "configure_isis_interface_mpls_ldp_sync",
+    "unconfigure_isis_interface_mpls_ldp_sync",
+    "configure_isis_interface_ipv4_fast_reroute_ip",
+    "unconfigure_isis_interface_ipv4_fast_reroute_ip",
+    "configure_isis_interface_ipv6_fast_reroute_ip",
+    "unconfigure_isis_interface_ipv6_fast_reroute_ip",
+    "configure_isis_interface_csnp_enabled",
+    "unconfigure_isis_interface_csnp_enabled",
+    "configure_isis_interface_level_enabled",
+    "unconfigure_isis_interface_level_enabled",
 ]

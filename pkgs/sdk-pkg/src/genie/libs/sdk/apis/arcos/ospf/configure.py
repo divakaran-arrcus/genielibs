@@ -933,3 +933,281 @@ def unconfigure_ospf_maintenance_mode_trigger(device,
         raise SubCommandFailure(
             f"OSPF maintenance-mode trigger removal failed on {device.name}: {e}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Missing-API backlog batch T1-05 — OSPF logging, SPF-log and LSA timers
+# (arcos_pyats_sanity/docs/config-coverage/03-ospf-ldp-bfd-static.md)
+#
+# Leaf names and enums confirmed by `?` capture on rtr1 2026-08-17. The audit's
+# "triggers-per-log" is really `maximum-triggers-per-log`.
+# ---------------------------------------------------------------------------
+
+
+#: Accepted values for ``configure_ospf_log_adjacency_changes(mode=...)``.
+#: Device-confirmed enum (`global log-adjacency-changes ?` on rtr1 2026-08-17).
+OSPF_LOG_ADJ_MODES = (
+    'LOG_ADJ_DISABLE',
+    'LOG_ADJ_ENABLE_LIMITED',
+    'LOG_ADJ_ENABLE_DETAILED',
+)
+
+
+def _spf_logging_lines(maximum_logs, maximum_triggers_per_log):
+    """Build the `global spf logging` leaf lines. Raises if both are None."""
+    if maximum_logs is None and maximum_triggers_per_log is None:
+        raise ValueError(
+            "spf_logging requires at least one of 'maximum_logs' or "
+            "'maximum_triggers_per_log'"
+        )
+    lines = []
+    if maximum_logs is not None:
+        lines.append(f'global spf logging maximum-logs {maximum_logs}')
+    if maximum_triggers_per_log is not None:
+        lines.append(
+            f'global spf logging maximum-triggers-per-log {maximum_triggers_per_log}')
+    return lines
+
+
+def _lsa_timer_lines(min_arrival):
+    """Build the `global timers lsa` leaf lines.
+
+    Only ``min-arrival`` is settable. ``origination-delay`` appears in the CLI's
+    own `?` completions with a value type (`<unsignedInt, 0..600000>[50]`), but
+    the device REJECTS every assignment to it:
+
+        global timers lsa origination-delay 50   -> syntax error: unknown argument
+        global timers lsa origination-delay 50 60 -> syntax error: incomplete path
+
+    Confirmed on rtr1 2026-08-17 for BOTH OSPF and OSPF3, on a clean instance
+    with no config lock held. No API is offered for it rather than one that
+    always fails.
+    """
+    if min_arrival is None:
+        raise ValueError("timers_lsa requires 'min_arrival'")
+    return [f'global timers lsa min-arrival {min_arrival}']
+
+
+def configure_ospf_log_adjacency_changes(device, mode, network_instance='default',
+                                         protocol_instance='default'):
+    """Configure OSPF global log-adjacency-changes.
+
+    ``mode`` is one of :data:`OSPF_LOG_ADJ_MODES`.
+    """
+    if mode not in OSPF_LOG_ADJ_MODES:
+        raise ValueError(
+            f"Invalid mode '{mode}'. Must be one of: "
+            f"{', '.join(OSPF_LOG_ADJ_MODES)}"
+        )
+    log.info(f"Configuring OSPF global log-adjacency-changes on {device.name}")
+    ctx = _build_ospf_context(network_instance, protocol_instance)
+    try:
+        device.configure([
+            ctx,
+            f'global log-adjacency-changes {mode}',
+            '!',
+        ])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"OSPF global log-adjacency-changes failed on {device.name}: {e}"
+        )
+
+
+def unconfigure_ospf_log_adjacency_changes(device, network_instance='default',
+                                           protocol_instance='default'):
+    """Remove OSPF global log-adjacency-changes."""
+    log.info(f"Removing OSPF global log-adjacency-changes from {device.name}")
+    ctx = _build_ospf_context(network_instance, protocol_instance)
+    try:
+        device.configure([ctx, 'no global log-adjacency-changes', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Removing OSPF global log-adjacency-changes failed on {device.name}: {e}"
+        )
+
+
+def configure_ospf_spf_logging(device, maximum_logs=None, maximum_triggers_per_log=None, network_instance='default',
+                               protocol_instance='default'):
+    """Configure OSPF global SPF logging.
+
+    At least one of ``maximum_logs`` (device default 16) or
+    ``maximum_triggers_per_log`` (device default 8) must be given.
+    """
+    log.info(f"Configuring OSPF global SPF logging on {device.name}")
+    ctx = _build_ospf_context(network_instance, protocol_instance)
+    try:
+        device.configure([
+            ctx,
+            *_spf_logging_lines(maximum_logs, maximum_triggers_per_log),
+            '!',
+        ])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"OSPF global SPF logging failed on {device.name}: {e}"
+        )
+
+
+def unconfigure_ospf_spf_logging(device, network_instance='default',
+                                 protocol_instance='default'):
+    """Remove OSPF global SPF logging."""
+    log.info(f"Removing OSPF global SPF logging from {device.name}")
+    ctx = _build_ospf_context(network_instance, protocol_instance)
+    try:
+        device.configure([ctx, 'no global spf logging', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Removing OSPF global SPF logging failed on {device.name}: {e}"
+        )
+
+
+def configure_ospf_timers_lsa(device, min_arrival, network_instance='default',
+                              protocol_instance='default'):
+    """Configure OSPF global LSA timers.
+
+    Only ``min_arrival`` is offered — ``origination-delay`` is advertised by the
+    CLI's `?` output but rejected on assignment (see :func:`_lsa_timer_lines`).
+    """
+    log.info(f"Configuring OSPF global LSA timers on {device.name}")
+    ctx = _build_ospf_context(network_instance, protocol_instance)
+    try:
+        device.configure([
+            ctx,
+            *_lsa_timer_lines(min_arrival),
+            '!',
+        ])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"OSPF global LSA timers failed on {device.name}: {e}"
+        )
+
+
+def unconfigure_ospf_timers_lsa(device, network_instance='default',
+                                protocol_instance='default'):
+    """Remove OSPF global LSA timers."""
+    log.info(f"Removing OSPF global LSA timers from {device.name}")
+    ctx = _build_ospf_context(network_instance, protocol_instance)
+    try:
+        device.configure([ctx, 'no global timers lsa', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Removing OSPF global LSA timers failed on {device.name}: {e}"
+        )
+
+
+#: OSPFv2 SNMP traps that `global snmp send-trap <trap> <bool>` can enable.
+#: Device-confirmed (`global snmp send-trap ?` on rtr1 2026-08-17); every one
+#: defaults to false/disabled.
+OSPF_SNMP_TRAPS = (
+    'if-auth-failure',
+    'if-config-error',
+    'if-rx-bad-packet',
+    'if-state-change',
+    'lsdb-approaching-overflow',
+    'lsdb-overflow',
+    'max-age-lsa',
+    'nbr-state-change',
+    'originate-lsa',
+    'tx-retransmit',
+)
+
+
+def configure_ospf_snmp_send_trap(device, trap, enabled=True,
+                                  network_instance='default',
+                                  protocol_instance='default'):
+    """Enable or disable one OSPFv2 SNMP trap.
+
+    ``trap`` is one of :data:`OSPF_SNMP_TRAPS`. All traps default to disabled.
+    """
+    if trap not in OSPF_SNMP_TRAPS:
+        raise ValueError(
+            f"Invalid OSPF SNMP trap '{trap}'. Must be one of: "
+            f"{', '.join(OSPF_SNMP_TRAPS)}"
+        )
+    log.info(f"Configuring OSPF snmp send-trap {trap} on {device.name}")
+    ctx = _build_ospf_context(network_instance, protocol_instance)
+    try:
+        device.configure([
+            ctx,
+            f'global snmp send-trap {trap} {"true" if enabled else "false"}',
+            '!',
+        ])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"OSPF snmp send-trap {trap} failed on {device.name}: {e}"
+        )
+
+
+def unconfigure_ospf_snmp_send_trap(device, trap,
+                                    network_instance='default',
+                                    protocol_instance='default'):
+    """Remove one OSPFv2 SNMP trap setting (reverts to the disabled default)."""
+    if trap not in OSPF_SNMP_TRAPS:
+        raise ValueError(
+            f"Invalid OSPF SNMP trap '{trap}'. Must be one of: "
+            f"{', '.join(OSPF_SNMP_TRAPS)}"
+        )
+    log.info(f"Removing OSPF snmp send-trap {trap} from {device.name}")
+    ctx = _build_ospf_context(network_instance, protocol_instance)
+    try:
+        device.configure([ctx, f'no global snmp send-trap {trap}', '!'])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Removing OSPF snmp send-trap {trap} failed on {device.name}: {e}"
+        )
+
+
+def configure_ospf_interface_auth_keychain(device, area_id, interface, keychain,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Configure OSPF interface keychain authentication.
+
+    Sets auth-type=OSPF_AUTH_KEYCHAIN and binds the named keychain, mirroring
+    :func:`configure_ospf_interface_auth_md5`.
+
+    Graceful key rollover is NOT configured here — it is emergent from the
+    keychain's own overlapping send-lifetimes. Use
+    ``configure_keychain_key(send_lifetime_start_time=..., send_lifetime_end_time=...)``
+    in ``apis.arcos.keychain.configure`` for that.
+    """
+    log.info(
+        f"Configuring OSPF keychain auth ({keychain}) on {interface} "
+        f"area {area_id} on {device.name}"
+    )
+    ctx = _build_ospf_context(network_instance, protocol_instance)
+    try:
+        device.configure([
+            ctx,
+            f'area {area_id}',
+            f'interface {interface}',
+            'authentication auth-type OSPF_AUTH_KEYCHAIN',
+            f'authentication crypto-keychain keychain {keychain}',
+            '!',
+        ])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"OSPF keychain auth failed on {device.name}: {e}"
+        )
+
+
+def unconfigure_ospf_interface_auth_keychain(device, area_id, interface,
+                                             network_instance='default',
+                                             protocol_instance='default'):
+    """Remove OSPF interface keychain authentication."""
+    log.info(
+        f"Removing OSPF keychain auth on {interface} area {area_id} "
+        f"on {device.name}"
+    )
+    ctx = _build_ospf_context(network_instance, protocol_instance)
+    try:
+        device.configure([
+            ctx,
+            f'area {area_id}',
+            f'interface {interface}',
+            'no authentication crypto-keychain',
+            'no authentication auth-type',
+            '!',
+        ])
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Removing OSPF keychain auth failed on {device.name}: {e}"
+        )
