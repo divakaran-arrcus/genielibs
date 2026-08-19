@@ -9,16 +9,32 @@ _MPLS_TE_CTX = 'network-instance default mpls mpls-te'
 _RSVP_CTX = 'network-instance default protocol RSVP default'
 
 
-def configure_rsvp_te_interface(device, interface, metric=None):
+def configure_rsvp_te_interface(device, interface, metric=None, enabled=True):
     """Configure MPLS-TE on an interface.
 
     Args:
         device: Device object.
         interface: Interface name.
         metric: Optional TE metric (0-4294967295).
+        enabled: Enable or DISABLE MPLS-TE on the interface. Defaults to True.
+
+    Note:
+        ``enabled`` was added by missing-API batch T1-06. This function
+        previously hardcoded ``enable true``, so ``enable false`` was
+        unreachable. This closes audit row `03-ospf-ldp-bfd-static.md:180`
+        (MPLS-TE interface enable/disable — a fully-missing row), NOT the
+        partial-API flag at `config-coverage/README.md:63`, which names the
+        sibling :func:`configure_rsvp_interface` and is closed separately.
+        The default is True, so existing callers are unaffected. Device help
+        confirms the leaf's own default is also true
+        (`mpls mpls-te interface <i> ?` on rtr1 2026-08-17).
     """
-    log.info(f"Configuring MPLS-TE interface {interface} on {device.name}")
-    config = [f'{_MPLS_TE_CTX} interface {interface}', 'enable true']
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} MPLS-TE interface {interface} "
+        f"on {device.name}"
+    )
+    config = [f'{_MPLS_TE_CTX} interface {interface}',
+              f'enable {str(enabled).lower()}']
     if metric is not None:
         config.append(f'metric {metric}')
     config.append('!')
@@ -74,7 +90,7 @@ def unconfigure_rsvp_global(device):
 
 
 def configure_rsvp_interface(device, interface, hello_supported=None,
-                              bandwidth_subscription=None):
+                              bandwidth_subscription=None, enabled=True):
     """Configure RSVP-TE on an interface.
 
     Args:
@@ -82,9 +98,22 @@ def configure_rsvp_interface(device, interface, hello_supported=None,
         interface: Interface name.
         hello_supported: Enable Hello on interface (bool).
         bandwidth_subscription: Max reservable bandwidth percentage (0-100).
+        enabled: Enable or DISABLE RSVP on the interface. Defaults to True.
+
+    Note:
+        ``enabled`` was added by missing-API batch T1-06. This function
+        previously hardcoded ``enable true``, so ``enable false``
+        (RSVP-TE.adoc:363-368) was unreachable - this is the function the
+        coverage audit flags as a partial API (`config-coverage/README.md:63`,
+        row `03-ospf-ldp-bfd-static.md:186`). The default is True, so existing
+        callers are unaffected.
     """
-    log.info(f"Configuring RSVP interface {interface} on {device.name}")
-    config = [f'{_RSVP_CTX} interface {interface}', 'enable true']
+    log.info(
+        f"{'Enabling' if enabled else 'Disabling'} RSVP interface {interface} "
+        f"on {device.name}"
+    )
+    config = [f'{_RSVP_CTX} interface {interface}',
+              f'enable {str(enabled).lower()}']
     if hello_supported is not None:
         flag = 'true' if hello_supported else 'false'
         config.append(f'hello-supported {flag}')

@@ -519,3 +519,121 @@ def _ssh_exec_put(client, local_path: Path, remote_path: str) -> None:
         raise SubCommandFailure(
             f"SSH exec transfer to {remote_path} failed (exit {exit_code}): {err_output}"
         )
+
+
+#: Address families accepted by the ``system rib <AF>`` RNH-resolution knobs.
+#: Device-confirmed (`system rib IPV4 ?` on rtr1 2026-08-18).
+SYSTEM_RIB_AFS = ('IPV4', 'IPV6')
+
+
+def configure_system_rib_rnh_resolution(device, af, via_default_route=None,
+                                        via_aggregate_route=None):
+    """Control remote-next-hop resolution via default and/or aggregate routes.
+
+    adoc: Routing_Information_Base.adoc:21-25, Static_Routing.adoc:106-109.
+
+    This lives under ``system rib <AF>``, NOT under the STATIC protocol — the
+    config-coverage audit filed it against static-routing. It matters for static
+    routes whose next-hop can only be resolved through a default route
+    (Static_Routing.adoc:106).
+
+    Args:
+        device (obj): Device object.
+        af (str): ``'IPV4'`` or ``'IPV6'`` — see :data:`SYSTEM_RIB_AFS`.
+        via_default_route (bool, optional): Allow RNH resolution via default
+            routes. Defaults to None (leave unset).
+        via_aggregate_route (bool, optional): Allow RNH resolution via aggregate
+            routes. Defaults to None (leave unset).
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``af`` is invalid or neither control is supplied.
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> configure_system_rib_rnh_resolution(device, 'IPV4', via_default_route=True)
+    """
+    if af not in SYSTEM_RIB_AFS:
+        raise ValueError(
+            f"Invalid address family '{af}'. Must be one of: "
+            f"{', '.join(SYSTEM_RIB_AFS)}"
+        )
+    if via_default_route is None and via_aggregate_route is None:
+        raise ValueError(
+            "configure_system_rib_rnh_resolution requires at least one of "
+            "'via_default_route' or 'via_aggregate_route'"
+        )
+
+    log.info(f"Configuring system rib {af} rnh-resolution on {device.name}")
+    config = []
+    if via_default_route is not None:
+        config.append(
+            f'system rib {af} rnh-resolution-via-default-route '
+            f'{str(via_default_route).lower()}')
+    if via_aggregate_route is not None:
+        config.append(
+            f'system rib {af} rnh-resolution-via-aggregate-route '
+            f'{str(via_aggregate_route).lower()}')
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure system rib {af} rnh-resolution on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_system_rib_rnh_resolution(device, af, via_default_route=False,
+                                          via_aggregate_route=False):
+    """Remove RNH-resolution controls under ``system rib <AF>``.
+
+    Each flag defaults to False (leave alone); pass True to clear that leaf.
+
+    Args:
+        device (obj): Device object.
+        af (str): ``'IPV4'`` or ``'IPV6'``.
+        via_default_route (bool, optional): Clear the default-route control.
+            Defaults to False.
+        via_aggregate_route (bool, optional): Clear the aggregate-route control.
+            Defaults to False.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``af`` is invalid or nothing is selected.
+        SubCommandFailure: If configuration fails.
+
+    Example:
+        >>> unconfigure_system_rib_rnh_resolution(device, 'IPV4', via_default_route=True)
+    """
+    if af not in SYSTEM_RIB_AFS:
+        raise ValueError(
+            f"Invalid address family '{af}'. Must be one of: "
+            f"{', '.join(SYSTEM_RIB_AFS)}"
+        )
+    if not (via_default_route or via_aggregate_route):
+        raise ValueError(
+            "unconfigure_system_rib_rnh_resolution requires at least one of "
+            "'via_default_route' or 'via_aggregate_route' set True"
+        )
+
+    log.info(f"Removing system rib {af} rnh-resolution on {device.name}")
+    config = []
+    if via_default_route:
+        config.append(f'no system rib {af} rnh-resolution-via-default-route')
+    if via_aggregate_route:
+        config.append(f'no system rib {af} rnh-resolution-via-aggregate-route')
+    config.append('!')
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove system rib {af} rnh-resolution on "
+            f"{device.name}. Error:\n{e}"
+        )

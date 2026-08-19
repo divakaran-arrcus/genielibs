@@ -704,7 +704,8 @@ def unconfigure_interface_debounce(device, interface):
 
 
 def configure_interface_bfd_micro(device, interface, remote_ipv4=None,
-                                  remote_ipv6=None, enabled=True):
+                                  remote_ipv6=None, enabled=True,
+                                  profile=None):
     """Configure BFD micro on an interface on ArcOS.
 
     Args:
@@ -715,12 +716,22 @@ def configure_interface_bfd_micro(device, interface, remote_ipv4=None,
         remote_ipv6 (str, optional): Remote IPv6 address for BFD micro.
             Defaults to None.
         enabled (bool): Whether BFD micro is enabled. Defaults to True.
+        profile (str, optional): Micro-BFD profile name. Defaults to None
+            (leave unset).
 
     Returns:
         None
 
     Raises:
         SubCommandFailure: If the configuration fails.
+
+    Note:
+        ``profile`` was added by missing-API batch T1-07. The device offers
+        three micro-BFD leaves — ``enabled``, ``remote-address`` and
+        ``profile`` (`interface <bond> bfd micro ?` on rtr1 2026-08-18) — and
+        this function previously covered only the first two, so a profile could
+        not be bound (High_Availability.adoc:573). The default is None, so
+        existing callers are unaffected.
 
     Example:
         >>> configure_interface_bfd_micro(device, 'ethernet-1/1',
@@ -733,6 +744,8 @@ def configure_interface_bfd_micro(device, interface, remote_ipv4=None,
         config.append(f'bfd micro remote-address ipv4 {remote_ipv4}')
     if remote_ipv6 is not None:
         config.append(f'bfd micro remote-address ipv6 {remote_ipv6}')
+    if profile is not None:
+        config.append(f'bfd micro profile {profile}')
     config.append(f'bfd micro enabled {"true" if enabled else "false"}')
     config.append('!')
     try:
