@@ -26,7 +26,8 @@ def configure_routing_policy_set_qos_class_id(device, policy_name, statement,
         f'statement {statement}',
     ]
     if match_next_hop_set:
-        config.append(f'conditions match-next-hop-set {match_next_hop_set}')
+        config.append(
+            f'conditions match-next-hop-set next-hop-set {match_next_hop_set}')
         config.append(f'conditions match-next-hop-set match-set-options {match_set_options}')
     config.append('actions accept-route')
     config.append(f'actions bgp-actions set-qos-class-id {qos_class_id}')

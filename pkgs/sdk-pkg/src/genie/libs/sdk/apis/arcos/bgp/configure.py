@@ -7035,3 +7035,251 @@ def unconfigure_bgp_rtr_server(device, server_name,
             f"Could not remove BGP rtr-server {server_name} from {device.name}. "
             f"Error:\n{e}"
         )
+
+
+def configure_bgp_global_import_policy(device, afi_safi, policies,
+                                         network_instance='default',
+                                         protocol_instance='default'):
+    """Configure BGP global (instance-wide) import policy for an AFI-SAFI.
+
+    Applies an import-policy chain at ``global afi-safi`` scope, i.e. to the
+    whole BGP instance rather than a single neighbor or peer-group.
+
+    CLI emitted::
+
+        network-instance {ni} protocol BGP {pi}
+         global afi-safi {afi_safi}
+          apply-policy import-policy [ {policies} ]
+        !
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): AFI-SAFI name (e.g., 'IPV4_UNICAST')
+        policies (list or str): Policy name(s) to apply as import
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP global import policy
+
+    Example:
+        >>> configure_bgp_global_import_policy(device, 'IPV4_UNICAST', ['X1'])
+
+    Note:
+        The BGP instance must already have both ``global as`` and
+        ``global router-id``, or the commit aborts with
+        ``Local-AS and Router-ID must be configured`` — this is a
+        commit-time-only constraint that a parse check will not catch. See
+        :func:`configure_bgp_as_number` and :func:`configure_bgp_router_id`.
+        Verified on rtr1 2026-08-20.
+    """
+    log.info(
+        f"Configuring BGP global import-policy for {afi_safi} on {device.name}"
+    )
+
+    if isinstance(policies, (list, tuple)):
+        pol_str = ' '.join(str(p) for p in policies)
+    else:
+        pol_str = str(policies)
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'global afi-safi {afi_safi}',
+        f'apply-policy import-policy [ {pol_str} ]',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP global import-policy for {afi_safi} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_global_import_policy(device, afi_safi,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Remove the BGP global import policy for an AFI-SAFI.
+
+    CLI emitted::
+
+        network-instance {ni} protocol BGP {pi}
+         no global afi-safi {afi_safi} apply-policy import-policy
+        !
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): AFI-SAFI name (e.g., 'IPV4_UNICAST')
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove BGP global import policy
+
+    Example:
+        >>> unconfigure_bgp_global_import_policy(device, 'IPV4_UNICAST')
+
+    Note:
+        Exact inverse of :func:`configure_bgp_global_import_policy`. Removes
+        only the import-policy leaf; any export-policy on the same AFI-SAFI is
+        left intact. An empty ``global afi-safi`` container may remain —
+        assert on the leaf, not the block.
+
+        The whole path is emitted flat on the ``no`` line rather than entering
+        the ``global afi-safi`` submode: a bare ``no <leaf>`` after a submode
+        line that was accepted-and-ignored can land at the parent scope. This
+        matches every post-T1 BGP unconfigure in this module. Verified on rtr1
+        2026-08-20 — import removed, export and ``global as``/``router-id``
+        left intact.
+    """
+    log.info(
+        f"Removing BGP global import-policy for {afi_safi} from {device.name}"
+    )
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'no global afi-safi {afi_safi} apply-policy import-policy',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP global import-policy for {afi_safi} from "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def configure_bgp_global_export_policy(device, afi_safi, policies,
+                                         network_instance='default',
+                                         protocol_instance='default'):
+    """Configure BGP global (instance-wide) export policy for an AFI-SAFI.
+
+    Applies an export-policy chain at ``global afi-safi`` scope, i.e. to the
+    whole BGP instance rather than a single neighbor or peer-group. This is
+    also the attachment point for SR-Policy colour steering, where an
+    export-policy adds a colour extended-community to advertised routes.
+
+    CLI emitted::
+
+        network-instance {ni} protocol BGP {pi}
+         global afi-safi {afi_safi}
+          apply-policy export-policy [ {policies} ]
+        !
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): AFI-SAFI name (e.g., 'IPV4_UNICAST')
+        policies (list or str): Policy name(s) to apply as export
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure BGP global export policy
+
+    Example:
+        >>> configure_bgp_global_export_policy(
+        ...     device, 'IPV4_UNICAST', ['add-color'])
+
+    Note:
+        The BGP instance must already have both ``global as`` and
+        ``global router-id``, or the commit aborts with
+        ``Local-AS and Router-ID must be configured``. See
+        :func:`configure_bgp_as_number` and :func:`configure_bgp_router_id`.
+        Verified on rtr1 2026-08-20.
+    """
+    log.info(
+        f"Configuring BGP global export-policy for {afi_safi} on {device.name}"
+    )
+
+    if isinstance(policies, (list, tuple)):
+        pol_str = ' '.join(str(p) for p in policies)
+    else:
+        pol_str = str(policies)
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'global afi-safi {afi_safi}',
+        f'apply-policy export-policy [ {pol_str} ]',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure BGP global export-policy for {afi_safi} on "
+            f"{device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_bgp_global_export_policy(device, afi_safi,
+                                           network_instance='default',
+                                           protocol_instance='default'):
+    """Remove the BGP global export policy for an AFI-SAFI.
+
+    CLI emitted::
+
+        network-instance {ni} protocol BGP {pi}
+         no global afi-safi {afi_safi} apply-policy export-policy
+        !
+
+    Args:
+        device (obj): Device object
+        afi_safi (str): AFI-SAFI name (e.g., 'IPV4_UNICAST')
+        network_instance (str, optional): Network instance name. Defaults to 'default'.
+        protocol_instance (str, optional): BGP protocol instance name. Defaults to 'default'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove BGP global export policy
+
+    Example:
+        >>> unconfigure_bgp_global_export_policy(device, 'IPV4_UNICAST')
+
+    Note:
+        Exact inverse of :func:`configure_bgp_global_export_policy`. Removes
+        only the export-policy leaf; any import-policy on the same AFI-SAFI is
+        left intact.
+
+        The whole path is emitted flat on the ``no`` line rather than entering
+        the ``global afi-safi`` submode, matching every post-T1 BGP unconfigure
+        in this module — a bare ``no <leaf>`` after an accepted-and-ignored
+        submode line can land at the parent scope. Verified on rtr1
+        2026-08-20.
+    """
+    log.info(
+        f"Removing BGP global export-policy for {afi_safi} from {device.name}"
+    )
+
+    bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
+    config = [
+        bgp_context,
+        f'no global afi-safi {afi_safi} apply-policy export-policy',
+        '!'
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove BGP global export-policy for {afi_safi} from "
+            f"{device.name}. Error:\n{e}"
+        )
