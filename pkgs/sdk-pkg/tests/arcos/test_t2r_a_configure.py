@@ -255,6 +255,17 @@ class TestBgpGlobalExportPolicy(ArcosT2raTestCase):
             ],
         )
 
+    def test_configure_multiple_policies_space_joined(self):
+        configure_bgp_global_export_policy(
+            self.device, "IPV4_UNICAST", ["X1", "X2"])
+        self.assertEqual(
+            self.emitted()[2], "apply-policy export-policy [ X1 X2 ]")
+
+    def test_configure_accepts_bare_string(self):
+        configure_bgp_global_export_policy(self.device, "IPV4_UNICAST", "X1")
+        self.assertEqual(
+            self.emitted()[2], "apply-policy export-policy [ X1 ]")
+
     def test_unconfigure(self):
         unconfigure_bgp_global_export_policy(self.device, "IPV4_UNICAST")
         self.assertEqual(
@@ -289,6 +300,51 @@ class TestBgpGlobalExportPolicy(ArcosT2raTestCase):
 # ---------------------------------------------------------------------------
 
 
+class TestEmptyListIsRejectedNotSilentlyIgnored(ArcosT2raTestCase):
+    """An empty list must raise, never emit ``[  ]``.
+
+    Device-verified on rtr1 2026-08-25, build R8.6.1.EFT1:Aug_17_26:8_9_AM:
+    in a single candidate, ``apply-policy import-policy [  ]`` was absent from
+    ``show configuration`` while ``apply-policy export-policy [ P ]`` in the
+    same session landed; likewise a next-hop-set whose only leaf was
+    ``address [  ]`` did not materialise at all. arcOS accepts the empty form
+    and silently configures nothing, so without this guard the caller gets a
+    successful return and an unconfigured box.
+    """
+
+    def test_bgp_import_policy_empty_list_raises(self):
+        with self.assertRaises(ValueError):
+            configure_bgp_global_import_policy(
+                self.device, "IPV4_UNICAST", [])
+        self.device.configure.assert_not_called()
+
+    def test_bgp_export_policy_empty_list_raises(self):
+        with self.assertRaises(ValueError):
+            configure_bgp_global_export_policy(
+                self.device, "IPV4_UNICAST", [])
+        self.device.configure.assert_not_called()
+
+    def test_next_hop_set_empty_list_raises(self):
+        with self.assertRaises(ValueError):
+            configure_routing_policy_next_hop_set(self.device, "NH1", [])
+        self.device.configure.assert_not_called()
+
+    def test_empty_tuple_is_rejected_too(self):
+        with self.assertRaises(ValueError):
+            configure_bgp_global_import_policy(
+                self.device, "IPV4_UNICAST", ())
+        self.device.configure.assert_not_called()
+
+    def test_no_emission_ever_contains_an_empty_bracket_pair(self):
+        """The literal '[  ]' must not be reachable from any of the three."""
+        configure_bgp_global_import_policy(self.device, "IPV4_UNICAST", ["P"])
+        configure_bgp_global_export_policy(self.device, "IPV4_UNICAST", ["P"])
+        configure_routing_policy_next_hop_set(self.device, "NH1", ["cafe::/16"])
+        for call in self.device.configure.call_args_list:
+            for line in call[0][0]:
+                self.assertNotIn("[  ]", line)
+
+
 class TestQppbMatchNextHopSetBugFix(ArcosT2raTestCase):
     """qppb/configure.py:29 emitted the set name without its sub-leaf.
 
@@ -307,6 +363,49 @@ class TestQppbMatchNextHopSetBugFix(ArcosT2raTestCase):
         self.assertIn(
             "conditions match-next-hop-set next-hop-set NH1", emitted)
         self.assertNotIn("conditions match-next-hop-set NH1", emitted)
+
+    def test_exact_emission_full_line_list(self):
+        """Pin every line qppb emits, not just the condition pair.
+
+        The four lines outside the ``match_next_hop_set`` block had no pin at
+        all, and this is the only test file importing qppb -- so mutating
+        ``policy-definition``, ``statement``, ``actions accept-route`` or
+        ``set-qos-class-id`` survived the whole suite.
+        """
+        from genie.libs.sdk.apis.arcos.qppb.configure import (
+            configure_routing_policy_set_qos_class_id,
+        )
+        configure_routing_policy_set_qos_class_id(
+            self.device, "P1", "10", 5, match_next_hop_set="NH1")
+        self.assertEqual(
+            self.emitted(),
+            [
+                "routing-policy policy-definition P1",
+                "statement 10",
+                "conditions match-next-hop-set next-hop-set NH1",
+                "conditions match-next-hop-set match-set-options ANY",
+                "actions accept-route",
+                "actions bgp-actions set-qos-class-id 5",
+                "!",
+            ],
+        )
+
+    def test_exact_emission_without_next_hop_set(self):
+        """Same pin for the no-condition path."""
+        from genie.libs.sdk.apis.arcos.qppb.configure import (
+            configure_routing_policy_set_qos_class_id,
+        )
+        configure_routing_policy_set_qos_class_id(self.device, "P1", "10", 5)
+        self.assertEqual(
+            self.emitted(),
+            [
+                "routing-policy policy-definition P1",
+                "statement 10",
+                "actions accept-route",
+                "actions bgp-actions set-qos-class-id 5",
+                "!",
+            ],
+        )
 
     def test_match_set_options_line_unchanged(self):
         from genie.libs.sdk.apis.arcos.qppb.configure import (

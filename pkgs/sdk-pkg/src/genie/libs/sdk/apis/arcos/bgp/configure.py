@@ -7080,6 +7080,16 @@ def configure_bgp_global_import_policy(device, afi_safi, policies,
         f"Configuring BGP global import-policy for {afi_safi} on {device.name}"
     )
 
+    if isinstance(policies, (list, tuple)) and not policies:
+        raise ValueError(
+            "configure_bgp_global_import_policy requires at least one "
+            "entry in 'policies'. An empty list renders "
+            "'apply-policy import-policy [  ]', which arcOS accepts silently and ignores -- "
+            "the leaf is never created, so the caller would get a "
+            "successful return and no configuration "
+            "(verified on rtr1 2026-08-25)."
+        )
+
     if isinstance(policies, (list, tuple)):
         pol_str = ' '.join(str(p) for p in policies)
     else:
@@ -7205,6 +7215,16 @@ def configure_bgp_global_export_policy(device, afi_safi, policies,
     log.info(
         f"Configuring BGP global export-policy for {afi_safi} on {device.name}"
     )
+
+    if isinstance(policies, (list, tuple)) and not policies:
+        raise ValueError(
+            "configure_bgp_global_export_policy requires at least one "
+            "entry in 'policies'. An empty list renders "
+            "'apply-policy export-policy [  ]', which arcOS accepts silently and ignores -- "
+            "the leaf is never created, so the caller would get a "
+            "successful return and no configuration "
+            "(verified on rtr1 2026-08-25)."
+        )
 
     if isinstance(policies, (list, tuple)):
         pol_str = ' '.join(str(p) for p in policies)

@@ -1353,6 +1353,16 @@ def configure_routing_policy_next_hop_set(device, set_name, addresses):
     """
     log.info(f"Configuring next-hop-set {set_name} on {device.name}")
 
+    if isinstance(addresses, (list, tuple)) and not addresses:
+        raise ValueError(
+            "configure_routing_policy_next_hop_set requires at least one "
+            "entry in 'addresses'. An empty list renders "
+            "'address [  ]', which arcOS accepts silently and ignores -- "
+            "the leaf is never created, so the caller would get a "
+            "successful return and no configuration "
+            "(verified on rtr1 2026-08-25)."
+        )
+
     if isinstance(addresses, (list, tuple)):
         addr_str = ' '.join(str(a) for a in addresses)
     else:
