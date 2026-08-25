@@ -4702,17 +4702,23 @@ def unconfigure_isis_interface_flex_algo_admin_groups(device, interface,
         )
 
 
-def configure_isis_interface_flex_algo_metric(device, interface, level, algo_id,
+def configure_isis_interface_flex_algo_metric(device, interface, level,
                                                 te_metric=None, delay_metric=None,
                                                 network_instance='default',
                                                 protocol_instance='default'):
     """Configure flex-algo TE/delay metric on an ISIS interface at a specific level.
 
+    CLI emitted::
+
+        <interface context>
+         level {level} flexible-algorithm te-metric {te_metric}
+         level {level} flexible-algorithm delay-metric {delay_metric}
+        !
+
     Args:
         device (obj): Device object
         interface (str): Interface name
         level (int): ISIS level (1 or 2)
-        algo_id (int): Flexible-algorithm ID (128-255)
         te_metric (int, optional): TE metric value. Defaults to None.
         delay_metric (int, optional): Delay metric value. Defaults to None.
         network_instance (str, optional): Network instance name. Defaults to 'default'.
@@ -4722,29 +4728,53 @@ def configure_isis_interface_flex_algo_metric(device, interface, level, algo_id,
         None
 
     Raises:
+        ValueError: Neither te_metric nor delay_metric was supplied
         SubCommandFailure: Failed to configure flex-algo metric
 
     Example:
         >>> configure_isis_interface_flex_algo_metric(
-        ...     device, 'swp1', 2, 128, te_metric=100
+        ...     device, 'swp1', 2, te_metric=100
         ... )
+
+    Note:
+        **This metric is per-interface-level and algorithm-agnostic — there is no
+        algo_id parameter, because the CLI has no per-algorithm interface metric.**
+        ``level N flexible-algorithm ?`` offers exactly ``te-metric`` and
+        ``delay-metric``; operational state reports a single
+        ``flexible-algorithm`` object directly under the level, with no algorithm
+        key. An earlier revision took an ``algo_id`` and emitted
+        ``level N flexible-algorithm {algo_id}``, which the device rejects with
+        ``syntax error: unknown argument``. That made the whole call a **silent
+        no-op** — nothing configured, nothing raised — because a rejected line
+        stages nothing and the resulting ``% No modifications to commit`` is not
+        treated as a failure. Do not reintroduce an algo argument here.
+
+        ``algo_id`` remains correct on the *global* flex-algo functions
+        (:func:`configure_isis_flexible_algorithm` and friends), which really are
+        keyed by algorithm.
+
+        Verified on rtr1 2026-08-25: both metrics read back in running-config and
+        in operational state (``levels.<n>.flexible_algorithm``).
     """
+    if te_metric is None and delay_metric is None:
+        raise ValueError(
+            "configure_isis_interface_flex_algo_metric requires te_metric and/or "
+            "delay_metric; a bare 'flexible-algorithm' line is rejected by the device"
+        )
+
     log.info(
-        f"Configuring ISIS flex-algo {algo_id} metric on {interface} level {level} "
+        f"Configuring ISIS flex-algo metric on {interface} level {level} "
         f"on {device.name}"
     )
 
     intf_context = _build_interface_context(interface, network_instance, protocol_instance)
-    config = [
-        intf_context,
-        f'level {level} flexible-algorithm {algo_id}',
-    ]
+    config = [intf_context]
 
     if te_metric is not None:
-        config.append(f'te-metric {te_metric}')
+        config.append(f'level {level} flexible-algorithm te-metric {te_metric}')
 
     if delay_metric is not None:
-        config.append(f'delay-metric {delay_metric}')
+        config.append(f'level {level} flexible-algorithm delay-metric {delay_metric}')
 
     config.append('!')
 
@@ -4757,16 +4787,28 @@ def configure_isis_interface_flex_algo_metric(device, interface, level, algo_id,
         )
 
 
-def unconfigure_isis_interface_flex_algo_metric(device, interface, level, algo_id,
+def unconfigure_isis_interface_flex_algo_metric(device, interface, level,
+                                                  te_metric=False, delay_metric=False,
                                                   network_instance='default',
                                                   protocol_instance='default'):
     """Remove flex-algo TE/delay metric from an ISIS interface at a specific level.
+
+    Called with neither flag it removes **both** metrics, per the convention that
+    an unconfigure with no values clears the whole thing.
+
+    CLI emitted::
+
+        <interface context>
+         no level {level} flexible-algorithm te-metric
+         no level {level} flexible-algorithm delay-metric
+        !
 
     Args:
         device (obj): Device object
         interface (str): Interface name
         level (int): ISIS level (1 or 2)
-        algo_id (int): Flexible-algorithm ID (128-255)
+        te_metric (bool): Remove the TE metric. Defaults to False.
+        delay_metric (bool): Remove the delay metric. Defaults to False.
         network_instance (str, optional): Network instance name. Defaults to 'default'.
         protocol_instance (str, optional): ISIS protocol instance name. Defaults to 'default'.
 
@@ -4777,19 +4819,41 @@ def unconfigure_isis_interface_flex_algo_metric(device, interface, level, algo_i
         SubCommandFailure: Failed to remove flex-algo metric
 
     Example:
-        >>> unconfigure_isis_interface_flex_algo_metric(device, 'swp1', 2, 128)
+        >>> # remove both
+        >>> unconfigure_isis_interface_flex_algo_metric(device, 'swp1', 2)
+        >>> # remove only the TE metric
+        >>> unconfigure_isis_interface_flex_algo_metric(
+        ...     device, 'swp1', 2, te_metric=True)
+
+    Note:
+        Exact inverse of :func:`configure_isis_interface_flex_algo_metric`, and
+        takes no ``algo_id`` for the same reason — see that function's note. The
+        previous revision emitted ``no level N flexible-algorithm {algo_id}``,
+        which was a silent no-op. Emitted one flat ``no`` line per metric rather
+        than removing the ``flexible-algorithm`` container, so neither metric can
+        be taken out by a removal aimed at the other.
+
+        Verified on rtr1 2026-08-25 by read-back in both directions.
     """
+    # No flags means "clear the whole thing".
+    if not te_metric and not delay_metric:
+        te_metric = delay_metric = True
+
     log.info(
-        f"Removing ISIS flex-algo {algo_id} metric from {interface} level {level} "
+        f"Removing ISIS flex-algo metric from {interface} level {level} "
         f"on {device.name}"
     )
 
     intf_context = _build_interface_context(interface, network_instance, protocol_instance)
-    config = [
-        intf_context,
-        f'no level {level} flexible-algorithm {algo_id}',
-        '!'
-    ]
+    config = [intf_context]
+
+    if te_metric:
+        config.append(f'no level {level} flexible-algorithm te-metric')
+
+    if delay_metric:
+        config.append(f'no level {level} flexible-algorithm delay-metric')
+
+    config.append('!')
 
     try:
         device.configure(config)

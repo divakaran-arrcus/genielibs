@@ -829,16 +829,23 @@ class TestIsisFlexibleAlgorithm(unittest.TestCase):
         self.assertIn("no flexible-algorithm admin-groups", self.d.cfg())
 
     def test_configure_isis_interface_flex_algo_metric(self):
-        configure_isis_interface_flex_algo_metric(self.d, "swp1", 2, 128,
+        # No algo_id: the per-interface-level metric is algorithm-agnostic.
+        # The previous assertions pinned "level 2 flexible-algorithm 128", an
+        # emission the device rejects outright -- so this test was locking in a
+        # silent no-op. See T2R-B.
+        configure_isis_interface_flex_algo_metric(self.d, "swp1", 2,
                                                     te_metric=100, delay_metric=50)
         c = self.d.cfg()
-        self.assertIn("level 2 flexible-algorithm 128", c)
-        self.assertIn("te-metric 100", c)
-        self.assertIn("delay-metric 50", c)
+        self.assertIn("level 2 flexible-algorithm te-metric 100", c)
+        self.assertIn("level 2 flexible-algorithm delay-metric 50", c)
+        self.assertNotIn("flexible-algorithm 128", c)
 
     def test_unconfigure_isis_interface_flex_algo_metric(self):
-        unconfigure_isis_interface_flex_algo_metric(self.d, "swp1", 2, 128)
-        self.assertIn("no level 2 flexible-algorithm 128", self.d.cfg())
+        unconfigure_isis_interface_flex_algo_metric(self.d, "swp1", 2)
+        c = self.d.cfg()
+        self.assertIn("no level 2 flexible-algorithm te-metric", c)
+        self.assertIn("no level 2 flexible-algorithm delay-metric", c)
+        self.assertNotIn("flexible-algorithm 128", c)
 
     def test_configure_isis_flexible_algorithm_priority(self):
         configure_isis_flexible_algorithm_priority(self.d, 128, 200)

@@ -68,6 +68,26 @@ from genie.libs.sdk.apis.arcos.route_policy.configure import (
     unconfigure_routing_policy_isis_actions_set_level,
     configure_routing_policy_isis_actions_set_metric,
     unconfigure_routing_policy_isis_actions_set_metric,
+    # T2R-A: next-hop-set defined-set + match condition
+    configure_routing_policy_next_hop_set,
+    unconfigure_routing_policy_next_hop_set,
+    configure_routing_policy_match_next_hop_set,
+    unconfigure_routing_policy_match_next_hop_set,
+    # T2R-C: unconfigure parity inverses
+    unconfigure_routing_policy_adjust_local_pref,
+    unconfigure_routing_policy_adjust_med,
+    unconfigure_routing_policy_set_aigp,
+    unconfigure_routing_policy_set_as_path_prepend,
+    unconfigure_routing_policy_set_route_origin,
+    unconfigure_routing_policy_drop_attr,
+    unconfigure_routing_policy_call_policy,
+    unconfigure_routing_policy_match_interface,
+    unconfigure_routing_policy_set_community,
+    unconfigure_routing_policy_bgp_conditions,
+    unconfigure_routing_policy_bgp_actions,
+    unconfigure_routing_policy_match_community_set,
+    unconfigure_routing_policy_match_as_path_set,
+    unconfigure_routing_policy_match_large_community_set,
 )
 
 
@@ -631,7 +651,7 @@ class TestCoverage(unittest.TestCase):
             f"file: {sorted(missing)}",
         )
         # Sanity: the reference census counted 32 configure_/unconfigure_ fns.
-        self.assertEqual(len(expected), 32)
+        self.assertEqual(len(expected), 50)
 
 
 
@@ -659,5 +679,101 @@ class TestRoutePolicyConfigureCoverage(unittest.TestCase):
         self.assertEqual(
             missing, [],
             f"Uncovered route_policy configure functions: {missing}")
+
+class TestT2raT2rcAdditions(unittest.TestCase):
+    """Coverage for the next-hop-set pair (T2R-A) and the 14 unconfigure
+    inverses that brought this module to full configure/unconfigure parity
+    (T2R-C).
+
+    Exact-emission pins for these also live in
+    ``pkgs/sdk-pkg/tests/arcos/{test_t2r_a_configure.py,
+    test_route_policy_unconfigure_parity.py}``; this class exists so the
+    coverage gates in this file see them, and asserts real emissions rather
+    than merely naming the functions.
+    """
+
+    STMT = "no routing-policy policy-definition POL1 statement 10"
+
+    def setUp(self):
+        self.d = Mock()
+        self.d.name = "dev"
+
+    def emitted(self):
+        return self.d.configure.call_args[0][0]
+
+    def test_next_hop_set_pair(self):
+        configure_routing_policy_next_hop_set(self.d, "NH1", ["cafe::/16"])
+        self.assertEqual(
+            self.emitted(),
+            ["routing-policy defined-sets next-hop-set NH1",
+             "address [ cafe::/16 ]", "!"])
+        self.d.configure.reset_mock()
+        unconfigure_routing_policy_next_hop_set(self.d, "NH1")
+        self.assertEqual(
+            self.emitted(),
+            ["no routing-policy defined-sets next-hop-set NH1", "!"])
+
+    def test_match_next_hop_set_pair(self):
+        configure_routing_policy_match_next_hop_set(self.d, "POL1", "10", "NH1")
+        self.assertIn(
+            "conditions match-next-hop-set next-hop-set NH1", self.emitted())
+        self.d.configure.reset_mock()
+        unconfigure_routing_policy_match_next_hop_set(self.d, "POL1", "10")
+        self.assertEqual(
+            self.emitted(),
+            [f"{self.STMT} conditions match-next-hop-set", "!"])
+
+    def test_single_leaf_unconfigures(self):
+        for fn, path in [
+            (unconfigure_routing_policy_adjust_local_pref,
+             "actions bgp-actions adjust-local-pref"),
+            (unconfigure_routing_policy_adjust_med,
+             "actions bgp-actions adjust-med"),
+            (unconfigure_routing_policy_set_aigp,
+             "actions bgp-actions set-aigp"),
+            (unconfigure_routing_policy_set_as_path_prepend,
+             "actions bgp-actions set-as-path-prepend"),
+            (unconfigure_routing_policy_set_route_origin,
+             "actions bgp-actions set-route-origin"),
+            (unconfigure_routing_policy_drop_attr,
+             "actions bgp-actions drop-attr"),
+            (unconfigure_routing_policy_call_policy, "conditions call-policy"),
+            (unconfigure_routing_policy_match_interface,
+             "conditions match-interface"),
+            (unconfigure_routing_policy_set_community,
+             "actions bgp-actions set-community"),
+            (unconfigure_routing_policy_bgp_conditions,
+             "conditions bgp-conditions match-ext-community-set"),
+            (unconfigure_routing_policy_match_community_set,
+             "conditions bgp-conditions match-community-set"),
+            (unconfigure_routing_policy_match_as_path_set,
+             "conditions bgp-conditions match-as-path-set"),
+            (unconfigure_routing_policy_match_large_community_set,
+             "conditions bgp-conditions match-large-community-set"),
+        ]:
+            with self.subTest(fn=fn.__name__):
+                self.d.configure.reset_mock()
+                fn(self.d, "POL1", "10")
+                self.assertEqual(
+                    self.emitted(), [f"{self.STMT} {path}", "!"])
+
+    def test_bgp_actions_no_arg_clears_all_four_as_separate_lines(self):
+        """Never 'no actions bgp-actions' -- that container has 8 owners."""
+        unconfigure_routing_policy_bgp_actions(self.d, "POL1", "10")
+        emitted = self.emitted()
+        self.assertEqual(len(emitted), 5)
+        for leaf in ("set-local-pref", "set-med", "set-next-hop",
+                     "set-ext-community"):
+            self.assertIn(f"{self.STMT} actions bgp-actions {leaf}", emitted)
+        self.assertNotIn(f"{self.STMT} actions bgp-actions", emitted)
+
+    def test_bgp_actions_selective(self):
+        unconfigure_routing_policy_bgp_actions(
+            self.d, "POL1", "10", set_med=True)
+        self.assertEqual(
+            self.emitted(),
+            [f"{self.STMT} actions bgp-actions set-med", "!"])
+
+
 if __name__ == "__main__":
     unittest.main()
