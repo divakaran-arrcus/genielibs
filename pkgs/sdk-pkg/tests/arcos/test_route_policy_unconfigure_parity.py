@@ -246,7 +246,12 @@ class TestWorkspaceWideUnconfigureParity(unittest.TestCase):
 
     Measured 2026-08-25 across 50 modules / 407 configure functions: 43 modules
     were already fully paired and 24 functions were unpaired, 14 of them in
-    ``route_policy``. This batch closes those 14, leaving the 10 below.
+    ``route_policy``. This batch closes those 14, leaving the 18 below.
+
+    The 18 (not 10) is the corrected figure. The original glob was
+    ``*/configure.py``, which silently skipped ``evpn/configure_mpls.py`` and
+    ``evpn/configure_vpws.py`` — 51 of the 53 configure-bearing files — hiding
+    8 real gaps and making a gate named "workspace-wide" under-report by 44%.
 
     The allow-list is a visible backlog, not a rubber stamp — it is short
     enough that each entry is a reviewable decision. Shrinking it is the goal;
@@ -261,6 +266,18 @@ class TestWorkspaceWideUnconfigureParity(unittest.TestCase):
             "configure_bgp_med_missing_as_worst",
             "configure_bgp_multipath_as_path_relax",
             "configure_bgp_multipath_evpn_etree_ead_relax",
+        },
+        # evpn spreads its API across configure.py, configure_mpls.py and
+        # configure_vpws.py; all 8 were invisible to the pre-fix glob.
+        "evpn": {
+            "configure_bgp_reoriginate_evpn_dci",
+            "configure_bgp_rib_install_l2_label",
+            "configure_bgp_suppress_rt5_routes",
+            "configure_evpn_etree",
+            "configure_evpn_vpws_link_loss_forwarding",
+            "configure_interface_etree_leaf",
+            "configure_ni_evpn_domain",
+            "configure_vni_centralized_evpn_routing",
         },
         "fqdn_filter": {"configure_fqdn_active_policies"},
         "interface": {
@@ -293,16 +310,81 @@ class TestWorkspaceWideUnconfigureParity(unittest.TestCase):
         self.assertTrue(os.path.isfile(
             os.path.join(self.ARCOS_DIR, "route_policy", "configure.py")))
 
-    def _scan(self):
-        arcos_dir = self.ARCOS_DIR
-        found = {}
-        for path in sorted(glob.glob(os.path.join(arcos_dir, "*", "configure.py"))):
+    def test_scan_is_not_vacuous(self):
+        """Every gate below passes trivially on an empty scan.
+
+        ``test_allowlist_has_no_stale_entries`` was the only test that failed
+        when ``_scan`` returned nothing — and it stops failing the moment
+        ALLOWED_UNPAIRED reaches {}, which is the stated goal. So the guard
+        died exactly at success. Assert the scan saw real files instead.
+        """
+        files = self._scan_files()
+        self.assertGreaterEqual(
+            len(files), self.MIN_SCANNED_FILES,
+            f"parity scan found only {len(files)} configure files under "
+            f"{self.ARCOS_DIR} — the gate is not seeing the tree")
+        self.assertTrue(
+            any(f.endswith("configure_vpws.py") for f in files),
+            "scan is missing evpn/configure_vpws.py — the glob has regressed "
+            "to '*/configure.py' and is under-reporting by 8 functions")
+
+        cfg, unc = self._collect()
+        total_cfg = sum(len(v) for v in cfg.values())
+        total_unc = sum(len(v) for v in unc.values())
+        self.assertGreaterEqual(
+            total_cfg, self.MIN_CONFIGURE_FUNCTIONS,
+            f"parse found only {total_cfg} configure_* functions — the gate "
+            f"is not really reading the tree")
+        self.assertGreaterEqual(
+            total_unc, 200,
+            f"parse found only {total_unc} unconfigure_* functions")
+
+    #: Minimum number of configure-bearing files a healthy scan must see.
+    #: Guards against a silently-empty scan making every gate below vacuous.
+    MIN_SCANNED_FILES = 40
+
+    def _scan_files(self):
+        """Every configure-bearing file, not just those named configure.py."""
+        return sorted(glob.glob(
+            os.path.join(self.ARCOS_DIR, "*", "configure*.py")))
+
+    #: A healthy parse must discover at least this many configure_* functions.
+    #: 407 were measured 2026-08-25; 300 leaves headroom while still failing
+    #: loudly if the glob, the file read, or the regex stops finding anything.
+    MIN_CONFIGURE_FUNCTIONS = 300
+
+    def _collect(self):
+        """(configure_by_module, unconfigure_by_module) — the parse itself.
+
+        Shared with the vacuity guard on purpose: a gate whose emptiness check
+        runs a *different* code path from its real scan can pass while the
+        scan sees nothing.
+        """
+        cfg, unc = {}, {}
+        for path in self._scan_files():
+            mod = os.path.basename(os.path.dirname(path))
             src = open(path).read()
-            cfg = set(re.findall(r"^def configure_(\w+)\(", src, re.M))
-            unc = set(re.findall(r"^def unconfigure_(\w+)\(", src, re.M))
-            unpaired = {f"configure_{n}" for n in (cfg - unc)}
+            cfg.setdefault(mod, set()).update(
+                re.findall(r"^def configure_(\w+)\(", src, re.M))
+            unc.setdefault(mod, set()).update(
+                re.findall(r"^def unconfigure_(\w+)\(", src, re.M))
+        return cfg, unc
+
+    def _scan(self):
+        """Unpaired configure_* per module.
+
+        Pairing is resolved at MODULE level, across all of a module's
+        ``configure*.py`` files: ``evpn`` defines functions in three of them,
+        and a configure in one file may legitimately have its inverse in
+        another. Accumulating per module also avoids the bug where one file's
+        result overwrote another's in the same directory.
+        """
+        cfg, unc = self._collect()
+        found = {}
+        for mod, names in cfg.items():
+            unpaired = {f"configure_{n}" for n in (names - unc.get(mod, set()))}
             if unpaired:
-                found[os.path.basename(os.path.dirname(path))] = unpaired
+                found[mod] = unpaired
         return found
 
     def test_no_unexpected_unpaired_configure_functions(self):
