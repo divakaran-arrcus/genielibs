@@ -1312,3 +1312,229 @@ def unconfigure_routing_policy_isis_actions_set_metric(device, policy_name,
             f"Could not remove ISIS set-metric from {policy_name}/"
             f"{statement_name} on {device.name}. Error:\n{e}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Next-Hop Set APIs
+# ---------------------------------------------------------------------------
+
+
+def configure_routing_policy_next_hop_set(device, set_name, addresses):
+    """Configure a routing-policy next-hop-set defined-set.
+
+    Creates the next-hop-set and populates its ``address`` leaf-list in a
+    single configuration transaction.
+
+    CLI emitted::
+
+        routing-policy defined-sets next-hop-set {set_name}
+         address [ {addresses} ]
+        !
+
+    Args:
+        device (obj): Device object
+        set_name (str): Next-hop-set name (e.g., 'NH1')
+        addresses (list or str): Next-hop address(es), prefix(es), or the
+            literal ``SELF``. A list/tuple is joined space-separated; a bare
+            string is used as-is.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure next-hop-set
+
+    Example:
+        >>> configure_routing_policy_next_hop_set(device, 'NH1', ['cafe::/16'])
+
+    Note:
+        Required before :func:`configure_routing_policy_match_next_hop_set`,
+        which references the set by name. Verified on rtr1 2026-08-20.
+    """
+    log.info(f"Configuring next-hop-set {set_name} on {device.name}")
+
+    if isinstance(addresses, (list, tuple)) and not addresses:
+        raise ValueError(
+            "configure_routing_policy_next_hop_set requires at least one "
+            "entry in 'addresses'. An empty list renders "
+            "'address [  ]', which arcOS accepts silently and ignores -- "
+            "the leaf is never created, so the caller would get a "
+            "successful return and no configuration "
+            "(verified on rtr1 2026-08-25)."
+        )
+
+    if isinstance(addresses, (list, tuple)):
+        addr_str = ' '.join(str(a) for a in addresses)
+    else:
+        addr_str = str(addresses)
+
+    config = [
+        f'routing-policy defined-sets next-hop-set {set_name}',
+        f'address [ {addr_str} ]',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure next-hop-set {set_name} on {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def unconfigure_routing_policy_next_hop_set(device, set_name):
+    """Remove an entire routing-policy next-hop-set defined-set.
+
+    CLI emitted::
+
+        no routing-policy defined-sets next-hop-set {set_name}
+        !
+
+    Args:
+        device (obj): Device object
+        set_name (str): Next-hop-set name to remove
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove next-hop-set
+
+    Example:
+        >>> unconfigure_routing_policy_next_hop_set(device, 'NH1')
+
+    Note:
+        Exact inverse of :func:`configure_routing_policy_next_hop_set`.
+        Verified on rtr1 2026-08-20.
+    """
+    log.info(f"Removing next-hop-set {set_name} from {device.name}")
+
+    config = [
+        f'no routing-policy defined-sets next-hop-set {set_name}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove next-hop-set {set_name} from {device.name}. "
+            f"Error:\n{e}"
+        )
+
+
+def configure_routing_policy_match_next_hop_set(device, policy_name,
+                                                  statement_name,
+                                                  next_hop_set,
+                                                  match_set_options='ANY'):
+    """Configure a match-next-hop-set condition on a policy statement.
+
+    CLI emitted::
+
+        routing-policy policy-definition {policy_name}
+         statement {statement_name}
+          conditions match-next-hop-set next-hop-set {next_hop_set}
+          conditions match-next-hop-set match-set-options {match_set_options}
+        !
+
+    Args:
+        device (obj): Device object
+        policy_name (str): Policy definition name
+        statement_name (str): Statement name/number
+        next_hop_set (str): Next-hop-set name to match
+        match_set_options (str): ANY, ALL, or INVERT. Defaults to 'ANY'.
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to configure match-next-hop-set
+
+    Example:
+        >>> configure_routing_policy_match_next_hop_set(
+        ...     device, 'POL1', '10', 'NH1')
+
+    Note:
+        The set name goes under a ``next-hop-set`` sub-leaf; the bare form
+        ``conditions match-next-hop-set {name}`` is rejected by the device
+        with a syntax error. The referenced set must already exist — see
+        :func:`configure_routing_policy_next_hop_set`. Verified on rtr1
+        2026-08-20.
+    """
+    log.info(
+        f"Configuring match-next-hop-set {next_hop_set} on "
+        f"{policy_name}/{statement_name} on {device.name}"
+    )
+
+    config = [
+        f'routing-policy policy-definition {policy_name}',
+        f'statement {statement_name}',
+        f'conditions match-next-hop-set next-hop-set {next_hop_set}',
+        f'conditions match-next-hop-set match-set-options '
+        f'{match_set_options}',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not configure match-next-hop-set on {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )
+
+
+def unconfigure_routing_policy_match_next_hop_set(device, policy_name,
+                                                    statement_name):
+    """Remove the match-next-hop-set condition from a policy statement.
+
+    Removes the whole ``conditions match-next-hop-set`` container, clearing
+    both the ``next-hop-set`` and ``match-set-options`` leaves that
+    :func:`configure_routing_policy_match_next_hop_set` sets.
+
+    CLI emitted::
+
+        no routing-policy policy-definition {policy_name} statement
+            {statement_name} conditions match-next-hop-set
+        !
+
+    Args:
+        device (obj): Device object
+        policy_name (str): Policy definition name
+        statement_name (str): Statement name/number
+
+    Returns:
+        None
+
+    Raises:
+        SubCommandFailure: Failed to remove match-next-hop-set
+
+    Example:
+        >>> unconfigure_routing_policy_match_next_hop_set(device, 'POL1', '10')
+
+    Note:
+        Exact inverse of :func:`configure_routing_policy_match_next_hop_set`.
+        Emitted flat rather than via submode entry, so a bare ``no`` cannot
+        land at the parent scope. An empty ``statement`` container is left
+        behind — assert on the leaves, not the block. Verified on rtr1
+        2026-08-20.
+    """
+    log.info(
+        f"Removing match-next-hop-set from {policy_name}/{statement_name} "
+        f"on {device.name}"
+    )
+
+    config = [
+        f'no routing-policy policy-definition {policy_name} '
+        f'statement {statement_name} conditions match-next-hop-set',
+        '!',
+    ]
+
+    try:
+        device.configure(config)
+    except SubCommandFailure as e:
+        raise SubCommandFailure(
+            f"Could not remove match-next-hop-set from {policy_name}/"
+            f"{statement_name} on {device.name}. Error:\n{e}"
+        )
