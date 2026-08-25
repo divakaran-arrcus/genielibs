@@ -71,7 +71,11 @@ class TestConfigureRoutingPolicySetQosClassId(unittest.TestCase):
             self.d, "QPPB-POL", 10, qos_class_id=5,
             match_next_hop_set="NH-SET1")
         c = self.d.cfg()
-        self.assertIn("conditions match-next-hop-set NH-SET1", c)
+        # The set name belongs under a "next-hop-set" sub-leaf. The bare form
+        # this previously asserted is rejected by arcOS outright, so the old
+        # assertion was pinning a silent-failure emission. See T2R-A.
+        self.assertIn("conditions match-next-hop-set next-hop-set NH-SET1", c)
+        self.assertNotIn("conditions match-next-hop-set NH-SET1", c)
         self.assertIn("conditions match-next-hop-set match-set-options ANY", c)
 
     def test_policy_with_match_set_options_all(self):
