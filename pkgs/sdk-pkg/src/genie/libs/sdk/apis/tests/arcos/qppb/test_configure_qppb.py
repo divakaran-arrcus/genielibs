@@ -70,13 +70,27 @@ class TestConfigureRoutingPolicySetQosClassId(unittest.TestCase):
         configure_routing_policy_set_qos_class_id(
             self.d, "QPPB-POL", 10, qos_class_id=5,
             match_next_hop_set="NH-SET1")
-        c = self.d.cfg()
+        # EXACT emission pin, not assertIn. A mutation test showed that with
+        # only substring checks, appending a stray rejected line to the
+        # emission left this test green -- and on arcOS one rejected line
+        # stages nothing, so the whole commit (including the correct lines)
+        # becomes a silent no-op. Substring assertions cannot see an extra
+        # line; an exact list can.
+        #
         # The set name belongs under a "next-hop-set" sub-leaf. The bare form
         # this previously asserted is rejected by arcOS outright, so the old
         # assertion was pinning a silent-failure emission. See T2R-A.
-        self.assertIn("conditions match-next-hop-set next-hop-set NH-SET1", c)
-        self.assertNotIn("conditions match-next-hop-set NH-SET1", c)
-        self.assertIn("conditions match-next-hop-set match-set-options ANY", c)
+        self.assertEqual(
+            self.d.cfg().splitlines(),
+            [
+                "routing-policy policy-definition QPPB-POL",
+                "statement 10",
+                "conditions match-next-hop-set next-hop-set NH-SET1",
+                "conditions match-next-hop-set match-set-options ANY",
+                "actions accept-route",
+                "actions bgp-actions set-qos-class-id 5",
+                "!",
+            ])
 
     def test_policy_with_match_set_options_all(self):
         configure_routing_policy_set_qos_class_id(

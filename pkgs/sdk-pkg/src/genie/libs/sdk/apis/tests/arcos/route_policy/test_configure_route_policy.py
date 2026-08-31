@@ -650,7 +650,11 @@ class TestCoverage(unittest.TestCase):
             f"configure/unconfigure functions never referenced in this test "
             f"file: {sorted(missing)}",
         )
-        # Sanity: the reference census counted 32 configure_/unconfigure_ fns.
+        # Sanity: census of configure_/unconfigure_ fns in route_policy.
+        # Bump this deliberately when the module gains a function -- and add the
+        # new function's exact-emission pin at the same time, since this count
+        # and the name-scan gates below both pass on an imported-but-unpinned
+        # function.
         self.assertEqual(len(expected), 50)
 
 
@@ -681,15 +685,17 @@ class TestRoutePolicyConfigureCoverage(unittest.TestCase):
             f"Uncovered route_policy configure functions: {missing}")
 
 class TestT2raT2rcAdditions(unittest.TestCase):
-    """Coverage for the next-hop-set pair (T2R-A) and the 14 unconfigure
-    inverses that brought this module to full configure/unconfigure parity
-    (T2R-C).
+    """Exact-emission pins for the T2R-A next-hop-set pair and the 14 T2R-C
+    unconfigure inverses that brought this module to full parity.
 
-    Exact-emission pins for these also live in
-    ``pkgs/sdk-pkg/tests/arcos/{test_t2r_a_configure.py,
-    test_route_policy_unconfigure_parity.py}``; this class exists so the
-    coverage gates in this file see them, and asserts real emissions rather
-    than merely naming the functions.
+    **Correction:** an earlier version of this docstring claimed the class
+    "exists so the coverage gates in this file see them". That was wrong. A
+    mutation test showed the two gates below are satisfied by the *import block*
+    at the top of this file, so deleting this entire class leaves them green.
+    The gates therefore prove only that a name is imported, never that its
+    emission is pinned. This class exists because those emissions need real
+    assertions -- which matters more than usual here, since a wrong emitted
+    string cannot fail at runtime on arcOS.
     """
 
     STMT = "no routing-policy policy-definition POL1 statement 10"

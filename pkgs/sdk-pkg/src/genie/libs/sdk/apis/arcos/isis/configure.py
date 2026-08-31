@@ -4702,6 +4702,46 @@ def unconfigure_isis_interface_flex_algo_admin_groups(device, interface,
         )
 
 
+def _validate_flex_algo_level(level):
+    """Reject a level the device will silently refuse.
+
+    The interface-level flex-algo path takes a bare numeric level (``level 2``).
+    Note that :func:`configure_isis_interface` in this module takes the *enum*
+    form (``level_2``), so passing that shape here is an easy and previously
+    undetectable mistake: the device answers
+    ``syntax error: "level_2" is not a valid value`` and, because a rejected
+    line stages nothing, the commit reports success and the call configures
+    nothing. Verified on rtr1 2026-08-31.
+
+    Raises:
+        ValueError: level is not 1 or 2
+    """
+    if isinstance(level, bool) or str(level).strip() not in ("1", "2"):
+        raise ValueError(
+            f"flex-algo interface level must be 1 or 2 (got {level!r}); "
+            f"the 'level_N' enum form used by configure_isis_interface is "
+            f"rejected by the device on this path"
+        )
+
+
+def _validate_flex_algo_metric(name, value):
+    """Reject a metric value the device will silently refuse.
+
+    ``te-metric 0`` returns ``syntax error: "0" is out of range`` — and an
+    ``is None`` guard alone lets ``0``, ``False`` and ``''`` through to a
+    rejected line, i.e. straight back into the silent no-op this function was
+    fixed to remove. Verified on rtr1 2026-08-31.
+
+    Raises:
+        ValueError: value is not a positive integer
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(
+            f"{name} must be a positive integer (got {value!r}); the device "
+            f"rejects 0 as out of range and a rejected line commits as a no-op"
+        )
+
+
 def configure_isis_interface_flex_algo_metric(device, interface, level,
                                                 te_metric=None, delay_metric=None,
                                                 network_instance='default',
@@ -4762,9 +4802,15 @@ def configure_isis_interface_flex_algo_metric(device, interface, level,
             "delay_metric; a bare 'flexible-algorithm' line is rejected by the device"
         )
 
+    _validate_flex_algo_level(level)
+    for _name, _value in (("te_metric", te_metric),
+                          ("delay_metric", delay_metric)):
+        if _value is not None:
+            _validate_flex_algo_metric(_name, _value)
+
     log.info(
         f"Configuring ISIS flex-algo metric on {interface} level {level} "
-        f"on {device.name}"
+        f"te_metric={te_metric} delay_metric={delay_metric} on {device.name}"
     )
 
     intf_context = _build_interface_context(interface, network_instance, protocol_instance)
@@ -4835,13 +4881,28 @@ def unconfigure_isis_interface_flex_algo_metric(device, interface, level,
 
         Verified on rtr1 2026-08-25 by read-back in both directions.
     """
+    # These are FLAGS, not values -- unlike the configure half, where the same
+    # names carry metric values. Reject a non-bool rather than coercing: a
+    # caller copying the configure's shape and passing te_metric=0 would
+    # otherwise fall through to "no flags" and clear BOTH metrics.
+    for _name, _value in (("te_metric", te_metric),
+                          ("delay_metric", delay_metric)):
+        if not isinstance(_value, bool):
+            raise ValueError(
+                f"unconfigure_isis_interface_flex_algo_metric takes {_name} as a "
+                f"bool flag, not a metric value (got {_value!r}); pass True to "
+                f"remove that metric, or omit both to remove them all"
+            )
+
+    _validate_flex_algo_level(level)
+
     # No flags means "clear the whole thing".
     if not te_metric and not delay_metric:
         te_metric = delay_metric = True
 
     log.info(
         f"Removing ISIS flex-algo metric from {interface} level {level} "
-        f"on {device.name}"
+        f"(te_metric={te_metric} delay_metric={delay_metric}) on {device.name}"
     )
 
     intf_context = _build_interface_context(interface, network_instance, protocol_instance)
