@@ -4,6 +4,10 @@ import logging
 
 from unicon.core.errors import SubCommandFailure
 
+from genie.libs.sdk.apis.arcos.segment_routing.get import (
+    get_mpls_reserved_label_block,
+)
+
 log = logging.getLogger(__name__)
 
 
@@ -289,31 +293,43 @@ def configure_mpls_reserved_label_block(device, block_id, lower_bound,
                                         upper_bound, usage,
                                         protocol_identifier,
                                         protocol_name=None,
-                                        network_instance='default'):
-    """Configure an MPLS reserved label block.
+                                        network_instance='default',
+                                        verify=True):
+    """Configure an MPLS reserved label block, then read it back.
+
+    The read-back is not belt-and-braces -- it is the only thing that catches a
+    rejected ``usage`` token. arcOS rejects an unknown enum value as ``syntax
+    error: unknown element`` but still commits the surrounding block, so the
+    block lands with lower-bound, upper-bound, protocol-identifier,
+    protocol-name and NO usage leaf. ``device.configure()`` raises nothing, so
+    the caller is told the block was configured when it was not. This shipped
+    undetected: nightly build 1541 pushed the pre-migration ``usage SRGB`` to
+    six routers, every leaf was rejected, and the suite reported 34/34 PASSED.
 
     Args:
         device (obj): Device object.
         block_id (str): Label block identifier.
         lower_bound (int): Lower bound of the label range.
         upper_bound (int): Upper bound of the label range.
-        usage (str): Label block usage enum, spelled
+        usage (str): Label block usage enum. arcOS spells these
             ``<PROTOCOL>_<ROLE>`` -- e.g. 'ISIS_SRGB', 'ISIS_SRLB',
-            'BGP_SRGB'. The bare 'SRGB'/'SRLB' forms are NOT valid:
-            arcOS rejects an unknown enum leaf-only, dropping it while
-            still committing the block, so the block lands without a
-            usage leaf and nothing raises.
+            'BGP_SRGB'. The bare 'SRGB'/'SRLB' forms are NOT valid and are
+            rejected leaf-only, as described above.
         protocol_identifier (str): Protocol identifier
             (e.g., 'ISIS', 'OSPF').
         protocol_name (str, optional): Protocol instance name.
         network_instance (str, optional): Network instance name.
             Defaults to 'default'.
+        verify (bool, optional): Read the block back after configuring and
+            fail if a leaf did not land. Defaults to True. Set False only
+            where the read path is unavailable.
 
     Returns:
         None
 
     Raises:
-        SubCommandFailure: Failed to configure MPLS reserved label block.
+        SubCommandFailure: Failed to configure MPLS reserved label block, or
+            the block read back with a leaf that does not match what was sent.
 
     Example:
         >>> configure_mpls_reserved_label_block(
@@ -352,6 +368,61 @@ def configure_mpls_reserved_label_block(device, block_id, lower_bound,
         raise SubCommandFailure(
             f"Could not configure MPLS reserved label block {block_id} on "
             f"{device.name}. Error:\n{e}"
+        )
+
+    if verify:
+        _assert_reserved_label_block_applied(
+            device, block_id, lower_bound, upper_bound, usage, ni=ni,
+        )
+
+
+def _assert_reserved_label_block_applied(device, block_id, lower_bound,
+                                         upper_bound, usage, ni='default'):
+    """Raise if a just-configured block did not come back with what we sent.
+
+    Only leaf-level mismatches raise. A ``None`` read-back is logged and let
+    through on purpose: ``get_mpls_reserved_label_blocks`` returns ``{}`` both
+    for "no blocks configured" and for any parse failure, so it cannot tell an
+    absent block from an unreadable one. Raising there would convert a broken
+    parser or an unsupported platform into a false red on a block that
+    committed fine. A block we DID read is real evidence, and every leaf in it
+    is fair game.
+    """
+    block = get_mpls_reserved_label_block(device, block_id, ni=ni)
+    if not block:
+        log.warning(
+            "reserved-label-block %s on %s could not be read back "
+            "(absent, or the read path is unavailable) -- leaf values "
+            "unverified", block_id, device.name
+        )
+        return
+
+    mismatches = []
+    if block.get("lower-bound") != lower_bound:
+        mismatches.append(
+            f"lower-bound: sent {lower_bound!r}, read "
+            f"{block.get('lower-bound')!r}"
+        )
+    if block.get("upper-bound") != upper_bound:
+        mismatches.append(
+            f"upper-bound: sent {upper_bound!r}, read "
+            f"{block.get('upper-bound')!r}"
+        )
+    # arcOS renders the enum namespace-qualified (`arcos-mpls:ISIS_SRGB`);
+    # an absent leaf is the rejected-token signature and reads as ''.
+    actual_usage = str(block.get("usage") or "").split(":")[-1]
+    if actual_usage != usage:
+        mismatches.append(
+            f"usage: sent {usage!r}, read {actual_usage or '<leaf absent>'!r}"
+            " -- arcOS rejects an unknown usage enum leaf-only while still"
+            " committing the block; valid tokens are spelled"
+            " <PROTOCOL>_<ROLE>, e.g. ISIS_SRGB"
+        )
+
+    if mismatches:
+        raise SubCommandFailure(
+            f"MPLS reserved label block {block_id} on {device.name} committed "
+            f"but did not apply as sent:\n  " + "\n  ".join(mismatches)
         )
 
 
