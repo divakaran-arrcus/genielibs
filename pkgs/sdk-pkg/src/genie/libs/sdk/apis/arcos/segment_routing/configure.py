@@ -297,7 +297,12 @@ def configure_mpls_reserved_label_block(device, block_id, lower_bound,
         block_id (str): Label block identifier.
         lower_bound (int): Lower bound of the label range.
         upper_bound (int): Upper bound of the label range.
-        usage (str): Label block usage (e.g., 'SRGB', 'SRLB').
+        usage (str): Label block usage enum, spelled
+            ``<PROTOCOL>_<ROLE>`` -- e.g. 'ISIS_SRGB', 'ISIS_SRLB',
+            'BGP_SRGB'. The bare 'SRGB'/'SRLB' forms are NOT valid:
+            arcOS rejects an unknown enum leaf-only, dropping it while
+            still committing the block, so the block lands without a
+            usage leaf and nothing raises.
         protocol_identifier (str): Protocol identifier
             (e.g., 'ISIS', 'OSPF').
         protocol_name (str, optional): Protocol instance name.
@@ -316,7 +321,7 @@ def configure_mpls_reserved_label_block(device, block_id, lower_bound,
         ...     block_id='SRGB_BLOCK',
         ...     lower_bound=16000,
         ...     upper_bound=23999,
-        ...     usage='SRGB',
+        ...     usage='ISIS_SRGB',
         ...     protocol_identifier='ISIS',
         ...     protocol_name='default',
         ... )

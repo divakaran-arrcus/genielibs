@@ -140,20 +140,20 @@ class TestMplsReservedLabelBlockApis(unittest.TestCase):
 
     def test_label_block_full(self):
         configure_mpls_reserved_label_block(
-            self.d, "SRGB_BLOCK", 16000, 23999, "SRGB", "ISIS",
+            self.d, "SRGB_BLOCK", 16000, 23999, "ISIS_SRGB", "ISIS",
             protocol_name="default",
         )
         c = self.d.cfg()
         self.assertIn("mpls global reserved-label-block SRGB_BLOCK", c)
         self.assertIn("lower-bound 16000", c)
         self.assertIn("upper-bound 23999", c)
-        self.assertIn("usage SRGB", c)
+        self.assertIn("usage ISIS_SRGB", c)
         self.assertIn("protocol-identifier ISIS", c)
         self.assertIn("protocol-name default", c)
 
     def test_label_block_no_protocol_name(self):
         configure_mpls_reserved_label_block(
-            self.d, "SRLB_BLOCK", 15000, 15999, "SRLB", "OSPF",
+            self.d, "SRLB_BLOCK", 15000, 15999, "ISIS_SRLB", "OSPF",
         )
         c = self.d.cfg()
         self.assertIn("mpls global reserved-label-block SRLB_BLOCK", c)
@@ -274,7 +274,7 @@ class TestSegmentRoutingConfigureSubCommandFailure(unittest.TestCase):
         (configure_srv6_locator_micro_segment, ("loc1",), {}),
         (unconfigure_srv6_locator_micro_segment, ("loc1",), {}),
         (configure_mpls_reserved_label_block,
-         ("SRGB_BLOCK", 16000, 23999, "SRGB", "ISIS"), {}),
+         ("SRGB_BLOCK", 16000, 23999, "ISIS_SRGB", "ISIS"), {}),
         (unconfigure_mpls_reserved_label_block, ("SRGB_BLOCK",), {}),
         (configure_srms_mapping, ("map1",), {}),
         (unconfigure_srms_mapping, ("map1",), {}),
