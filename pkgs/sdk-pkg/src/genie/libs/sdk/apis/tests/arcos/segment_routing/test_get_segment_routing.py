@@ -38,6 +38,8 @@ from genie.libs.sdk.apis.arcos.segment_routing.get import (
     get_srv6_local_sid,
     get_srv6_local_sid_behavior,
     get_srv6_local_sids_by_locator,
+    get_mpls_reserved_label_blocks,
+    get_mpls_reserved_label_block,
 )
 
 MOD = "genie.libs.sdk.apis.arcos.segment_routing.get"
@@ -418,6 +420,125 @@ class TestSrv6LocalSidsGetApisDegraded(unittest.TestCase):
         cls, _ = _mock_parser_class(side_effect=TypeError("e"))
         with patch(f"{MOD}.ShowSrv6LocalSids", cls):
             self.assertEqual(get_srv6_local_sids(object()), {})
+
+
+
+# ---------------------------------------------------------------------------
+# MPLS reserved label blocks
+# ---------------------------------------------------------------------------
+#
+# The `usage` leaf is Optional in the parser schema for a concrete reason:
+# arcOS rejects an unknown usage enum as `syntax error: unknown element` but
+# still commits the rest of the block, so a block created with a bad token
+# exists on the box WITHOUT a usage leaf. RLB_NO_USAGE_OUTPUT is that state,
+# as nightly build 1541 left it on six routers.
+
+RLB_OUTPUT = {
+    "network-instance": {
+        "default": {
+            "mpls": {
+                "reserved-label-blocks": {
+                    "SRGB_BLOCK": {
+                        "local-id": "SRGB_BLOCK",
+                        "lower-bound": 16000,
+                        "upper-bound": 23999,
+                        "usage": "ISIS_SRGB",
+                        "protocol-identifier": "ISIS",
+                        "protocol-name": "default",
+                    },
+                    "SRLB_BLOCK": {
+                        "local-id": "SRLB_BLOCK",
+                        "lower-bound": 15000,
+                        "upper-bound": 15999,
+                        "usage": "ISIS_SRLB",
+                        "protocol-identifier": "ISIS",
+                        "protocol-name": "default",
+                    },
+                }
+            }
+        }
+    }
+}
+
+RLB_NO_USAGE_OUTPUT = {
+    "network-instance": {
+        "default": {
+            "mpls": {
+                "reserved-label-blocks": {
+                    "SRGB_BLOCK": {
+                        "local-id": "SRGB_BLOCK",
+                        "lower-bound": 16000,
+                        "upper-bound": 23999,
+                        "protocol-identifier": "ISIS",
+                        "protocol-name": "default",
+                    },
+                }
+            }
+        }
+    }
+}
+
+
+class TestGetMplsReservedLabelBlocks(unittest.TestCase):
+    """get_mpls_reserved_label_blocks / get_mpls_reserved_label_block"""
+
+    def _patch(self, **kw):
+        return patch(f"{MOD}.ShowMplsReservedLabelBlockConfig", **kw)
+
+    def _parser(self, output):
+        cls = Mock()
+        cls.return_value.parse = Mock(return_value=output)
+        return cls
+
+    def test_get_blocks_returns_all(self):
+        with self._patch(new=self._parser(RLB_OUTPUT)):
+            blocks = get_mpls_reserved_label_blocks(Mock())
+        self.assertEqual(sorted(blocks), ["SRGB_BLOCK", "SRLB_BLOCK"])
+        self.assertEqual(blocks["SRGB_BLOCK"]["usage"], "ISIS_SRGB")
+        self.assertEqual(blocks["SRLB_BLOCK"]["lower-bound"], 15000)
+
+    def test_get_single_block(self):
+        with self._patch(new=self._parser(RLB_OUTPUT)):
+            block = get_mpls_reserved_label_block(Mock(), "SRLB_BLOCK")
+        self.assertEqual(block["upper-bound"], 15999)
+
+    def test_get_single_block_absent_is_none(self):
+        with self._patch(new=self._parser(RLB_OUTPUT)):
+            self.assertIsNone(
+                get_mpls_reserved_label_block(Mock(), "NOPE_BLOCK"))
+
+    def test_rejected_usage_leaf_is_simply_absent(self):
+        """A block whose usage token arcOS refused has no usage key at all."""
+        with self._patch(new=self._parser(RLB_NO_USAGE_OUTPUT)):
+            block = get_mpls_reserved_label_block(Mock(), "SRGB_BLOCK")
+        self.assertNotIn("usage", block)
+        self.assertEqual(block["lower-bound"], 16000)
+
+    def test_no_blocks_configured_returns_empty(self):
+        cls = Mock()
+        cls.return_value.parse = Mock(side_effect=SchemaEmptyParserError("x"))
+        with self._patch(new=cls):
+            self.assertEqual(get_mpls_reserved_label_blocks(Mock()), {})
+
+    def test_subcommandfailure_returns_empty(self):
+        cls = Mock()
+        cls.return_value.parse = Mock(side_effect=SubCommandFailure("x"))
+        with self._patch(new=cls):
+            self.assertEqual(get_mpls_reserved_label_blocks(Mock()), {})
+
+    def test_unexpected_parser_error_returns_empty(self):
+        """Defensive: {} means "absent OR unreadable", never a raise."""
+        cls = Mock()
+        cls.return_value.parse = Mock(side_effect=ValueError("boom"))
+        with self._patch(new=cls):
+            self.assertEqual(get_mpls_reserved_label_blocks(Mock()), {})
+
+    def test_ni_is_threaded_to_the_parser(self):
+        cls = self._parser(RLB_OUTPUT)
+        with self._patch(new=cls):
+            get_mpls_reserved_label_blocks(Mock(), ni="vrf-red")
+        cls.return_value.parse.assert_called_once_with(
+            network_instance="vrf-red")
 
 
 class TestSegmentRoutingGetCoverage(unittest.TestCase):

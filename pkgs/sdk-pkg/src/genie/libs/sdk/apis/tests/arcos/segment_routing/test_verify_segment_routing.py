@@ -17,7 +17,7 @@ never enters the poll loop at all (confirmed against
 """
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 from genie.libs.sdk.apis.arcos.segment_routing import verify as sr_verify
 from genie.libs.sdk.apis.arcos.segment_routing.verify import (
@@ -31,6 +31,7 @@ from genie.libs.sdk.apis.arcos.segment_routing.verify import (
     verify_srv6_locator_micro_segment_enabled,
     verify_srv6_local_sid_present,
     verify_srv6_local_sid_behavior,
+    verify_mpls_reserved_label_block,
 )
 
 MOD = "genie.libs.sdk.apis.arcos.segment_routing.verify"
@@ -285,6 +286,80 @@ class TestVerifySrv6LocalSidBehavior(unittest.TestCase):
                 object(), "fcbb:bb00:9:9::/64", "END_PSP_USD", **FAST_FAIL
             )
         )
+
+
+
+GOOD_BLOCK = {
+    "local-id": "SRGB_BLOCK",
+    "lower-bound": 16000,
+    "upper-bound": 23999,
+    # arcOS renders the enum namespace-qualified; callers pass the bare token.
+    "usage": "arcos-mpls:ISIS_SRGB",
+    "protocol-identifier": "ISIS",
+    "protocol-name": "default",
+}
+
+# The same block after arcOS refused `usage SRGB`: every other leaf landed and
+# the usage leaf is simply gone. This is the state nightly build 1541 left on
+# six routers while reporting 34/34 PASSED.
+BLOCK_MISSING_USAGE = {k: v for k, v in GOOD_BLOCK.items() if k != "usage"}
+
+
+class TestVerifyMplsReservedLabelBlock(unittest.TestCase):
+    """verify_mpls_reserved_label_block
+
+    Unlike its siblings above, this one logs ``device.name``, so a bare
+    ``self.device`` will not do.
+    """
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = "rtr1"
+
+    @patch(f"{MOD}.get_mpls_reserved_label_block", return_value=GOOD_BLOCK)
+    def test_presence_only(self, mock_get):
+        self.assertTrue(verify_mpls_reserved_label_block(self.device, "SRGB_BLOCK"))
+
+    @patch(f"{MOD}.get_mpls_reserved_label_block", return_value=GOOD_BLOCK)
+    def test_all_leaves_match(self, mock_get):
+        self.assertTrue(verify_mpls_reserved_label_block(
+            self.device, "SRGB_BLOCK", lower_bound=16000, upper_bound=23999,
+            usage="ISIS_SRGB"))
+
+    @patch(f"{MOD}.get_mpls_reserved_label_block", return_value=GOOD_BLOCK)
+    def test_usage_comparison_strips_yang_prefix(self, mock_get):
+        """`arcos-mpls:ISIS_SRGB` must compare equal to `ISIS_SRGB`."""
+        self.assertTrue(verify_mpls_reserved_label_block(
+            self.device, "SRGB_BLOCK", usage="ISIS_SRGB"))
+
+    @patch(f"{MOD}.get_mpls_reserved_label_block",
+           return_value=BLOCK_MISSING_USAGE)
+    def test_absent_usage_leaf_fails(self, mock_get):
+        self.assertFalse(verify_mpls_reserved_label_block(
+            self.device, "SRGB_BLOCK", usage="ISIS_SRGB", **FAST_FAIL))
+
+    @patch(f"{MOD}.get_mpls_reserved_label_block",
+           return_value=BLOCK_MISSING_USAGE)
+    def test_absent_usage_leaf_still_passes_presence_check(self, mock_get):
+        """Presence is not the same question as correctness."""
+        self.assertTrue(verify_mpls_reserved_label_block(self.device, "SRGB_BLOCK"))
+
+    @patch(f"{MOD}.get_mpls_reserved_label_block", return_value=GOOD_BLOCK)
+    def test_wrong_bound_fails(self, mock_get):
+        self.assertFalse(verify_mpls_reserved_label_block(
+            self.device, "SRGB_BLOCK", upper_bound=20000, **FAST_FAIL))
+
+    @patch(f"{MOD}.get_mpls_reserved_label_block", return_value=None)
+    def test_absent_block_exhausts_timeout(self, mock_get):
+        self.assertFalse(verify_mpls_reserved_label_block(
+            self.device, "SRGB_BLOCK", **FAST_FAIL))
+        mock_get.assert_called()
+
+    @patch(f"{MOD}.get_mpls_reserved_label_block",
+           side_effect=Exception("boom"))
+    def test_read_error_exhausts_timeout(self, mock_get):
+        self.assertFalse(verify_mpls_reserved_label_block(
+            self.device, "SRGB_BLOCK", **FAST_FAIL))
 
 
 class TestSegmentRoutingVerifyCoverage(unittest.TestCase):
