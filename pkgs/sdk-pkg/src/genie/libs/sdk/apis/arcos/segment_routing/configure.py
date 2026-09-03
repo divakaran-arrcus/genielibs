@@ -4,9 +4,7 @@ import logging
 
 from unicon.core.errors import SubCommandFailure
 
-from genie.libs.sdk.apis.arcos.segment_routing.get import (
-    get_mpls_reserved_label_block,
-)
+from genie.utils.timeout import Timeout
 
 log = logging.getLogger(__name__)
 
@@ -294,7 +292,9 @@ def configure_mpls_reserved_label_block(device, block_id, lower_bound,
                                         protocol_identifier,
                                         protocol_name=None,
                                         network_instance='default',
-                                        verify=True):
+                                        verify=True,
+                                        verify_max_time=10,
+                                        verify_check_interval=2):
     """Configure an MPLS reserved label block, then read it back.
 
     The read-back is not belt-and-braces -- it is the only thing that catches a
@@ -321,8 +321,16 @@ def configure_mpls_reserved_label_block(device, block_id, lower_bound,
         network_instance (str, optional): Network instance name.
             Defaults to 'default'.
         verify (bool, optional): Read the block back after configuring and
-            fail if a leaf did not land. Defaults to True. Set False only
-            where the read path is unavailable.
+            raise if it does not match what was sent. Defaults to True.
+            Fails closed: a block that cannot be read back at all also
+            raises, since that is indistinguishable from one that did not
+            apply. Set False where the read path is unavailable (the read
+            goes over ``| display json``).
+        verify_max_time (int, optional): Seconds to keep re-reading before
+            giving up. Defaults to 10 -- the running-config datastore can
+            lag the commit that just returned.
+        verify_check_interval (int, optional): Seconds between read
+            attempts. Defaults to 2.
 
     Returns:
         None
@@ -372,30 +380,61 @@ def configure_mpls_reserved_label_block(device, block_id, lower_bound,
 
     if verify:
         _assert_reserved_label_block_applied(
-            device, block_id, lower_bound, upper_bound, usage, ni=ni,
+            device, block_id, lower_bound, upper_bound, usage,
+            protocol_identifier, protocol_name, ni=ni,
+            max_time=verify_max_time, check_interval=verify_check_interval,
         )
 
 
 def _assert_reserved_label_block_applied(device, block_id, lower_bound,
-                                         upper_bound, usage, ni='default'):
-    """Raise if a just-configured block did not come back with what we sent.
+                                         upper_bound, usage,
+                                         protocol_identifier=None,
+                                         protocol_name=None, ni='default',
+                                         max_time=10, check_interval=2):
+    """Raise unless a just-configured block reads back with what we sent.
 
-    Only leaf-level mismatches raise. A ``None`` read-back is logged and let
-    through on purpose: ``get_mpls_reserved_label_blocks`` returns ``{}`` both
-    for "no blocks configured" and for any parse failure, so it cannot tell an
-    absent block from an unreadable one. Raising there would convert a broken
-    parser or an unsupported platform into a false red on a block that
-    committed fine. A block we DID read is real evidence, and every leaf in it
-    is fair game.
+    Fails CLOSED. An unreadable read-back after a clean commit raises, rather
+    than warning and reporting success: the whole point of this check is that
+    arcOS drops a bad leaf silently, and a check that passes when it cannot see
+    the block reproduces exactly that failure. `get_mpls_reserved_label_blocks`
+    returns {} for "no blocks", for a parse failure, and for a platform without
+    `| display json` alike -- the parser swallows its own errors -- so those
+    genuinely cannot be told apart here. Of the two ways to be wrong, a false
+    red breaks every suite at once and is diagnosed in minutes; a false green
+    is the bug we are trying to kill. `verify=False` is the escape hatch, and
+    the message below says so.
+
+    Polls, because the running-config datastore can lag the commit that just
+    returned. `verify_mpls_reserved_label_block` allows 30s on the identical
+    read; a single immediate read here would race it.
     """
-    block = get_mpls_reserved_label_block(device, block_id, ni=ni)
+    # Imported here, not at module scope: parsers live in get.py by
+    # convention, and genie.libs.parser is not an sdk-pkg install_requires.
+    from genie.libs.sdk.apis.arcos.segment_routing.get import (
+        get_mpls_reserved_label_block,
+    )
+
+    timeout = Timeout(max_time, check_interval)
+    block = None
+    while timeout.iterate():
+        try:
+            block = get_mpls_reserved_label_block(device, block_id, ni=ni)
+        except Exception as exc:      # noqa: BLE001 - read path is advisory
+            log.debug("reserved-label-block %s read-back failed: %s",
+                      block_id, exc)
+            block = None
+        if block:
+            break
+        timeout.sleep()
+
     if not block:
-        log.warning(
-            "reserved-label-block %s on %s could not be read back "
-            "(absent, or the read path is unavailable) -- leaf values "
-            "unverified", block_id, device.name
+        raise SubCommandFailure(
+            f"MPLS reserved label block {block_id} on {device.name} committed "
+            f"but could not be read back within {max_time}s. Either it did "
+            f"not apply, or the read path is unavailable on this platform "
+            f"(the block config is read over `| display json`). Pass "
+            f"verify=False to skip this check."
         )
-        return
 
     mismatches = []
     if block.get("lower-bound") != lower_bound:
@@ -408,9 +447,15 @@ def _assert_reserved_label_block_applied(device, block_id, lower_bound,
             f"upper-bound: sent {upper_bound!r}, read "
             f"{block.get('upper-bound')!r}"
         )
-    # arcOS renders the enum namespace-qualified (`arcos-mpls:ISIS_SRGB`);
-    # an absent leaf is the rejected-token signature and reads as ''.
-    actual_usage = str(block.get("usage") or "").split(":")[-1]
+
+    # Every enum leaf below is droppable the same silent way `usage` is, and
+    # comes back through the same namespace strip, so all of them are checked.
+    # The parser already strips (`strip_namespace`); splitting on ':' again is
+    # belt-and-braces for a raw-dict caller and costs nothing.
+    def _leaf(name):
+        return str(block.get(name) or "").split(":")[-1]
+
+    actual_usage = _leaf("usage")
     if actual_usage != usage:
         mismatches.append(
             f"usage: sent {usage!r}, read {actual_usage or '<leaf absent>'!r}"
@@ -418,6 +463,20 @@ def _assert_reserved_label_block_applied(device, block_id, lower_bound,
             " committing the block; valid tokens are spelled"
             " <PROTOCOL>_<ROLE>, e.g. ISIS_SRGB"
         )
+    if protocol_identifier is not None:
+        actual = _leaf("protocol-identifier")
+        if actual != protocol_identifier:
+            mismatches.append(
+                f"protocol-identifier: sent {protocol_identifier!r}, read "
+                f"{actual or '<leaf absent>'!r}"
+            )
+    if protocol_name is not None:
+        actual = _leaf("protocol-name")
+        if actual != protocol_name:
+            mismatches.append(
+                f"protocol-name: sent {protocol_name!r}, read "
+                f"{actual or '<leaf absent>'!r}"
+            )
 
     if mismatches:
         raise SubCommandFailure(
@@ -427,20 +486,29 @@ def _assert_reserved_label_block_applied(device, block_id, lower_bound,
 
 
 def unconfigure_mpls_reserved_label_block(device, block_id,
-                                          network_instance='default'):
-    """Remove an MPLS reserved label block.
+                                          network_instance='default',
+                                          verify=True):
+    """Remove an MPLS reserved label block, then confirm it is gone.
+
+    Unlike the configure path, this check can be simple and still be safe: an
+    empty read-back is the *expected* outcome of a removal, so there is no
+    absent-vs-unreadable ambiguity to resolve. The only failure signal is the
+    block still being present, which is unambiguous evidence.
 
     Args:
         device (obj): Device object.
         block_id (str): Label block identifier to remove.
         network_instance (str, optional): Network instance name.
             Defaults to 'default'.
+        verify (bool, optional): Confirm the block is gone afterwards.
+            Defaults to True.
 
     Returns:
         None
 
     Raises:
-        SubCommandFailure: Failed to remove MPLS reserved label block.
+        SubCommandFailure: Failed to remove MPLS reserved label block, or it
+            is still present afterwards.
 
     Example:
         >>> unconfigure_mpls_reserved_label_block(
@@ -467,6 +535,24 @@ def unconfigure_mpls_reserved_label_block(device, block_id,
             f"Could not remove MPLS reserved label block {block_id} on "
             f"{device.name}. Error:\n{e}"
         )
+
+    if verify:
+        from genie.libs.sdk.apis.arcos.segment_routing.get import (
+            get_mpls_reserved_label_block,
+        )
+        try:
+            still_there = get_mpls_reserved_label_block(device, block_id,
+                                                        ni=ni)
+        except Exception as exc:      # noqa: BLE001 - read path is advisory
+            log.debug("reserved-label-block %s removal read-back failed: %s",
+                      block_id, exc)
+            still_there = None
+        if still_there:
+            raise SubCommandFailure(
+                f"MPLS reserved label block {block_id} on {device.name} is "
+                f"still present after `no mpls global reserved-label-block "
+                f"{block_id}` committed cleanly."
+            )
 
 
 def configure_srms_mapping(device, mapping_id,

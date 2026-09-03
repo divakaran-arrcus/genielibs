@@ -289,12 +289,15 @@ class TestVerifySrv6LocalSidBehavior(unittest.TestCase):
 
 
 
+# As the PARSER yields it. arcOS puts `arcos-mpls:` on the wire, but
+# ShowMplsReservedLabelBlockConfig strips it (strip_namespace), so a block that
+# reached this code always carries the bare token. A fixture with the prefix
+# pins an input the parser cannot produce.
 GOOD_BLOCK = {
     "local-id": "SRGB_BLOCK",
     "lower-bound": 16000,
     "upper-bound": 23999,
-    # arcOS renders the enum namespace-qualified; callers pass the bare token.
-    "usage": "arcos-mpls:ISIS_SRGB",
+    "usage": "ISIS_SRGB",
     "protocol-identifier": "ISIS",
     "protocol-name": "default",
 }
@@ -318,7 +321,8 @@ class TestVerifyMplsReservedLabelBlock(unittest.TestCase):
 
     @patch(f"{MOD}.get_mpls_reserved_label_block", return_value=GOOD_BLOCK)
     def test_presence_only(self, mock_get):
-        self.assertTrue(verify_mpls_reserved_label_block(self.device, "SRGB_BLOCK"))
+        self.assertTrue(
+            verify_mpls_reserved_label_block(self.device, "SRGB_BLOCK"))
 
     @patch(f"{MOD}.get_mpls_reserved_label_block", return_value=GOOD_BLOCK)
     def test_all_leaves_match(self, mock_get):
@@ -326,9 +330,11 @@ class TestVerifyMplsReservedLabelBlock(unittest.TestCase):
             self.device, "SRGB_BLOCK", lower_bound=16000, upper_bound=23999,
             usage="ISIS_SRGB"))
 
-    @patch(f"{MOD}.get_mpls_reserved_label_block", return_value=GOOD_BLOCK)
+    @patch(f"{MOD}.get_mpls_reserved_label_block",
+           return_value=dict(GOOD_BLOCK, usage="arcos-mpls:ISIS_SRGB"))
     def test_usage_comparison_strips_yang_prefix(self, mock_get):
-        """`arcos-mpls:ISIS_SRGB` must compare equal to `ISIS_SRGB`."""
+        """Defensive path: the parser already strips, so this only fires for a
+        caller feeding in a raw, unstripped dict."""
         self.assertTrue(verify_mpls_reserved_label_block(
             self.device, "SRGB_BLOCK", usage="ISIS_SRGB"))
 
@@ -342,7 +348,8 @@ class TestVerifyMplsReservedLabelBlock(unittest.TestCase):
            return_value=BLOCK_MISSING_USAGE)
     def test_absent_usage_leaf_still_passes_presence_check(self, mock_get):
         """Presence is not the same question as correctness."""
-        self.assertTrue(verify_mpls_reserved_label_block(self.device, "SRGB_BLOCK"))
+        self.assertTrue(
+            verify_mpls_reserved_label_block(self.device, "SRGB_BLOCK"))
 
     @patch(f"{MOD}.get_mpls_reserved_label_block", return_value=GOOD_BLOCK)
     def test_wrong_bound_fails(self, mock_get):
