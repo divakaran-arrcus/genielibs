@@ -24,6 +24,16 @@ from genie.libs.sdk.apis.arcos.rib.get import (
 log = logging.getLogger(__name__)
 
 
+def _local(obj, key, default=None):
+    """Fetch ``key`` from a dict, ignoring any YANG module prefix."""
+    if not isinstance(obj, dict):
+        return default
+    for k, v in obj.items():
+        if str(k).split(":")[-1] == key:
+            return v
+    return default
+
+
 def verify_route_in_rib(
     device,
     prefix: str,
@@ -284,16 +294,20 @@ def verify_rib_has_backup(
             backups = []
 
         for nh in backups:
+            # A backup resolved through the SR-MPLS indirection comes from the
+            # pathid table, whose leaves can arrive module-qualified, so match
+            # on the local name rather than an exact key.
+            egress = _local(nh, "interface")
             if (
                 expected_backup_egress is None
-                or nh.get("interface") == expected_backup_egress
+                or egress == expected_backup_egress
             ):
                 log.debug(
                     "verify_rib_has_backup(%s, af=%s): backup via %s flags=%s",
                     prefix,
                     af,
-                    nh.get("interface"),
-                    nh.get("flags"),
+                    egress,
+                    _local(nh, "flags"),
                 )
                 return True
 
