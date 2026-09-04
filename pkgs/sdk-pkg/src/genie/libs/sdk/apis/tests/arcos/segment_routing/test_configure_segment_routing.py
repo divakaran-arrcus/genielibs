@@ -9,7 +9,7 @@ distinctive substring of the emitted CLI.
 """
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from unicon.core.errors import SubCommandFailure
 
@@ -132,6 +132,29 @@ class TestSrv6LocatorMicroSegmentApis(unittest.TestCase):
         self.assertIn("no micro-segment-behavior-unode", c)
 
 
+# The configure API reads the block back after committing (arcOS drops a bad
+# leaf and commits the rest, so nothing else would notice), and fails closed
+# when it cannot see it. `_CfgDevice` is a config recorder with no parser
+# behind it, so these CLI-shape tests patch the getter to a block matching
+# what they send. `verify=False` would also work but would stop exercising
+# the read-back path at all.
+_GETTER = ("genie.libs.sdk.apis.arcos.segment_routing.get."
+           "get_mpls_reserved_label_block")
+
+
+def _read_back(**over):
+    block = {
+        "local-id": "SRGB_BLOCK",
+        "lower-bound": 16000,
+        "upper-bound": 23999,
+        "usage": "ISIS_SRGB",
+        "protocol-identifier": "ISIS",
+        "protocol-name": "default",
+    }
+    block.update(over)
+    return block
+
+
 class TestMplsReservedLabelBlockApis(unittest.TestCase):
     """configure_mpls_reserved_label_block / unconfigure_mpls_reserved_label_block"""
 
@@ -139,28 +162,37 @@ class TestMplsReservedLabelBlockApis(unittest.TestCase):
         self.d = _CfgDevice()
 
     def test_label_block_full(self):
-        configure_mpls_reserved_label_block(
-            self.d, "SRGB_BLOCK", 16000, 23999, "SRGB", "ISIS",
-            protocol_name="default",
-        )
+        with patch(_GETTER, return_value=_read_back()):
+            configure_mpls_reserved_label_block(
+                self.d, "SRGB_BLOCK", 16000, 23999, "ISIS_SRGB", "ISIS",
+                protocol_name="default",
+            )
         c = self.d.cfg()
         self.assertIn("mpls global reserved-label-block SRGB_BLOCK", c)
         self.assertIn("lower-bound 16000", c)
         self.assertIn("upper-bound 23999", c)
-        self.assertIn("usage SRGB", c)
+        self.assertIn("usage ISIS_SRGB", c)
         self.assertIn("protocol-identifier ISIS", c)
         self.assertIn("protocol-name default", c)
 
     def test_label_block_no_protocol_name(self):
-        configure_mpls_reserved_label_block(
-            self.d, "SRLB_BLOCK", 15000, 15999, "SRLB", "OSPF",
-        )
+        block = _read_back(**{"local-id": "SRLB_BLOCK",
+                              "lower-bound": 15000, "upper-bound": 15999,
+                              "usage": "ISIS_SRLB",
+                              "protocol-identifier": "OSPF"})
+        del block["protocol-name"]
+        with patch(_GETTER, return_value=block):
+            configure_mpls_reserved_label_block(
+                self.d, "SRLB_BLOCK", 15000, 15999, "ISIS_SRLB", "OSPF",
+            )
         c = self.d.cfg()
         self.assertIn("mpls global reserved-label-block SRLB_BLOCK", c)
         self.assertNotIn("protocol-name", c)
 
     def test_unconfigure_label_block(self):
-        unconfigure_mpls_reserved_label_block(self.d, "SRGB_BLOCK")
+        # Removal confirms the block is GONE, so a None read-back is success.
+        with patch(_GETTER, return_value=None):
+            unconfigure_mpls_reserved_label_block(self.d, "SRGB_BLOCK")
         self.assertIn("no mpls global reserved-label-block SRGB_BLOCK", self.d.cfg())
 
 
@@ -274,8 +306,10 @@ class TestSegmentRoutingConfigureSubCommandFailure(unittest.TestCase):
         (configure_srv6_locator_micro_segment, ("loc1",), {}),
         (unconfigure_srv6_locator_micro_segment, ("loc1",), {}),
         (configure_mpls_reserved_label_block,
-         ("SRGB_BLOCK", 16000, 23999, "SRGB", "ISIS"), {}),
-        (unconfigure_mpls_reserved_label_block, ("SRGB_BLOCK",), {}),
+         ("SRGB_BLOCK", 16000, 23999, "ISIS_SRGB", "ISIS"),
+         {"verify": False}),
+        (unconfigure_mpls_reserved_label_block, ("SRGB_BLOCK",),
+         {"verify": False}),
         (configure_srms_mapping, ("map1",), {}),
         (unconfigure_srms_mapping, ("map1",), {}),
         (configure_srms_mapping_ipv4_prefix,
