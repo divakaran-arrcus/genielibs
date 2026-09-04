@@ -285,27 +285,28 @@ def get_rib_entry_count(
 
 _IGP_NH_FLAG = "IGP_NH"
 
+# The oper tables that resolve an indirect next-hop, per address family, as
+# (container, list). These are IRREGULAR -- ipv4-pathids holds `pathids` but
+# ipv6-pathids holds `v6pathids`, and ipv4-nhids holds `ipv4-nhids` while
+# ipv6-nhids holds `v6nhids` (arcos-rib.yang:2089-2109, :2288-2307). They are
+# spelled out rather than interpolated from the AF because interpolating gave
+# `ipv6-pathids pathids` and `ipv6-nhids ipv6-nhids`, neither of which exists,
+# so every IPv6 backup silently resolved to nothing.
+#
+# Verified on arcOS R8.6.1.Alpha1: the CONTAINER names are ipv6-pathids /
+# ipv6-nhids (a bare `rib IPV6 v6pathids` is `syntax error: unknown element`),
+# so only the inner list carries the v6 prefix.
+_RESOLUTION_TABLES = {
+    "IPV4": {"pathids": ("ipv4-pathids", "pathids"),
+             "nhids": ("ipv4-nhids", "ipv4-nhids")},
+    "IPV6": {"pathids": ("ipv6-pathids", "v6pathids"),
+             "nhids": ("ipv6-nhids", "v6nhids")},
+}
 
-def _walk_lists(obj, key):
-    """Yield every list found under ``key``, at any depth.
 
-    Deliberately nesting-agnostic. These oper tables are read over
-    ``| display json``, and the exact wrapper ConfD emits for a container
-    carrying ``tailf:cli-drop-node-name`` (``igp-rnhs`` vs ``igp-rnh``) is not
-    something we want the caller to depend on. Searching by key survives
-    either, and survives a wrapper being added or removed between releases.
-    """
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            if str(k).split(":")[-1] == key:
-                if isinstance(v, list):
-                    yield v
-                elif isinstance(v, dict):
-                    yield [v]
-            yield from _walk_lists(v, key)
-    elif isinstance(obj, list):
-        for v in obj:
-            yield from _walk_lists(v, key)
+def _tables(af):
+    """Return the (container, list) pair map for an address family."""
+    return _RESOLUTION_TABLES.get(str(af).upper(), _RESOLUTION_TABLES["IPV4"])
 
 
 def _leaf(obj, key, default=None):
@@ -324,8 +325,15 @@ def _execute_json(device, command):
     Uses ``execute`` rather than ``parse``: there is no upstream parser for the
     igp-rnh / pathid oper tables, and inventing a strict schema for output
     whose JSON nesting has not been confirmed on a device would be worse than
-    walking the document. Returns ``{}`` on any failure — a resolution we
-    cannot perform must degrade to "no backup found", never raise.
+    walking the document.
+
+    Decoding uses ``json.JSONDecoder.raw_decode`` from the first ``{``, not a
+    hand-rolled brace counter -- a counter miscounts any ``{`` inside a string
+    value, and silently returns only the first of two documents.
+
+    Returns ``{}`` on any failure. The CALLER decides what that means: see
+    ``resolve_indirect_nexthops``, which distinguishes "read failed" from
+    "no backup" rather than collapsing both to an empty list.
     """
     import json
 
@@ -341,19 +349,12 @@ def _execute_json(device, command):
     if start < 0:
         log.debug("_execute_json(%s): no JSON in output", command)
         return {}
-    depth = 0
-    for i, ch in enumerate(text[start:], start):
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(text[start:i + 1])
-                except Exception as exc:  # noqa: BLE001
-                    log.debug("_execute_json(%s): bad JSON: %s", command, exc)
-                    return {}
-    return {}
+    try:
+        doc, _ = json.JSONDecoder().raw_decode(text[start:])
+    except ValueError as exc:
+        log.debug("_execute_json(%s): bad JSON: %s", command, exc)
+        return {}
+    return doc if isinstance(doc, dict) else {}
 
 
 def is_indirect_nexthop(nh: Dict[str, Any]) -> bool:
@@ -365,7 +366,9 @@ def is_indirect_nexthop(nh: Dict[str, Any]) -> bool:
     extra device reads, and certain the flat path is still taken on an image
     that renders flat.
     """
-    if _IGP_NH_FLAG not in str(_leaf(nh, "flags") or ""):
+    # Whole-token match: `flags` is a YANG bits leaf rendered space-separated,
+    # and a substring test would also match a hypothetical NO_IGP_NH.
+    if _IGP_NH_FLAG not in str(_leaf(nh, "flags") or "").replace(",", " ").split():
         return False
     value = _leaf(nh, "next-hop")
     if isinstance(value, bool):
@@ -383,54 +386,95 @@ def get_rib_igp_rnh_pathids(
 ) -> List[int]:
     """Return the underlying pathids for an IGP-RNH id.
 
-    The IGP-RNH id is also the NHID of the real path set, so either table
-    answers. ``igp-rnh`` is tried first because it is one read and reports the
-    NHID back for cross-checking; the nhid table is the fallback.
+    Reads ``igp-rnh <id>`` first -- one read, and it reports the NHID back so
+    the two can be cross-checked. Falls back to the nhid table.
+
+    Only rows whose own key/id matches ``rnh_id`` are considered. An earlier
+    version scanned the whole document for any ``paths`` list at any depth,
+    which collected pathids from a second RNH in the same output and
+    double-counted a list that appeared at two depths.
 
     Args:
         device: pyATS device object.
-        rnh_id: IGP-RNH id — the integer ``next-hop`` of a recursive next-hop.
-        af: Address family — ``"IPV4"`` or ``"IPV6"`` (default ``"IPV4"``).
-        ni: Network instance name (default ``"default"``).
+        rnh_id: IGP-RNH id -- the integer ``next-hop`` of a recursive next-hop.
+        af: Address family -- ``"IPV4"`` or ``"IPV6"`` (default ``"IPV4"``).
+        ni: Network instance name (default ``"default"``). Note the pathid and
+            nhid tables exist only under NI ``default``.
 
     Returns:
-        List of pathid integers; empty when the id cannot be resolved.
+        Ordered, de-duplicated list of pathid integers; empty when the id
+        cannot be resolved.
     """
-    fam = "ipv4" if str(af).upper() == "IPV4" else "ipv6"
+    tables = _tables(af)
+    nh_container, nh_list = tables["nhids"]
     reads = (
-        (f"show network-instance {ni} rib {af} igp-rnh {rnh_id}", "paths"),
-        (f"show network-instance {ni} rib {af} {fam}-nhids "
-         f"{fam}-nhids {rnh_id}", "pathids-list"),
+        (f"show network-instance {ni} rib {af} igp-rnh {rnh_id}",
+         ("paths",), ("id", "nhid")),
+        (f"show network-instance {ni} rib {af} {nh_container} {nh_list} "
+         f"{rnh_id}",
+         ("pathids-list", "pathids_list"), ("nhid",)),
     )
-    for command, field in reads:
+
+    def _ints(value):
+        out = []
+        if isinstance(value, list):
+            for x in value:
+                try:
+                    out.append(int(x))
+                except (TypeError, ValueError):
+                    continue
+        elif isinstance(value, (str, int)):
+            for tok in str(value).replace("[", " ").replace("]", " ").split():
+                if tok.lstrip("-").isdigit():
+                    out.append(int(tok))
+        return out
+
+    def _rows(obj):
+        """Yield dicts that look like a row keyed by one of `key_names`."""
+        if isinstance(obj, dict):
+            yield obj
+            for v in obj.values():
+                yield from _rows(v)
+        elif isinstance(obj, list):
+            for v in obj:
+                yield from _rows(v)
+
+    for command, path_fields, key_names in reads:
         doc = _execute_json(device, command)
         if not doc:
             continue
-        # The row we want is whichever object carries the pathid list.
         found: List[int] = []
-        def _scan(obj):
-            if isinstance(obj, dict):
-                val = _leaf(obj, field)
-                if isinstance(val, list):
-                    for x in val:
-                        try:
-                            found.append(int(x))
-                        except (TypeError, ValueError):
-                            continue
-                elif isinstance(val, str):
-                    for tok in val.replace("[", " ").replace("]", " ").split():
-                        if tok.isdigit():
-                            found.append(int(tok))
-                for v in obj.values():
-                    _scan(v)
-            elif isinstance(obj, list):
-                for v in obj:
-                    _scan(v)
-        _scan(doc)
+        for row in _rows(doc):
+            # The row must identify itself as the one we asked for. Without
+            # this a second RNH in the same document contributes its pathids.
+            state = _leaf(row, "state") if isinstance(
+                _leaf(row, "state"), dict) else {}
+            ids = {str(_leaf(row, k)) for k in key_names}
+            ids |= {str(_leaf(state, k)) for k in key_names}
+            if str(rnh_id) not in ids:
+                continue
+            # Cross-check, which the igp-rnh read exists to make possible: the
+            # RNH id and the NHID it reports must agree, because the fallback
+            # read keys the nhid table with the RNH id. arcos-rib.yang models
+            # them as separate leaves (:1304), so equality is an invariant of
+            # rib_igp_rnh_find_create, not of the schema -- worth asserting
+            # rather than assuming.
+            reported = _leaf(state, "nhid", _leaf(row, "nhid"))
+            if reported is not None and str(reported) != str(rnh_id):
+                log.warning(
+                    "igp-rnh %s reports nhid %s -- they are expected to be "
+                    "equal; the %s fallback keys on the RNH id and would read "
+                    "the wrong row", rnh_id, reported,
+                    _tables(af)["nhids"][0],
+                )
+            for field in path_fields:
+                for candidate in (row, _leaf(row, "state") or {}):
+                    found.extend(_ints(_leaf(candidate, field)))
         if found:
+            deduped = list(dict.fromkeys(found))
             log.debug("igp-rnh %s -> pathids %s (via %s)",
-                      rnh_id, found, command)
-            return found
+                      rnh_id, deduped, command)
+            return deduped
     log.debug("igp-rnh %s: could not resolve pathids", rnh_id)
     return []
 
@@ -443,41 +487,57 @@ def get_rib_pathid(
 ) -> Dict[str, Any]:
     """Return one resolved pathid: the object carrying egress and flags.
 
-    This is the only table that holds the real forwarding detail —
-    ``interface``, ``next-hop`` address, ``flags`` (ATTACH/BACKUP/...), the
-    ``backup`` boolean, ``weight`` and ``pushed-mpls-label-stack``.
+    This is the only table holding the real forwarding detail -- ``interface``,
+    ``next-hop`` address, ``flags`` (ATTACH/BACKUP/...), the ``backup``
+    boolean, ``weight`` and ``pushed-mpls-label-stack``.
+
+    The row is matched on its own ``pathid``. An earlier version returned
+    whichever candidate dict had the most keys, which on a multi-row document
+    returned a DIFFERENT path's row -- including its BACKUP flag.
 
     Args:
         device: pyATS device object.
         pathid: Pathid integer.
-        af: Address family — ``"IPV4"`` or ``"IPV6"`` (default ``"IPV4"``).
+        af: Address family -- ``"IPV4"`` or ``"IPV6"`` (default ``"IPV4"``).
         ni: Network instance name (default ``"default"``).
 
     Returns:
         The pathid dict, or ``{}`` when absent/unreadable.
     """
-    fam = "ipv4" if str(af).upper() == "IPV4" else "ipv6"
+    container, listname = _tables(af)["pathids"]
     doc = _execute_json(
         device,
-        f"show network-instance {ni} rib {af} {fam}-pathids pathids {pathid}",
+        f"show network-instance {ni} rib {af} {container} {listname} {pathid}",
     )
     if not doc:
         return {}
-    best: Dict[str, Any] = {}
-    def _scan(obj):
-        nonlocal best
+
+    def _rows(obj):
         if isinstance(obj, dict):
-            if _leaf(obj, "interface") is not None or \
-               _leaf(obj, "pathid") is not None:
-                if len(obj) > len(best):
-                    best = obj
+            yield obj
             for v in obj.values():
-                _scan(v)
+                yield from _rows(v)
         elif isinstance(obj, list):
             for v in obj:
-                _scan(v)
-    _scan(doc)
-    return best
+                yield from _rows(v)
+
+    for row in _rows(doc):
+        if str(_leaf(row, "pathid")) == str(pathid):
+            return row
+    log.debug("pathid %s: no row with that key in the response", pathid)
+    return {}
+
+
+class IndirectNexthopUnresolved(Exception):
+    """A recursive SR-MPLS next-hop exists but its real paths cannot be read.
+
+    Deliberately NOT an empty result. Suites assert on the negative -- there
+    are `not verify_rib_has_backup(...)` sites and `..._have_no_backup`
+    testcases -- so returning [] here would let a resolution defect satisfy
+    them, which is precisely the silent pass this whole change set exists to
+    remove. The same repo already chose fail-closed for
+    configure_mpls_reserved_label_block for the same reason.
+    """
 
 
 def resolve_indirect_nexthops(
@@ -490,35 +550,65 @@ def resolve_indirect_nexthops(
 
     Each returned path is the pathid object, with the parent's common label
     suffix recorded as ``parent-pushed-mpls-label-stack`` so a caller can
-    reconstruct the full stack the packet actually gets: the RIB subtracts the
-    common suffix from each sub-path, leaving the primary with no labels and
-    the backup with only its repair SIDs.
+    reconstruct the full stack: the RIB subtracts the common suffix from each
+    sub-path, leaving the primary with no labels and the backup with only its
+    repair SIDs.
 
     Args:
         device: pyATS device object.
         nh: A next-hop dict from a RIB entry origin.
-        af: Address family — ``"IPV4"`` or ``"IPV6"`` (default ``"IPV4"``).
-        ni: Network instance name (default ``"default"``).
+        af: Address family -- ``"IPV4"`` or ``"IPV6"`` (default ``"IPV4"``).
+        ni: Network instance name (default ``"default"``). The pathid and nhid
+            tables are modelled only under NI ``default``
+            (arcos-rib.yang:2992), so a non-default ``ni`` cannot resolve.
 
     Returns:
-        List of resolved path dicts; empty when resolution fails.
+        List of resolved path dicts.
+
+    Raises:
+        IndirectNexthopUnresolved: the RNH id could not be resolved to any
+            pathid, or no pathid row could be read. Never returns [] for this.
     """
+    if str(ni) != "default":
+        raise IndirectNexthopUnresolved(
+            f"the pathid/nhid oper tables are modelled only under "
+            f"network-instance 'default'; cannot resolve an indirect "
+            f"next-hop in ni={ni!r}"
+        )
+
     rnh_id = _leaf(nh, "next-hop")
     parent_labels = _leaf(nh, "pushed-mpls-label-stack") or []
+    pathids = get_rib_igp_rnh_pathids(device, rnh_id, af=af, ni=ni)
+    if not pathids:
+        raise IndirectNexthopUnresolved(
+            f"IGP-RNH {rnh_id!r} ({af}) resolved to no pathids -- the "
+            f"igp-rnh and {_tables(af)['nhids'][0]} reads both came back "
+            f"empty or unreadable"
+        )
+
     out: List[Dict[str, Any]] = []
-    for pathid in get_rib_igp_rnh_pathids(device, rnh_id, af=af, ni=ni):
+    unread = []
+    for pathid in pathids:
         path = get_rib_pathid(device, pathid, af=af, ni=ni)
         if not path:
+            unread.append(pathid)
             continue
         path = dict(path)
         path.setdefault("pathid", pathid)
         path["parent-pushed-mpls-label-stack"] = parent_labels
         out.append(path)
-    return out
 
-# -------------------------------------------------------------------
-# Public API — Label entries
-# -------------------------------------------------------------------
+    if not out:
+        raise IndirectNexthopUnresolved(
+            f"IGP-RNH {rnh_id!r} ({af}) lists pathids {pathids} but none "
+            f"could be read from {_tables(af)['pathids'][0]}"
+        )
+    if unread:
+        log.warning(
+            "IGP-RNH %r (%s): pathid(s) %s unreadable; resolved %d of %d",
+            rnh_id, af, unread, len(out), len(pathids),
+        )
+    return out
 
 
 def get_rib_label_entries(
@@ -663,6 +753,9 @@ def get_rib_backup_nexthops(
                 continue
             # Indirect rendering: follow the recursion. The BACKUP flag lives
             # on the underlying pathids, never on the synthetic parent.
+            # resolve_indirect_nexthops RAISES when it cannot resolve, and the
+            # exception is deliberately NOT caught here -- "unreadable" must
+            # not reach a caller as "no backup".
             if is_indirect_nexthop(nh):
                 indirect_seen = True
                 for path in resolve_indirect_nexthops(
@@ -685,12 +778,12 @@ def get_rib_backup_nexthops(
         " (via SR-MPLS indirection)" if indirect_seen else "",
     )
     if indirect_seen and not backups:
-        # Worth saying out loud: this is the shape that silently returned []
-        # and turned four TI-LFA lanes red without naming a cause.
-        log.warning(
-            "%s has an ECMP-FEC-optimized recursive next-hop but no backup "
-            "resolved behind it. Either TI-LFA programmed no backup, or the "
-            "igp-rnh/pathid oper read is unavailable on this image.",
-            prefix,
+        # Reachable and MEANINGFUL now: resolution succeeded (or it would have
+        # raised), and none of the real paths carries BACKUP. That is a
+        # genuine "TI-LFA programmed no backup", not an unreadable device.
+        log.info(
+            "%s resolved through an ECMP-FEC-optimized recursive next-hop; "
+            "none of its underlying paths is flagged %s",
+            prefix, backup_flag,
         )
     return backups

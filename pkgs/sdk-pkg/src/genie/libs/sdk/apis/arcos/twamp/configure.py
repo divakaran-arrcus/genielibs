@@ -72,7 +72,10 @@ def configure_twamp_session_reflector(device, enabled=True,
     ]
 
     if reflector_udp_port is not None:
-        if not _valid_reflector_udp_port(int(reflector_udp_port)):
+        # Coerce ONCE and push the coerced value. Validating int(x) while
+        # pushing x let 862.5 through the guard and onto the device.
+        reflector_udp_port = int(reflector_udp_port)
+        if not _valid_reflector_udp_port(reflector_udp_port):
             raise ValueError(
                 f"reflector_udp_port={reflector_udp_port} is outside the range "
                 f"arcOS accepts (862 | 49152..65535). Pushing it would draw "

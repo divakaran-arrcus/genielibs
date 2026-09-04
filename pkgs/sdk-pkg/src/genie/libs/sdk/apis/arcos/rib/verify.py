@@ -15,6 +15,8 @@ from typing import Optional
 from genie.utils.timeout import Timeout
 
 from genie.libs.sdk.apis.arcos.rib.get import (
+    IndirectNexthopUnresolved,
+    _leaf,
     is_route_in_rib,
     get_route_best_protocol,
     get_rib_label_entry,
@@ -22,16 +24,6 @@ from genie.libs.sdk.apis.arcos.rib.get import (
 )
 
 log = logging.getLogger(__name__)
-
-
-def _local(obj, key, default=None):
-    """Fetch ``key`` from a dict, ignoring any YANG module prefix."""
-    if not isinstance(obj, dict):
-        return default
-    for k, v in obj.items():
-        if str(k).split(":")[-1] == key:
-            return v
-    return default
 
 
 def verify_route_in_rib(
@@ -289,6 +281,16 @@ def verify_rib_has_backup(
             backups = get_rib_backup_nexthops(
                 device, prefix=prefix, af=af, ni=ni, backup_flag=backup_flag
             )
+        except IndirectNexthopUnresolved:
+            # Deliberately NOT swallowed into False. The route HAS a recursive
+            # SR-MPLS next-hop and we could not read what is behind it, which
+            # is not the same as "there is no backup". Suites assert on the
+            # negative (`not verify_rib_has_backup(...)`, and testcases named
+            # ..._have_no_backup), so returning False here would let a
+            # resolution defect satisfy them -- exactly the silent pass this
+            # work exists to remove. Polling cannot help either: an
+            # unreadable oper path does not become readable.
+            raise
         except Exception as exc:  # pragma: no cover - defensive
             log.error("get_rib_backup_nexthops failed for %s: %s", prefix, exc)
             backups = []
@@ -297,7 +299,7 @@ def verify_rib_has_backup(
             # A backup resolved through the SR-MPLS indirection comes from the
             # pathid table, whose leaves can arrive module-qualified, so match
             # on the local name rather than an exact key.
-            egress = _local(nh, "interface")
+            egress = _leaf(nh, "interface")
             if (
                 expected_backup_egress is None
                 or egress == expected_backup_egress
@@ -307,7 +309,7 @@ def verify_rib_has_backup(
                     prefix,
                     af,
                     egress,
-                    _local(nh, "flags"),
+                    _leaf(nh, "flags"),
                 )
                 return True
 
