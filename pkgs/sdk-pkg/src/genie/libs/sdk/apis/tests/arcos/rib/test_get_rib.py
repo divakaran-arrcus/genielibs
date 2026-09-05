@@ -15,12 +15,14 @@ not at import time).
 """
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
 from unicon.core.errors import SubCommandFailure
 
 from genie.libs.sdk.apis.arcos.rib import get as rib_get
+
+MOD = "genie.libs.sdk.apis.arcos.rib.get"
 
 
 # ---------------------------------------------------------------------------
@@ -428,3 +430,64 @@ class TestIndirectNexthopResolutionApis(unittest.TestCase):
         self.device.execute = Mock(side_effect=Exception("oper unavailable"))
         with self.assertRaises(rib_get.IndirectNexthopUnresolved):
             rib_get.resolve_indirect_nexthops(self.device, self.INDIRECT_NH)
+
+
+class TestResolvedNexthopApis(unittest.TestCase):
+    """get_rib_resolved_nexthops / get_rib_egress_interfaces.
+
+    One place to ask "which interface does this prefix use", so a caller cannot
+    get it wrong. Four suites had private walkers that read `interface` off the
+    top-level next-hops and returned [] under the indirect rendering.
+    """
+
+    FLAT_ENTRY = {
+        "prefix": "6.6.6.6/32",
+        "origins": {"0": {"next-hops": {
+            "0": {"pathid": "73", "interface": "swp2",
+                  "flags": "ATTACH BACKUP"},
+            "1": {"pathid": "53", "interface": "swp1", "flags": "ATTACH"},
+        }}},
+    }
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = "rtr1"
+
+    def test_all_egresses(self):
+        with patch(f"{MOD}.get_rib_entry", return_value=self.FLAT_ENTRY):
+            self.assertEqual(
+                rib_get.get_rib_egress_interfaces(self.device, "6.6.6.6/32"),
+                ["swp2", "swp1"])
+
+    def test_backup_only(self):
+        with patch(f"{MOD}.get_rib_entry", return_value=self.FLAT_ENTRY):
+            self.assertEqual(
+                rib_get.get_rib_egress_interfaces(
+                    self.device, "6.6.6.6/32", backup=True), ["swp2"])
+
+    def test_primary_only(self):
+        with patch(f"{MOD}.get_rib_entry", return_value=self.FLAT_ENTRY):
+            self.assertEqual(
+                rib_get.get_rib_egress_interfaces(
+                    self.device, "6.6.6.6/32", backup=False), ["swp1"])
+
+    def test_primary_and_backup_are_disjoint(self):
+        """The assertion four suites make, which returned two empty lists."""
+        with patch(f"{MOD}.get_rib_entry", return_value=self.FLAT_ENTRY):
+            pri = rib_get.get_rib_egress_interfaces(
+                self.device, "6.6.6.6/32", backup=False)
+            bk = rib_get.get_rib_egress_interfaces(
+                self.device, "6.6.6.6/32", backup=True)
+        self.assertTrue(pri and bk, "neither list may be empty")
+        self.assertFalse(set(pri) & set(bk))
+
+    def test_resolved_nexthops_returns_dicts(self):
+        with patch(f"{MOD}.get_rib_entry", return_value=self.FLAT_ENTRY):
+            nhs = rib_get.get_rib_resolved_nexthops(self.device, "6.6.6.6/32")
+        self.assertEqual(len(nhs), 2)
+
+    def test_absent_prefix_is_empty(self):
+        with patch(f"{MOD}.get_rib_entry", return_value=None):
+            self.assertEqual(
+                rib_get.get_rib_egress_interfaces(self.device, "9.9.9.9/32"),
+                [])
