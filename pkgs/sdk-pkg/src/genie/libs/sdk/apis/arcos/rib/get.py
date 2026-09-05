@@ -703,6 +703,100 @@ def get_rib_label_entry_count(
     return len(label_entries)
 
 
+def get_rib_resolved_nexthops(
+    device,
+    prefix: str,
+    af: str = "IPV4",
+    ni: str = "default",
+    backup: Optional[bool] = None,
+    backup_flag: str = "BACKUP",
+) -> List[Dict[str, Any]]:
+    """Return a prefix's next-hops with any SR-MPLS indirection resolved.
+
+    The one place callers should go for "which interface does this prefix use".
+    Handles BOTH renderings: the flat one, where each next-hop already carries
+    `interface` and its flags, and the ECMP-FEC-optimized one, where the route
+    holds a single synthetic recursive next-hop and the real paths sit behind
+    an IGP-RNH id.
+
+    This exists because suites were hand-walking `origins -> next-hops` and
+    reading `interface` off the top level. Under the indirect rendering there
+    IS no interface there, so those walkers returned [] and their disjointness
+    assertions failed with two empty lists -- which reads as "no data" rather
+    than "wrong shape".
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix string (e.g. ``'6.6.6.6/32'``).
+        af: Address family -- ``"IPV4"`` or ``"IPV6"`` (default ``"IPV4"``).
+        ni: Network instance name (default ``"default"``).
+        backup: ``True`` for backup paths only, ``False`` for primary
+            (non-backup) only, ``None`` (default) for all.
+        backup_flag: Flag token identifying a backup next-hop.
+
+    Returns:
+        List of next-hop dicts, each carrying ``interface`` where the device
+        reports one.
+
+    Raises:
+        IndirectNexthopUnresolved: a recursive next-hop could not be resolved.
+            Never silently returns [] for that -- see get_rib_backup_nexthops.
+    """
+    entry = get_rib_entry(device, prefix=prefix, af=af, ni=ni)
+    if not entry:
+        return []
+
+    resolved: List[Dict[str, Any]] = []
+    for origin in (entry.get("origins") or {}).values():
+        for nh in (origin.get("next-hops") or {}).values():
+            if is_indirect_nexthop(nh):
+                resolved.extend(
+                    resolve_indirect_nexthops(device, nh, af=af, ni=ni))
+            else:
+                resolved.append(nh)
+
+    if backup is None:
+        return resolved
+
+    def _is_backup(p):
+        return (backup_flag in str(_leaf(p, "flags") or "")
+                or _leaf(p, "backup") is True
+                or str(_leaf(p, "backup") or "").lower() == "true")
+
+    return [p for p in resolved if _is_backup(p) is bool(backup)]
+
+
+def get_rib_egress_interfaces(
+    device,
+    prefix: str,
+    af: str = "IPV4",
+    ni: str = "default",
+    backup: Optional[bool] = None,
+    backup_flag: str = "BACKUP",
+) -> List[str]:
+    """Egress interfaces for a prefix, with SR-MPLS indirection resolved.
+
+    Args:
+        device: pyATS device object.
+        prefix: Route prefix string.
+        af: Address family -- ``"IPV4"`` or ``"IPV6"`` (default ``"IPV4"``).
+        ni: Network instance name (default ``"default"``).
+        backup: ``True`` backup only, ``False`` primary only, ``None`` all.
+        backup_flag: Flag token identifying a backup next-hop.
+
+    Returns:
+        Ordered, de-duplicated list of interface names.
+    """
+    seen = []
+    for p in get_rib_resolved_nexthops(
+            device, prefix, af=af, ni=ni, backup=backup,
+            backup_flag=backup_flag):
+        intf = _leaf(p, "interface")
+        if intf and intf not in seen:
+            seen.append(intf)
+    return seen
+
+
 def get_rib_backup_nexthops(
     device,
     prefix: str,
