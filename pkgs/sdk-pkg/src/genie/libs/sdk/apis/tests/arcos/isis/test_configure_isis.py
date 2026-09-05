@@ -859,9 +859,19 @@ class TestIsisFlexibleAlgorithm(unittest.TestCase):
         self.assertIn("admin-groups include-any [ 1 2 ]", c)
 
     def test_unconfigure_isis_flexible_algorithm_admin_groups(self):
+        """ONE flat `no` line, and it must not enter the FAD container.
+
+        Entering `global flexible-algorithm <id>` CREATES the FAD when absent
+        (verified on arcOS R8.6.1.Alpha1), so an unconfigure would re-add the
+        object it was asked to clean a leaf from.
+        """
         unconfigure_isis_flexible_algorithm_admin_groups(self.d, 128, "include-any")
         c = self.d.cfg()
-        self.assertIn("no admin-groups include-any", c)
+        self.assertIn(
+            "no network-instance default protocol ISIS default "
+            "global flexible-algorithm 128 admin-groups include-any", c)
+        # The bare container line is what created the FAD.
+        self.assertNotIn("\nglobal flexible-algorithm 128\n", "\n" + c + "\n")
 
     def test_configure_isis_interface_flex_algo_delay_metric_dynamic(self):
         configure_isis_interface_flex_algo_delay_metric_dynamic(self.d, "swp1", 2)

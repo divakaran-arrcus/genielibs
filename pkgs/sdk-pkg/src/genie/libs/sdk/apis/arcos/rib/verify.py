@@ -15,6 +15,8 @@ from typing import Optional
 from genie.utils.timeout import Timeout
 
 from genie.libs.sdk.apis.arcos.rib.get import (
+    IndirectNexthopUnresolved,
+    _leaf,
     is_route_in_rib,
     get_route_best_protocol,
     get_rib_label_entry,
@@ -279,21 +281,35 @@ def verify_rib_has_backup(
             backups = get_rib_backup_nexthops(
                 device, prefix=prefix, af=af, ni=ni, backup_flag=backup_flag
             )
+        except IndirectNexthopUnresolved:
+            # Deliberately NOT swallowed into False. The route HAS a recursive
+            # SR-MPLS next-hop and we could not read what is behind it, which
+            # is not the same as "there is no backup". Suites assert on the
+            # negative (`not verify_rib_has_backup(...)`, and testcases named
+            # ..._have_no_backup), so returning False here would let a
+            # resolution defect satisfy them -- exactly the silent pass this
+            # work exists to remove. Polling cannot help either: an
+            # unreadable oper path does not become readable.
+            raise
         except Exception as exc:  # pragma: no cover - defensive
             log.error("get_rib_backup_nexthops failed for %s: %s", prefix, exc)
             backups = []
 
         for nh in backups:
+            # A backup resolved through the SR-MPLS indirection comes from the
+            # pathid table, whose leaves can arrive module-qualified, so match
+            # on the local name rather than an exact key.
+            egress = _leaf(nh, "interface")
             if (
                 expected_backup_egress is None
-                or nh.get("interface") == expected_backup_egress
+                or egress == expected_backup_egress
             ):
                 log.debug(
                     "verify_rib_has_backup(%s, af=%s): backup via %s flags=%s",
                     prefix,
                     af,
-                    nh.get("interface"),
-                    nh.get("flags"),
+                    egress,
+                    _leaf(nh, "flags"),
                 )
                 return True
 
