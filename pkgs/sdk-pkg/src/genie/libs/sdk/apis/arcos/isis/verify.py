@@ -853,7 +853,7 @@ def verify_isis_mla_fired(
     algo: int = 0,
     near_node: Optional[str] = None,
     far_node: Optional[str] = None,
-    expected_states=("ACTIVE", "EXPIRED"),
+    expected_states=("ACTIVE", "EXPIRED", "CANCELED", "EMPTY"),
     since_timestamp: Optional[str] = None,
     network_instance: str = "default",
     protocol_instance: str = "default",
@@ -863,10 +863,49 @@ def verify_isis_mla_fired(
     """Verify Micro-Loop-Avoidance fired for a given algorithm/topology.
 
     MLA records each event durably in the ``micro-loop-avoidance status``
-    table (one row per algo/topology): ``mla-state`` (ACTIVE during the
-    rib-update-delay window, EXPIRED after) + ``last-event`` +
+    table (one row per algo/topology): ``mla-state`` + ``last-event`` +
     ``near-node``/``far-node``. This is the control-plane observable for MLA
     on arcOS/VIR (the ISIS fast-reroute table does not surface it).
+
+    The ``mla-state`` enum is FIVE-way, and four of the five mean the session
+    started -- i.e. MLA fired:
+
+    ==========  ====================================================
+    NONE        no session ever started; no compatible trigger. The
+                only value that means "did not fire".
+    ACTIVE      session running, rib-update-delay pending.
+    EXPIRED     ran its full delay window and completed normally.
+    CANCELED    torn down by a CONFLICTING topology change.
+    EMPTY       activated, then the route calculation programmed ZERO
+                MLA SID stacks, so it was torn down early.
+    ==========  ====================================================
+
+    ``EMPTY`` is the newest of these (arrcus_sw ANPN-33133 / 797f74e4c0,
+    "isis: cancel MLA when the computation produces no enforcement"). Before
+    that fix the rib-update-delay was armed at ctx-create time on the
+    PREDICTION that MLA would be needed, so a session that enforced nothing
+    still deferred TI-LFA for the whole window; the fix decides from the
+    OUTCOME and tears such a session down early. It is stamped EMPTY rather
+    than CANCELED precisely because no conflict occurred.
+
+    All four "fired" states are therefore accepted by default. This matters
+    more than it sounds: for a single-link shut on a small topology, EMPTY is
+    the COMMON outcome, not the exception -- one archived trigger produced
+    EMPTY on three of four (algo, topology) tuples and EXPIRED on the fourth.
+    Defaulting to ("ACTIVE", "EXPIRED") made those runs report "MLA did not
+    fire" while the device's own status table showed last-event=LINK-DOWN with
+    a fresh SPF timestamp.
+
+    Pass ``expected_states`` explicitly to narrow it -- e.g. ``("EXPIRED",)``
+    when a test genuinely requires a completed hold.
+
+    .. warning::
+       Do NOT compare ``spf-start-timestamp`` across states as one clock. For
+       NONE/ACTIVE/CANCELED/EMPTY it is the ACTIVATING SPF's start; for
+       EXPIRED it is deferred to the POST-CONVERGENCE SPF. Two rows from one
+       trigger can therefore differ by ~``rib-update-delay`` with nothing
+       wrong. Freshness-vs-baseline comparison (``since_timestamp``) is still
+       valid, since both stamps postdate the trigger.
 
     Polls ``get_isis_micro_loop_avoidance`` until a status row for ``algo``
     (0 = SPF/base, 128+ = flex-algo) has ``mla-state`` in ``expected_states``
@@ -881,8 +920,11 @@ def verify_isis_mla_fired(
             'OVERLOAD-CLEAR', 'MAX-METRIC-SET', 'MAX-METRIC-CLEAR'.
         algo: Algorithm id of the status row to match (default 0 = SPF).
         near_node / far_node: If set, require the row's endpoints to match.
-        expected_states: Acceptable ``mla-state`` values (default ACTIVE or
-            EXPIRED — i.e. MLA fired at some point).
+        expected_states: Acceptable ``mla-state`` values. Defaults to every
+            state that means the session started -- ACTIVE, EXPIRED,
+            CANCELED, EMPTY -- i.e. MLA fired at some point. Only NONE is
+            excluded. Narrow it explicitly when a test needs a specific
+            outcome.
         network_instance / protocol_instance: ISIS instance selectors.
         max_time / check_interval: Polling bounds (seconds).
 
