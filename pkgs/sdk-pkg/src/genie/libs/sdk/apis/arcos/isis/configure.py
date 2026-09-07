@@ -5127,12 +5127,20 @@ def unconfigure_isis_flexible_algorithm_admin_groups(device, algo_id, constraint
         f"from {device.name}"
     )
 
-    isis_context = _build_isis_config_context(network_instance, protocol_instance)
+    # ONE flat line, not `global flexible-algorithm <id>` followed by
+    # `no admin-groups ...`. Entering the FAD container CREATES it when it is
+    # absent -- verified on arcOS R8.6.1.Alpha1: the two-line form left
+    # `global flexible-algorithm 128` in `show configuration` on a device that
+    # had no such FAD. An unconfigure that creates the object it was asked to
+    # clean re-adds residue a caller's teardown had already removed.
+    #
+    # The flat form is strictly better, both halves verified on the same
+    # image: it removes `admin-groups <constraint>` when present, and creates
+    # nothing when the FAD is absent (`syntax error: element does not exist`,
+    # leaf-only, no commit).
     config = [
-        isis_context,
-        f'global flexible-algorithm {algo_id}',
-        f'no admin-groups {constraint_type}',
-        '!'
+        f'no {_build_isis_config_context(network_instance, protocol_instance)}'
+        f' global flexible-algorithm {algo_id} admin-groups {constraint_type}',
     ]
 
     try:

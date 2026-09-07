@@ -129,3 +129,57 @@ class TestTwampConfigureCoverage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestReflectorUdpPortRange(unittest.TestCase):
+    """arcos-twamp.yang restricts the leaf to `range "862 | 49152..65535"`.
+
+    An out-of-range value is rejected LEAF-ONLY: arcOS drops it, commits the
+    rest, and device.configure() raises nothing -- so the caller is told a port
+    was set that never was. 54 archived CI builds pushed 9862 and the testcase
+    exercising it passed every time.
+    """
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = "rtr1"
+
+    def test_862_accepted(self):
+        configure_twamp_session_reflector(self.device, reflector_udp_port=862)
+        args = self.device.configure.call_args[0][0]
+        self.assertIn("twamp session-reflector reflector-udp-port 862", args)
+
+    def test_dynamic_range_boundaries_accepted(self):
+        for port in (49152, 65535):
+            self.device.reset_mock()
+            configure_twamp_session_reflector(
+                self.device, reflector_udp_port=port)
+            self.assertIn(
+                f"twamp session-reflector reflector-udp-port {port}",
+                self.device.configure.call_args[0][0])
+
+    def test_9862_rejected(self):
+        """The exact value 54 builds pushed."""
+        with self.assertRaises(ValueError) as ctx:
+            configure_twamp_session_reflector(
+                self.device, reflector_udp_port=9862)
+        msg = str(ctx.exception)
+        self.assertIn("9862", msg)
+        self.assertIn("862 | 49152..65535", msg)
+        self.device.configure.assert_not_called()
+
+    def test_just_below_dynamic_range_rejected(self):
+        with self.assertRaises(ValueError):
+            configure_twamp_session_reflector(
+                self.device, reflector_udp_port=49151)
+
+    def test_just_above_default_rejected(self):
+        with self.assertRaises(ValueError):
+            configure_twamp_session_reflector(
+                self.device, reflector_udp_port=863)
+
+    def test_omitted_port_still_configures_admin_state(self):
+        configure_twamp_session_reflector(self.device)
+        args = self.device.configure.call_args[0][0]
+        self.assertIn("twamp session-reflector admin-state true", args)
+        self.assertNotIn("reflector-udp-port", " ".join(args))
