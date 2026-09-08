@@ -296,9 +296,13 @@ class TestWorkspaceWideUnconfigureParity(unittest.TestCase):
     #: imported module resolves into site-packages — and a gate that scanned
     #: *that* copy would report on a stale wheel while the repo carried a real
     #: gap. Anchoring on this test file's own location keeps the gate
-    #: authoritative however the package is imported.
+    #: authoritative however the package is imported. Uses
+    #: ``realpath``, not ``abspath``: this tree is reached through
+    #: the ``tests/sdk_pkg_tests`` symlink under CI discovery, and
+    #: ``abspath`` would keep the symlinked prefix and walk ``..``
+    #: into ``tests/src``, which does not exist.
     ARCOS_DIR = os.path.normpath(os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
+        os.path.dirname(os.path.realpath(__file__)),
         "..", "..", "src", "genie", "libs", "sdk", "apis", "arcos"))
 
     def test_scan_target_is_the_repo_not_site_packages(self):
