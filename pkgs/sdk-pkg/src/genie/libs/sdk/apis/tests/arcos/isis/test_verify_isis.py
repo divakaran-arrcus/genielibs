@@ -605,7 +605,15 @@ class TestVerifyIsisMlaFired(unittest.TestCase):
         self.assertGreaterEqual(mock_get.call_count, 2)
 
     def test_wrong_state_exhausts_timeout(self):
-        rows = {"0-0-MT-0": {"algo": 0, "mla-state": "INACTIVE"}}
+        """NONE is the only state that means MLA did not fire.
+
+        Was written against "INACTIVE", which is not a member of the arcOS
+        enum at all, so it asserted nothing about real device states -- and
+        once the default became an exclusion rather than an allowlist, an
+        unrecognised string was (correctly) accepted and this test broke.
+        NONE is the real no-fire value and is what the check must use.
+        """
+        rows = {"0-0-MT-0": {"algo": 0, "mla-state": "NONE"}}
         with patch(f"{VERIFY_MODULE}.get_isis_micro_loop_avoidance") as mock_get:
             mock_get.return_value = self._mla(rows)
             result = verify_isis_mla_fired(
@@ -613,6 +621,27 @@ class TestVerifyIsisMlaFired(unittest.TestCase):
                 max_time=EXHAUST_MAX_TIME, check_interval=EXHAUST_INTERVAL,
             )
         self.assertFalse(result)
+        self.assertGreaterEqual(mock_get.call_count, 2)
+
+    def test_unrecognised_state_is_accepted_and_warned(self):
+        """A state this SDK has never seen must NOT read as "did not fire".
+
+        The arcOS enum has grown once already (EMPTY, ANPN-33133). When it
+        grows again the honest default is to accept the new state -- it means
+        a session existed -- and warn loudly, rather than silently regressing
+        every caller to a no-fire verdict.
+        """
+        rows = {"0-0-MT-0": {"algo": 0, "mla-state": "SOME_NEW_STATE"}}
+        with patch(f"{VERIFY_MODULE}.get_isis_micro_loop_avoidance") as mock_get:
+            mock_get.return_value = self._mla(rows)
+            with self.assertLogs(VERIFY_MODULE, level="WARNING") as logs:
+                result = verify_isis_mla_fired(
+                    self.device, algo=0,
+                    max_time=EXHAUST_MAX_TIME,
+                    check_interval=EXHAUST_INTERVAL,
+                )
+        self.assertTrue(result)
+        self.assertTrue(any("SOME_NEW_STATE" in m for m in logs.output))
 
     def test_stale_row_filtered_by_since_timestamp(self):
         # Row timestamp is not strictly newer than the baseline -> skipped.

@@ -511,10 +511,28 @@ class TestMlaEmptyIsAFire(unittest.TestCase):
                 near_node="rtr1", **FAST_MLA))
 
     def test_algo128_expired_still_counts(self):
+        """EXPIRED counts -- pinned to the row that actually IS expired.
+
+        algo=128 matches TWO rows in this fixture, one EMPTY and one EXPIRED,
+        so a bare algo=128 assertion passed under the old two-value default
+        as well as the new one and therefore tested nothing. Pin the topology
+        and narrow the state so only the genuinely EXPIRED row can satisfy it.
+        """
         with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
             self.assertTrue(verify_isis_mla_fired(
                 self.device, expected_event="LINK-DOWN", algo=128,
-                near_node="rtr1", **FAST_MLA))
+                near_node="rtr1", topology_id="ISIS_MT_ID2_IPV6_UNICAST",
+                expected_states=("EXPIRED",), **FAST_MLA))
+
+    def test_algo128_empty_topology_is_not_expired(self):
+        """Counterpart: the OTHER algo-128 row is EMPTY, so ("EXPIRED",)
+        must reject it. Together these two pin the topology selector -- drop
+        it and one of the pair fails."""
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            self.assertFalse(verify_isis_mla_fired(
+                self.device, algo=128,
+                topology_id="ISIS_MT_ID0_STANDARD",
+                expected_states=("EXPIRED",), **FAST_MLA))
 
     def test_never_started_is_still_not_a_fire(self):
         """NONE must NOT become a pass -- it is the only real no-fire signal.
@@ -562,6 +580,95 @@ class TestMlaEmptyIsAFire(unittest.TestCase):
             self.assertFalse(verify_isis_mla_fired(
                 self.device, algo=0, expected_states=("EXPIRED",),
                 **FAST_MLA))
+
+    # ---- endpoint guards: previously deleteable with no test noticing ------
+
+    def test_wrong_near_node_rejected(self):
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            self.assertFalse(verify_isis_mla_fired(
+                self.device, algo=0, near_node="rtr9", **FAST_MLA))
+
+    def test_wrong_far_node_rejected(self):
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            self.assertFalse(verify_isis_mla_fired(
+                self.device, algo=0, far_node="rtr9", **FAST_MLA))
+
+    def test_correct_endpoints_accepted(self):
+        """Positive control for the two above -- proves they reject on the
+        endpoint and not because nothing matched."""
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            self.assertTrue(verify_isis_mla_fired(
+                self.device, algo=0, near_node="rtr1", far_node="rtr2",
+                **FAST_MLA))
+
+    # ---- row-key selectors: algo alone can match the wrong row ------------
+
+    def test_level_selector_rejects_other_level(self):
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            self.assertFalse(verify_isis_mla_fired(
+                self.device, algo=0, level=1, **FAST_MLA))
+
+    def test_level_selector_accepts_matching_level(self):
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            self.assertTrue(verify_isis_mla_fired(
+                self.device, algo=0, level=2, **FAST_MLA))
+
+    # ---- the empty-baseline trap -------------------------------------------
+
+    def test_empty_since_timestamp_warns_and_disarms(self):
+        """``get_isis_mla_status_timestamp`` returns "" when it cannot read a
+        baseline. Left armed, "" compares as older than every row, so the
+        filter rejects nothing while looking active. It must disarm loudly."""
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            with self.assertLogs(
+                "genie.libs.sdk.apis.arcos.isis.verify", level="WARNING"
+            ) as logs:
+                result = verify_isis_mla_fired(
+                    self.device, algo=0, since_timestamp="", **FAST_MLA)
+        self.assertTrue(result)
+        self.assertTrue(any("freshness filter is DISABLED" in m
+                            for m in logs.output))
+
+    def test_empty_since_timestamp_really_disarms_not_just_warns(self):
+        """Pins the DISARM, not only its warning.
+
+        An armed-but-vacuous filter and a disarmed one accept the same rows,
+        so a warning assertion alone cannot tell them apart. Combining the
+        empty baseline with allow_missing_timestamp=False separates them: if
+        "" were still armed, algo=129's timestamp-less row would be REJECTED
+        as unconfirmable; once "" is recognised as "no baseline", there is no
+        freshness claim to confirm and the row is accepted.
+        """
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            self.assertTrue(verify_isis_mla_fired(
+                self.device, algo=129, expected_states=("NONE",),
+                since_timestamp="", allow_missing_timestamp=False,
+                **FAST_MLA))
+
+    # ---- unconfirmable freshness can be made strict ------------------------
+
+    def test_missing_row_timestamp_can_be_rejected(self):
+        """algo=129's row has no spf-start-timestamp. Accepting it is the
+        default; allow_missing_timestamp=False must reject instead."""
+        base = {"max_time": 0.05, "check_interval": 0.01}
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            self.assertTrue(verify_isis_mla_fired(
+                self.device, algo=129, expected_states=("NONE",),
+                since_timestamp="2026-09-07T13:00:00+00:00", **base))
+            self.assertFalse(verify_isis_mla_fired(
+                self.device, algo=129, expected_states=("NONE",),
+                since_timestamp="2026-09-07T13:00:00+00:00",
+                allow_missing_timestamp=False, **base))
+
+    # ---- a bare string must not become a substring match -------------------
+
+    def test_bare_string_expected_states_is_normalised(self):
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            self.assertTrue(verify_isis_mla_fired(
+                self.device, algo=0, expected_states="EMPTY", **FAST_MLA))
+            # "EMPT" would match as a substring if normalisation were missing
+            self.assertFalse(verify_isis_mla_fired(
+                self.device, algo=0, expected_states="EMPT", **FAST_MLA))
 
 
 if __name__ == "__main__":
