@@ -875,7 +875,11 @@ def verify_isis_mla_fired(
                 only value that means "did not fire".
     ACTIVE      session running, rib-update-delay pending.
     EXPIRED     ran its full delay window and completed normally.
-    CANCELED    torn down by a CONFLICTING topology change.
+    CANCELED    torn down before the window elapsed. A conflicting
+                topology change is the intended case, but the same
+                teardown is reached from a flex-algo FAD change, an
+                invalid change batch, a ctx-create error, and level
+                disable / IS-type drop / sys-id reconfigure.
     EMPTY       activated, then the route calculation programmed ZERO
                 MLA SID stacks, so it was torn down early.
     ==========  ====================================================
@@ -900,12 +904,36 @@ def verify_isis_mla_fired(
     when a test genuinely requires a completed hold.
 
     .. warning::
-       Do NOT compare ``spf-start-timestamp`` across states as one clock. For
-       NONE/ACTIVE/CANCELED/EMPTY it is the ACTIVATING SPF's start; for
-       EXPIRED it is deferred to the POST-CONVERGENCE SPF. Two rows from one
-       trigger can therefore differ by ~``rib-update-delay`` with nothing
-       wrong. Freshness-vs-baseline comparison (``since_timestamp``) is still
-       valid, since both stamps postdate the trigger.
+       Do NOT compare ``spf-start-timestamp`` across states as one clock. It
+       is stamped from a different SPF in each state (arrcus_sw @797f74e4c0):
+
+       ==========  ==================================================
+       NONE        no timestamp published at all -- confd gates
+                   last-event/near-node/far-node/spf-start-timestamp
+                   on ``state != NONE``.
+       ACTIVE      the ACTIVATING SPF's start (``isis_spf.c:1710``).
+       EXPIRED     deferred to the POST-CONVERGENCE SPF the RIB-delay
+                   handler scheduled (``:588`` arms it, ``:5294``
+                   stamps it).
+       CANCELED    the CANCELING SPF's start, or wall-clock when no
+                   SPF is live -- e.g. an administrative teardown
+                   (``:1441`` / ``:1443``).
+       EMPTY       the SPF whose route calculation installed zero MLA
+                   paths; it reaches the same cancel path from inside
+                   that run (``:1481``).
+       ==========  ==================================================
+
+       So two rows from one trigger can differ by ~``rib-update-delay`` with
+       nothing wrong.
+
+       Freshness-vs-baseline (``since_timestamp``) is sound for a genuine new
+       fire, but it is NOT a guarantee the row describes *your* trigger.
+       ``last-event``/``near-node``/``far-node`` are written only at
+       activation and are not cleared by a teardown
+       (``isis_clear_mla_state_for_topo`` clears the working state, not the
+       oper snapshot), so an administratively cancelled row can carry a fresh
+       wall-clock stamp alongside the PREVIOUS activation's event. Pair
+       ``since_timestamp`` with ``expected_event`` when that matters.
 
     Polls ``get_isis_micro_loop_avoidance`` until a status row for ``algo``
     (0 = SPF/base, 128+ = flex-algo) has ``mla-state`` in ``expected_states``

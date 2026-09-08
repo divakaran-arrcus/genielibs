@@ -425,9 +425,6 @@ class TestVerifyRibHasBackup(unittest.TestCase):
         self.assertFalse(result)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 # ---------------------------------------------------------------------------
 # mla-state EMPTY — a FIFTH terminal state, added by ANPN-33133
@@ -520,10 +517,31 @@ class TestMlaEmptyIsAFire(unittest.TestCase):
                 near_node="rtr1", **FAST_MLA))
 
     def test_never_started_is_still_not_a_fire(self):
-        """NONE must NOT become a pass -- that is the real no-fire signal."""
+        """NONE must NOT become a pass -- it is the only real no-fire signal.
+
+        Deliberately passes NO ``expected_event``. The algo-129 row carries
+        only ``mla-state`` (a NONE row publishes no last-event, near-node or
+        timestamp at all), so supplying an expected_event makes the EVENT
+        filter reject the row and this assertion then passes no matter what
+        the state filter does. That is precisely how this guard was vacuous:
+        widening the default to swallow "NONE" was caught by nothing. With
+        the event filter out of the way the state filter is the only thing
+        that can reject, so that mutation now fails here.
+        """
         with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
             self.assertFalse(verify_isis_mla_fired(
-                self.device, expected_event="LINK-DOWN", algo=129,
+                self.device, algo=129, **FAST_MLA))
+
+    def test_the_none_row_is_actually_reachable(self):
+        """Control for the control above.
+
+        Proves the algo-129 row is findable, so the assertFalse above fails
+        on the state filter -- not because no row matched, which would make
+        it pass for the wrong reason again.
+        """
+        with patch(_MLA_GET, return_value=MLA_STATUS_EMPTY_MAJORITY):
+            self.assertTrue(verify_isis_mla_fired(
+                self.device, algo=129, expected_states=("NONE",),
                 **FAST_MLA))
 
     def test_wrong_event_still_rejected(self):
@@ -544,3 +562,7 @@ class TestMlaEmptyIsAFire(unittest.TestCase):
             self.assertFalse(verify_isis_mla_fired(
                 self.device, algo=0, expected_states=("EXPIRED",),
                 **FAST_MLA))
+
+
+if __name__ == "__main__":
+    unittest.main()
