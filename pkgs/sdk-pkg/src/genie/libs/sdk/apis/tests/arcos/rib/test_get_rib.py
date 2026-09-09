@@ -15,11 +15,14 @@ not at import time).
 """
 
 import unittest
+from unittest.mock import Mock, patch
 
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
 from unicon.core.errors import SubCommandFailure
 
 from genie.libs.sdk.apis.arcos.rib import get as rib_get
+
+MOD = "genie.libs.sdk.apis.arcos.rib.get"
 
 
 # ---------------------------------------------------------------------------
@@ -376,3 +379,115 @@ class TestRibGetCoverage(unittest.TestCase):
             f"Uncovered rib get functions: {missing}")
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# SR-MPLS indirect (ECMP-FEC-optimized) next-hop resolution
+#
+# arcOS collapses a labeled ECMP set onto one synthetic recursive next-hop, so
+# the egress interface and the BACKUP flag move one level down behind an
+# IGP-RNH id. These are the resolution helpers; the behavioural suite lives in
+# pkgs/sdk-pkg/tests/arcos/test_rib_indirect_backup.py.
+# ---------------------------------------------------------------------------
+
+class TestIndirectNexthopResolutionApis(unittest.TestCase):
+
+    INDIRECT_NH = {
+        "pathid": "326", "type": "IGP", "next-hop": 317, "weight": 100,
+        "flags": "RECURSIVE SR IGP_NH", "pushed-mpls-label-stack": [16006],
+    }
+    FLAT_NH = {
+        "pathid": "73", "type": "IPV4", "next-hop": "10.14.2.4",
+        "interface": "swp2", "flags": "ATTACH BACKUP",
+    }
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = "rtr1"
+
+    def test_is_indirect_nexthop_discriminates(self):
+        self.assertTrue(rib_get.is_indirect_nexthop(self.INDIRECT_NH))
+        self.assertFalse(rib_get.is_indirect_nexthop(self.FLAT_NH))
+
+    def test_get_rib_igp_rnh_pathids_scopes_to_the_requested_rnh(self):
+        self.device.execute = Mock(return_value=(
+            '{"igp-rnh":[{"id":317,"state":{"id":317,"nhid":317,'
+            '"paths":[73,53]}},'
+            '{"id":999,"state":{"id":999,"nhid":999,"paths":[7]}}]}'))
+        self.assertEqual(
+            rib_get.get_rib_igp_rnh_pathids(self.device, 317), [73, 53])
+
+    def test_get_rib_pathid_matches_on_the_key(self):
+        self.device.execute = Mock(return_value=(
+            '{"pathids":[{"pathid":53,"interface":"swp1","flags":"ATTACH"},'
+            '{"pathid":73,"interface":"swp2","flags":"ATTACH BACKUP",'
+            '"ifindex":1,"weight":100}]}'))
+        row = rib_get.get_rib_pathid(self.device, 53)
+        self.assertEqual(row.get("interface"), "swp1")
+
+    def test_resolve_indirect_nexthops_raises_when_unresolvable(self):
+        """Never returns [] -- that would read as "no backup"."""
+        self.device.execute = Mock(side_effect=Exception("oper unavailable"))
+        with self.assertRaises(rib_get.IndirectNexthopUnresolved):
+            rib_get.resolve_indirect_nexthops(self.device, self.INDIRECT_NH)
+
+
+class TestResolvedNexthopApis(unittest.TestCase):
+    """get_rib_resolved_nexthops / get_rib_egress_interfaces.
+
+    One place to ask "which interface does this prefix use", so a caller cannot
+    get it wrong. Four suites had private walkers that read `interface` off the
+    top-level next-hops and returned [] under the indirect rendering.
+    """
+
+    FLAT_ENTRY = {
+        "prefix": "6.6.6.6/32",
+        "origins": {"0": {"next-hops": {
+            "0": {"pathid": "73", "interface": "swp2",
+                  "flags": "ATTACH BACKUP"},
+            "1": {"pathid": "53", "interface": "swp1", "flags": "ATTACH"},
+        }}},
+    }
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = "rtr1"
+
+    def test_all_egresses(self):
+        with patch(f"{MOD}.get_rib_entry", return_value=self.FLAT_ENTRY):
+            self.assertEqual(
+                rib_get.get_rib_egress_interfaces(self.device, "6.6.6.6/32"),
+                ["swp2", "swp1"])
+
+    def test_backup_only(self):
+        with patch(f"{MOD}.get_rib_entry", return_value=self.FLAT_ENTRY):
+            self.assertEqual(
+                rib_get.get_rib_egress_interfaces(
+                    self.device, "6.6.6.6/32", backup=True), ["swp2"])
+
+    def test_primary_only(self):
+        with patch(f"{MOD}.get_rib_entry", return_value=self.FLAT_ENTRY):
+            self.assertEqual(
+                rib_get.get_rib_egress_interfaces(
+                    self.device, "6.6.6.6/32", backup=False), ["swp1"])
+
+    def test_primary_and_backup_are_disjoint(self):
+        """The assertion four suites make, which returned two empty lists."""
+        with patch(f"{MOD}.get_rib_entry", return_value=self.FLAT_ENTRY):
+            pri = rib_get.get_rib_egress_interfaces(
+                self.device, "6.6.6.6/32", backup=False)
+            bk = rib_get.get_rib_egress_interfaces(
+                self.device, "6.6.6.6/32", backup=True)
+        self.assertTrue(pri and bk, "neither list may be empty")
+        self.assertFalse(set(pri) & set(bk))
+
+    def test_resolved_nexthops_returns_dicts(self):
+        with patch(f"{MOD}.get_rib_entry", return_value=self.FLAT_ENTRY):
+            nhs = rib_get.get_rib_resolved_nexthops(self.device, "6.6.6.6/32")
+        self.assertEqual(len(nhs), 2)
+
+    def test_absent_prefix_is_empty(self):
+        with patch(f"{MOD}.get_rib_entry", return_value=None):
+            self.assertEqual(
+                rib_get.get_rib_egress_interfaces(self.device, "9.9.9.9/32"),
+                [])

@@ -101,7 +101,7 @@ class TestSegmentRoutingDeviceAttributes(TestCase):
                 "srgb": {
                     "lower_bound": 16000,
                     "upper_bound": 23999,
-                    "usage": "SRGB",
+                    "usage": "ISIS_SRGB",
                     "protocol_identifier": "ISIS",
                     "protocol_name": "default",
                 },
@@ -170,7 +170,7 @@ class TestSegmentRoutingDeviceAttributes(TestCase):
                 "srgb": {
                     "lower_bound": 16000,
                     "upper_bound": 23999,
-                    "usage": "SRGB",
+                    "usage": "ISIS_SRGB",
                     "protocol_identifier": "ISIS",
                     "protocol_name": "default",
                 },
@@ -255,7 +255,7 @@ class TestSegmentRoutingDeviceAttributes(TestCase):
                 "srgb": {
                     "lower_bound": 16000,
                     "upper_bound": 23999,
-                    "usage": "SRGB",
+                    "usage": "ISIS_SRGB",
                     "protocol_identifier": "ISIS",
                 },
             },
@@ -324,7 +324,7 @@ class TestSegmentRoutingDeviceAttributes(TestCase):
                 "srgb-obj": SimpleNamespace(
                     lower_bound=16000,
                     upper_bound=23999,
-                    usage="SRGB",
+                    usage="ISIS_SRGB",
                     protocol_identifier="ISIS",
                     protocol_name="default",
                 ),

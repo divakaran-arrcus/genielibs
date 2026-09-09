@@ -847,14 +847,30 @@ def verify_isis_no_mla_for_prefix(
     return True
 
 
+#: Every ``mla-state`` arcOS publishes, in C-enum order
+#: (``ISIS_MLA_DISP_*`` in ``isis_common.h`` @797f74e4c0). Used to warn when a
+#: device reports a state this SDK has never heard of, which is the signal that
+#: the enum grew and this module needs updating.
+MLA_STATES = ("NONE", "ACTIVE", "CANCELED", "EXPIRED", "EMPTY")
+
+#: The only ``mla-state`` that means no session ever started. Everything else
+#: means MLA fired. Expressed as the exclusion it actually is, so a sixth state
+#: is accepted by default rather than silently regressing every caller to
+#: "did not fire" — which is what a hardcoded allowlist would do.
+MLA_STATES_NOT_FIRED = ("NONE",)
+
+
 def verify_isis_mla_fired(
     device,
     expected_event: Optional[str] = None,
     algo: int = 0,
     near_node: Optional[str] = None,
     far_node: Optional[str] = None,
-    expected_states=("ACTIVE", "EXPIRED"),
+    expected_states=None,
     since_timestamp: Optional[str] = None,
+    level: Optional[int] = None,
+    topology_id: Optional[str] = None,
+    allow_missing_timestamp: bool = True,
     network_instance: str = "default",
     protocol_instance: str = "default",
     max_time: int = 60,
@@ -863,10 +879,87 @@ def verify_isis_mla_fired(
     """Verify Micro-Loop-Avoidance fired for a given algorithm/topology.
 
     MLA records each event durably in the ``micro-loop-avoidance status``
-    table (one row per algo/topology): ``mla-state`` (ACTIVE during the
-    rib-update-delay window, EXPIRED after) + ``last-event`` +
+    table (one row per algo/topology): ``mla-state`` + ``last-event`` +
     ``near-node``/``far-node``. This is the control-plane observable for MLA
     on arcOS/VIR (the ISIS fast-reroute table does not surface it).
+
+    The ``mla-state`` enum is FIVE-way, and four of the five mean the session
+    started -- i.e. MLA fired:
+
+    Listed in C-enum order (``ISIS_MLA_DISP_*``):
+
+    ==========  ====================================================
+    NONE        no session ever started; no compatible trigger. The
+                only value that means "did not fire".
+    ACTIVE      session running, rib-update-delay pending.
+    CANCELED    torn down before the window elapsed. A conflicting
+                topology change is the intended case, but the same
+                teardown is reached from a flex-algo FAD change, an
+                invalid change batch, a ctx-create error, and level
+                disable / IS-type drop / sys-id reconfigure.
+    EXPIRED     ran its full delay window and completed normally.
+    EMPTY       activated, then the route calculation programmed ZERO
+                MLA SID stacks, so it was torn down early.
+    ==========  ====================================================
+
+    ``EMPTY`` is the newest of these (arrcus_sw ANPN-33133 / 797f74e4c0,
+    "isis: cancel MLA when the computation produces no enforcement"). Before
+    that fix the rib-update-delay was armed at ctx-create time on the
+    PREDICTION that MLA would be needed, so a session that enforced nothing
+    still deferred TI-LFA for the whole window; the fix decides from the
+    OUTCOME and tears such a session down early. It is stamped EMPTY rather
+    than CANCELED precisely because no conflict occurred.
+
+    By default every state but ``NONE`` is accepted, and that default is
+    encoded as the EXCLUSION it actually is (``MLA_STATES_NOT_FIRED``) rather
+    than as a list of the four acceptable values. The difference matters when
+    the enum next grows: an allowlist would silently regress every default
+    caller to "did not fire" for the new state, whereas an exclusion accepts
+    it and logs a warning naming the unknown value.
+
+    This matters more than it sounds: for a single-link shut on a small
+    topology, EMPTY is the COMMON outcome, not the exception -- one archived
+    trigger produced EMPTY on three of four (algo, topology) tuples and
+    EXPIRED on the fourth. Defaulting to ("ACTIVE", "EXPIRED") made those runs
+    report "MLA did not fire" while the device's own status table showed
+    last-event=LINK-DOWN with a fresh SPF timestamp.
+
+    Pass ``expected_states`` explicitly to narrow it -- e.g. ``("EXPIRED",)``
+    when a test genuinely requires a completed hold. A bare string is
+    accepted and normalised, so ``expected_states="EXPIRED"`` does not
+    degrade into a substring match.
+
+    .. warning::
+       Do NOT compare ``spf-start-timestamp`` across states as one clock. It
+       is stamped from a different SPF in each state (arrcus_sw @797f74e4c0):
+
+       ==========  ==================================================
+       NONE        no timestamp published at all -- confd gates
+                   last-event/near-node/far-node/spf-start-timestamp
+                   on ``state != NONE``.
+       ACTIVE      the ACTIVATING SPF's start (``isis_spf.c:1710``).
+       EXPIRED     deferred to the POST-CONVERGENCE SPF the RIB-delay
+                   handler scheduled (``:588`` arms it, ``:5294``
+                   stamps it).
+       CANCELED    the CANCELING SPF's start, or wall-clock when no
+                   SPF is live -- e.g. an administrative teardown
+                   (``:1441`` / ``:1443``).
+       EMPTY       the SPF whose route calculation installed zero MLA
+                   paths; it reaches the same cancel path from inside
+                   that run (``:1481``).
+       ==========  ==================================================
+
+       So two rows from one trigger can differ by ~``rib-update-delay`` with
+       nothing wrong.
+
+       Freshness-vs-baseline (``since_timestamp``) is sound for a genuine new
+       fire, but it is NOT a guarantee the row describes *your* trigger.
+       ``last-event``/``near-node``/``far-node`` are written only at
+       activation and are not cleared by a teardown
+       (``isis_clear_mla_state_for_topo`` clears the working state, not the
+       oper snapshot), so an administratively cancelled row can carry a fresh
+       wall-clock stamp alongside the PREVIOUS activation's event. Pair
+       ``since_timestamp`` with ``expected_event`` when that matters.
 
     Polls ``get_isis_micro_loop_avoidance`` until a status row for ``algo``
     (0 = SPF/base, 128+ = flex-algo) has ``mla-state`` in ``expected_states``
@@ -881,15 +974,48 @@ def verify_isis_mla_fired(
             'OVERLOAD-CLEAR', 'MAX-METRIC-SET', 'MAX-METRIC-CLEAR'.
         algo: Algorithm id of the status row to match (default 0 = SPF).
         near_node / far_node: If set, require the row's endpoints to match.
-        expected_states: Acceptable ``mla-state`` values (default ACTIVE or
-            EXPIRED — i.e. MLA fired at some point).
+        expected_states: Acceptable ``mla-state`` values. ``None`` (default)
+            means every state except ``NONE`` -- i.e. MLA fired at some
+            point. Narrow it explicitly when a test needs a specific outcome;
+            a bare string is normalised to a one-tuple.
+        level / topology_id: Pin the status row to a specific IS-IS level or
+            topology. The oper list is keyed on (algo, level, topology-id),
+            so ``algo`` alone can match a different level or topology than
+            intended. Both default to ``None`` (match any).
+        allow_missing_timestamp: When ``since_timestamp`` is given and a
+            matching row carries no ``spf-start-timestamp``, accept it with a
+            warning (default) or reject it. Accepting is the default because
+            such a row is most likely the fire just triggered; set ``False``
+            when a test must not pass on unconfirmable freshness.
         network_instance / protocol_instance: ISIS instance selectors.
         max_time / check_interval: Polling bounds (seconds).
 
     Returns:
         True if a matching MLA status row is found within the timeout.
     """
+    # A bare string would degrade every state test to a SUBSTRING match
+    # ("NONE" in "NONE" is True, but so is "ACT" in "ACTIVE"), so normalise.
+    if isinstance(expected_states, str):
+        expected_states = (expected_states,)
+    if expected_states is not None:
+        expected_states = tuple(expected_states)
+
+    # get_isis_mla_status_timestamp returns "" (not None) when it cannot read a
+    # baseline. Left alone, "" arms the freshness filter and then compares
+    # every row as newer than "" — an armed filter that rejects nothing. Treat
+    # any falsy baseline as "no baseline", and say so, since the caller asked
+    # for freshness checking and is not getting it.
+    if since_timestamp is not None and not str(since_timestamp).strip():
+        log.warning(
+            "verify_isis_mla_fired: since_timestamp is empty — no baseline was "
+            "captured, so the freshness filter is DISABLED for this call. A "
+            "stale row from a prior trigger can satisfy it."
+        )
+        since_timestamp = None
+
     timeout = Timeout(max_time, check_interval)
+    read_failed = False
+    rows_seen = 0
 
     while timeout.iterate():
         try:
@@ -898,48 +1024,89 @@ def verify_isis_mla_fired(
                 network_instance=network_instance,
                 protocol_instance=protocol_instance,
             )
+            read_failed = False
         except Exception as exc:  # pragma: no cover - defensive
             log.error("get_isis_micro_loop_avoidance failed: %s", exc)
             mla = {}
+            read_failed = True
 
-        for row in (mla.get("status") or {}).values():
+        status = (mla or {}).get("status") or {}
+        rows_seen = max(rows_seen, len(status))
+
+        for key, row in status.items():
             if row.get("algo") != algo:
                 continue
-            # Fresh-fire filter: the MLA status is a single row per
-            # (algo, topology) overwritten in place, so a stale event from a
-            # prior trigger can linger. When ``since_timestamp`` is given,
-            # only a row whose ``spf-start-timestamp`` is strictly newer counts
-            # (ISO-8601 strings compare lexicographically). Capture the
-            # baseline timestamp BEFORE the trigger and pass it here.
-            if since_timestamp is not None:
-                row_ts = row.get("spf-start-timestamp")
-                if row_ts is None:
-                    # No timestamp to compare — freshness cannot be confirmed.
-                    # A matching algo/state/event row with no timestamp is very
-                    # likely the fire we just triggered; accept it (with a
-                    # warning) rather than silently skipping, which would
-                    # misreport a genuine fire as a no-fire.
-                    log.warning(
-                        "verify_isis_mla_fired: algo=%s row has no "
-                        "spf-start-timestamp; cannot confirm freshness vs "
-                        "baseline %s — accepting the match",
-                        algo, since_timestamp,
-                    )
-                elif str(row_ts) <= since_timestamp:
-                    continue
-            if row.get("mla-state") not in expected_states:
+            # The oper list is keyed on (algo, level, topology-id), so `algo`
+            # alone can match a DIFFERENT level or topology than the caller
+            # meant. Both selectors default to None (match any) to preserve
+            # existing behaviour; pass them to pin the row you intend.
+            if level is not None and row.get("level") != level:
                 continue
+            if (topology_id is not None
+                    and row.get("topology-id") != topology_id):
+                continue
+
+            state = row.get("mla-state")
+            if state is not None and state not in MLA_STATES:
+                log.warning(
+                    "verify_isis_mla_fired: row %s reports mla-state=%r, which "
+                    "this SDK does not know. The arcOS enum has grown — update "
+                    "MLA_STATES in %s.",
+                    key, state, __name__,
+                )
+
+            # Default rule is an EXCLUSION, not an allowlist: every state but
+            # NONE means the session started. An explicit expected_states
+            # narrows it.
+            if expected_states is None:
+                if state in MLA_STATES_NOT_FIRED:
+                    continue
+            elif state not in expected_states:
+                continue
+
             if expected_event is not None and row.get("last-event") != expected_event:
                 continue
             if near_node is not None and row.get("near-node") != near_node:
                 continue
             if far_node is not None and row.get("far-node") != far_node:
                 continue
+
+            # Fresh-fire filter, applied LAST so its warning only fires for a
+            # row that otherwise matched. The MLA status is a single row per
+            # (algo, level, topology) overwritten in place, so a stale event
+            # from a prior trigger can linger. Capture the baseline BEFORE the
+            # trigger and pass it here.
+            if since_timestamp is not None:
+                row_ts = row.get("spf-start-timestamp")
+                if row_ts is None:
+                    # Freshness cannot be confirmed. Accepting is the default
+                    # because a row matching state/event/nodes with no
+                    # timestamp is most likely the fire just triggered, and
+                    # skipping would misreport a genuine fire as a no-fire.
+                    # Pass allow_missing_timestamp=False to reject instead.
+                    if not allow_missing_timestamp:
+                        log.warning(
+                            "verify_isis_mla_fired: algo=%s row %s has no "
+                            "spf-start-timestamp and allow_missing_timestamp "
+                            "is False — rejecting the match",
+                            algo, key,
+                        )
+                        continue
+                    log.warning(
+                        "verify_isis_mla_fired: algo=%s row %s has no "
+                        "spf-start-timestamp; cannot confirm freshness vs "
+                        "baseline %s — accepting the match",
+                        algo, key, since_timestamp,
+                    )
+                elif str(row_ts) <= str(since_timestamp):
+                    continue
+
             log.debug(
-                "verify_isis_mla_fired: matched algo=%s state=%s last-event=%s "
-                "near=%s far=%s",
+                "verify_isis_mla_fired: matched row=%s algo=%s state=%s "
+                "last-event=%s near=%s far=%s",
+                key,
                 algo,
-                row.get("mla-state"),
+                state,
                 row.get("last-event"),
                 row.get("near-node"),
                 row.get("far-node"),
@@ -948,4 +1115,25 @@ def verify_isis_mla_fired(
 
         timeout.sleep()
 
+    # Distinguish the three ways this returns False. They have different
+    # causes and only the last is "the device says MLA did not fire".
+    if read_failed:
+        log.error(
+            "verify_isis_mla_fired: returning False after the status read "
+            "FAILED — this is a read/transport problem, not evidence that "
+            "MLA did not fire."
+        )
+    elif not rows_seen:
+        log.error(
+            "verify_isis_mla_fired: returning False and the status table was "
+            "EMPTY — arcOS omits the list entirely when MLA is globally "
+            "disabled, so check the MLA config before reading this as a "
+            "no-fire."
+        )
+    else:
+        log.info(
+            "verify_isis_mla_fired: no row matched algo=%s (saw %d row(s)) — "
+            "the device reports MLA did not fire for this trigger.",
+            algo, rows_seen,
+        )
     return False
