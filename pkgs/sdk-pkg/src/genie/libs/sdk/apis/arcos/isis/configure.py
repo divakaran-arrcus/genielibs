@@ -6004,7 +6004,13 @@ def unconfigure_isis_micro_loop_avoidance_sr_mpls(device, af='IPV4',
     isis_context = _build_isis_config_context(network_instance, protocol_instance)
     config = [
         isis_context,
-        f'global af {af_upper} UNICAST no micro-loop-avoidance sr-mpls-enabled',
+        # `no` leads the WHOLE path. arcOS rejects it mid-path with
+        # "syntax error: element does not exist" -- and, critically, still
+        # commits the surrounding block, so device.configure() raises
+        # nothing and the caller sees a clean return over a no-op. Both
+        # sibling builders (srv6-enabled, rib-update-delay) and every other
+        # unconfigure in this module already lead with `no`.
+        f'no global af {af_upper} UNICAST micro-loop-avoidance sr-mpls-enabled',
         '!'
     ]
 
