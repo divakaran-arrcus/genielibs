@@ -404,7 +404,7 @@ class TestGlobalRouteSelectionApis(unittest.TestCase):
 
     def test_unconfigure_ignore_next_hop_igp_metric(self):
         unconfigure_bgp_ignore_next_hop_igp_metric(self.d)
-        self.assertIn("global no route-selection-options ignore-next-hop-igp-metric", self.d.cfg())
+        self.assertIn("no global route-selection-options ignore-next-hop-igp-metric", self.d.cfg())
 
     def test_drop_upon_invalid_sr_policy(self):
         configure_bgp_drop_upon_invalid_sr_policy(self.d)
@@ -412,7 +412,7 @@ class TestGlobalRouteSelectionApis(unittest.TestCase):
 
     def test_unconfigure_drop_upon_invalid_sr_policy(self):
         unconfigure_bgp_drop_upon_invalid_sr_policy(self.d)
-        self.assertIn("global no drop-upon-invalid-sr-policy", self.d.cfg())
+        self.assertIn("no global drop-upon-invalid-sr-policy", self.d.cfg())
 
     def test_compatibility_l2_attr_local(self):
         configure_bgp_compatibility_l2_attr_local(self.d)
@@ -420,7 +420,7 @@ class TestGlobalRouteSelectionApis(unittest.TestCase):
 
     def test_unconfigure_compatibility_l2_attr_local(self):
         unconfigure_bgp_compatibility_l2_attr_local(self.d)
-        self.assertIn("global no compatibility l2-attr-local", self.d.cfg())
+        self.assertIn("no global compatibility l2-attr-local", self.d.cfg())
 
 
 class TestAddPathsApis(unittest.TestCase):

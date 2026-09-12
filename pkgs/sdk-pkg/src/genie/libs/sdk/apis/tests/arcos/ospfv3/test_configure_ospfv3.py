@@ -339,7 +339,7 @@ class TestConfigureOspfv3RedistributeAggregate(unittest.TestCase):
     def test_redistribute_aggregate_removal(self):
         unconfigure_ospfv3_redistribute_aggregate(self.d, "2001:db8::/32")
         c = self.d.cfg()
-        self.assertIn("global no redistribute-aggregate 2001:db8::/32", c)
+        self.assertIn("no global redistribute-aggregate 2001:db8::/32", c)
 
 
 class TestConfigureOspfv3SummaryAggregate(unittest.TestCase):
@@ -383,15 +383,15 @@ class TestConfigureOspfv3RoutePreference(unittest.TestCase):
     def test_route_preference_removal_specific(self):
         unconfigure_ospfv3_route_preference(self.d, intra_area=True)
         c = self.d.cfg()
-        self.assertIn("global no route-preference intra-area", c)
+        self.assertIn("no global route-preference intra-area", c)
         self.assertNotIn("inter-area", c)
 
     def test_route_preference_removal_default_all(self):
         unconfigure_ospfv3_route_preference(self.d)
         c = self.d.cfg()
-        self.assertIn("global no route-preference intra-area", c)
-        self.assertIn("global no route-preference inter-area", c)
-        self.assertIn("global no route-preference external", c)
+        self.assertIn("no global route-preference intra-area", c)
+        self.assertIn("no global route-preference inter-area", c)
+        self.assertIn("no global route-preference external", c)
 
 
 class TestConfigureOspfv3MaxLsa(unittest.TestCase):

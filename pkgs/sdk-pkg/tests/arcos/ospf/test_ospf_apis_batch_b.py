@@ -157,7 +157,7 @@ class TestAggregates(unittest.TestCase):
     def test_unconfigure_redistribute_aggregate(self):
         unconfigure_ospf_redistribute_aggregate(self.device, prefix="100.0.0.0/8")
         self.device.configure.assert_called_once_with([
-            CTX, "global no redistribute-aggregate 100.0.0.0/8", "!",
+            CTX, "no global redistribute-aggregate 100.0.0.0/8", "!",
         ])
 
     def test_summary_aggregate(self):
