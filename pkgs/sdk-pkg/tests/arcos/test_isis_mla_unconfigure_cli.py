@@ -20,18 +20,30 @@ cleanly, and the suite reports PASS over a complete no-op. Build 1834 scored
 Measured on the docker lab (rtr1, 2026-09-11), configure then unconfigure,
 reading the running-config back after each step:
 
-    configure sr-mpls-enabled true   -> ACCEPTED, readback: present
-    'global af .. UNICAST no ..'     -> REJECTED, readback: STILL PRESENT
-    'no global af .. UNICAST ..'     -> ACCEPTED, readback: ABSENT
+    configure sr-mpls-enabled true    -> ACCEPTED, readback: present
+    'global af .. UNICAST no ..'      -> REJECTED, readback: STILL PRESENT
+    'no global af .. UNICAST ..'      -> ACCEPTED, readback: ABSENT
 
 So the mid-path form does not merely log an error; it leaves MLA enabled on
-the device while every caller believes it was removed. Residue then leaks
-into whatever suite runs next on that deployment.
+the device while every caller believes it was removed.
 
-Both sibling builders already lead with ``no``
-(``no global micro-loop-avoidance srv6-enabled``,
-``no global micro-loop-avoidance rib-update-delay``), as does every other
-unconfigure in the module. The SR-MPLS one was the lone outlier.
+Scope, corrected after review -- the first version of this file overstated
+it twice. No MLA config-lifecycle testcase asserts a read-back after
+unconfiguring (all 19 call sites are unasserted ``finally:`` teardowns), and
+residue does NOT leak between suites, because ``isis/utils/cleanup.py``
+deletes the whole ISIS instance. The real cost is that the teardown silently
+does nothing, not that a specific assertion was fooled.
+
+Nor was SR-MPLS the "lone outlier": a device-verified sweep found the same
+mid-path ``no`` in 21 emitted CLI lines across 9 unconfigure builders in
+isis, bgp, ospf and ospfv3, all fixed together here. ``isis/configure.py``
+already documented this hazard (lab-validated 2026-05-22) and it was missed.
+
+The root enabler is neither of those: unicon's arcos ``ERROR_PATTERN``
+already contains ``syntax error``, yet ``device.configure()`` returns a
+buffer containing ``syntax error: element does not exist`` without raising.
+Until that is addressed, every malformed arcOS config line in every arcos
+API passes silently. That fix is deliberately out of scope here.
 """
 
 import unittest
@@ -41,6 +53,7 @@ from genie.libs.sdk.apis.arcos.isis.configure import (
     configure_isis_micro_loop_avoidance_sr_mpls,
     unconfigure_isis_micro_loop_avoidance_sr_mpls,
     unconfigure_isis_micro_loop_avoidance_srv6,
+    unconfigure_isis_micro_loop_avoidance_rib_update_delay,
 )
 
 
@@ -103,22 +116,37 @@ class TestMlaSrMplsUnconfigureCli(unittest.TestCase):
         """The invariant that was violated, asserted across the family.
 
         Driving each builder rather than pattern-matching source, so a
-        reworded log line or a reflow cannot make this gate vacuous.
+        reworded log line or a reflow cannot make this gate vacuous --
+        and asserting each one actually emitted a line, so a builder
+        that goes silent cannot pass by inspecting nothing.
         """
-        offenders = []
+        offenders, silent = [], []
         for label, call in (
             ("sr_mpls IPV4",
              lambda d: unconfigure_isis_micro_loop_avoidance_sr_mpls(d, af="IPV4")),
             ("sr_mpls IPV6",
              lambda d: unconfigure_isis_micro_loop_avoidance_sr_mpls(d, af="IPV6")),
             ("srv6", unconfigure_isis_micro_loop_avoidance_srv6),
+            ("rib_update_delay",
+             unconfigure_isis_micro_loop_avoidance_rib_update_delay),
         ):
             dev = MagicMock()
             dev.name = "rtr1"
             call(dev)
-            for line in _pushed(dev):
-                if "micro-loop-avoidance" in line and not line.startswith("no "):
+            matched = [l for l in _pushed(dev) if "micro-loop-avoidance" in l]
+            # Without this, a builder that stops emitting the line at all
+            # leaves `offenders` empty and the gate passes having inspected
+            # nothing -- measured: that mutation survived the first version.
+            if not matched:
+                silent.append(label)
+            for line in matched:
+                if not line.startswith("no "):
                     offenders.append(f"{label}: {line!r}")
+        self.assertEqual(
+            silent, [],
+            f"these emitted no micro-loop-avoidance line at all, so the "
+            f"parity check inspected nothing for them: {silent}",
+        )
         self.assertEqual(
             offenders, [],
             f"these emit `no` mid-path, which arcOS rejects: {offenders}",

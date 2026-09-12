@@ -797,7 +797,7 @@ class TestIsisLevelImportPolicy(unittest.TestCase):
         unconfigure_isis_level_import_policy(self.d, "level2-to-level1")
         c = self.d.cfg()
         self.assertIn(
-            "global no inter-level-propagation-policies level2-to-level1 import-policy", c)
+            "no global inter-level-propagation-policies level2-to-level1 import-policy", c)
 
     def test_unconfigure_isis_level_import_policy_invalid_direction(self):
         with self.assertRaises(ValueError):
@@ -1023,7 +1023,7 @@ class TestIsisMicroLoopAvoidance(unittest.TestCase):
     def test_unconfigure_isis_micro_loop_avoidance_sr_mpls(self):
         unconfigure_isis_micro_loop_avoidance_sr_mpls(self.d, af="ipv4")
         self.assertIn(
-            "global af IPV4 UNICAST no micro-loop-avoidance sr-mpls-enabled", self.d.cfg())
+            "no global af IPV4 UNICAST micro-loop-avoidance sr-mpls-enabled", self.d.cfg())
 
     def test_configure_isis_micro_loop_avoidance_srv6(self):
         configure_isis_micro_loop_avoidance_srv6(self.d, enabled=True)
@@ -1126,9 +1126,9 @@ class TestIsisDefaultInformationOriginate(unittest.TestCase):
         unconfigure_isis_default_information_originate(self.d, "IPV6")
         c = self.d.cfg()
         self.assertIn(
-            "global af IPV6 UNICAST no default-information originate enabled", c)
+            "no global af IPV6 UNICAST default-information originate enabled", c)
         self.assertIn(
-            "global af IPV6 UNICAST no default-information originate always", c)
+            "no global af IPV6 UNICAST default-information originate always", c)
 
     def test_unconfigure_isis_default_information_originate_invalid_afi(self):
         with self.assertRaises(ValueError):

@@ -1955,7 +1955,7 @@ def unconfigure_bgp_ignore_next_hop_igp_metric(device,
     bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
     config = [
         bgp_context,
-        'global no route-selection-options ignore-next-hop-igp-metric',
+        'no global route-selection-options ignore-next-hop-igp-metric',
         '!'
     ]
 
@@ -2030,7 +2030,7 @@ def unconfigure_bgp_drop_upon_invalid_sr_policy(device,
     bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
     config = [
         bgp_context,
-        'global no drop-upon-invalid-sr-policy',
+        'no global drop-upon-invalid-sr-policy',
         '!'
     ]
 
@@ -2105,7 +2105,7 @@ def unconfigure_bgp_compatibility_l2_attr_local(device,
     bgp_context = _build_bgp_config_context(network_instance, protocol_instance)
     config = [
         bgp_context,
-        'global no compatibility l2-attr-local',
+        'no global compatibility l2-attr-local',
         '!'
     ]
 

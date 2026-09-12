@@ -588,7 +588,7 @@ def unconfigure_ospf_redistribute_aggregate(device, prefix,
     try:
         device.configure([
             ctx,
-            f'global no redistribute-aggregate {prefix}',
+            f'no global redistribute-aggregate {prefix}',
             '!',
         ])
     except SubCommandFailure as e:
@@ -707,17 +707,17 @@ def unconfigure_ospf_route_preference(device,
     ctx = _build_ospf_context(network_instance, protocol_instance)
     cfg = [ctx]
     if intra_area:
-        cfg.append('global no route-preference intra-area')
+        cfg.append('no global route-preference intra-area')
     if inter_area:
-        cfg.append('global no route-preference inter-area')
+        cfg.append('no global route-preference inter-area')
     if external:
-        cfg.append('global no route-preference external')
+        cfg.append('no global route-preference external')
     if len(cfg) == 1:
         # Default: remove all
         cfg.extend([
-            'global no route-preference intra-area',
-            'global no route-preference inter-area',
-            'global no route-preference external',
+            'no global route-preference intra-area',
+            'no global route-preference inter-area',
+            'no global route-preference external',
         ])
     cfg.append('!')
     try:

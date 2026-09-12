@@ -4460,7 +4460,7 @@ def unconfigure_isis_level_import_policy(device, direction,
     isis_context = _build_isis_config_context(network_instance, protocol_instance)
     config = [
         isis_context,
-        f'global no inter-level-propagation-policies {direction} import-policy',
+        f'no global inter-level-propagation-policies {direction} import-policy',
         '!'
     ]
 
@@ -6748,9 +6748,9 @@ def unconfigure_isis_default_information_originate(device, afi,
     isis_context = _build_isis_config_context(network_instance, protocol_instance)
     config = [
         isis_context,
-        f'global af {afi} UNICAST no default-information originate enabled',
-        f'global af {afi} UNICAST no default-information originate always',
-        f'global af {afi} UNICAST no default-information originate export-policy',
+        f'no global af {afi} UNICAST default-information originate enabled',
+        f'no global af {afi} UNICAST default-information originate always',
+        f'no global af {afi} UNICAST default-information originate export-policy',
         '!',
     ]
 
