@@ -1000,21 +1000,23 @@ def verify_isis_mla_fired(
     if expected_states is not None:
         expected_states = tuple(expected_states)
 
-    # get_isis_mla_status_timestamp returns "" (not None) when it cannot read a
-    # baseline. Left alone, "" arms the freshness filter and then compares
-    # every row as newer than "" — an armed filter that rejects nothing. Treat
-    # any falsy baseline as "no baseline", and say so, since the caller asked
-    # for freshness checking and is not getting it.
+    # get_isis_mla_status_timestamp returns "" (not None) when there is no
+    # row to baseline against. Left alone, "" arms the freshness filter and
+    # then compares every row as newer than "" — an armed filter that rejects
+    # nothing. Treat any falsy baseline as "no baseline", and say so, since
+    # the caller asked for freshness checking and is not getting it.
     if since_timestamp is not None and not str(since_timestamp).strip():
         log.warning(
             "verify_isis_mla_fired: since_timestamp is empty — the freshness "
-            "filter is DISABLED for this call. get_isis_mla_status_timestamp "
-            "returns \"\" only when there was genuinely nothing to baseline "
-            "against (no row for the algo, or a NONE row, which publishes no "
-            "spf-start-timestamp), so there is normally no stale row to be "
-            "fooled by. It RAISES on a failed read, so this is not masking "
-            "an unreadable device. Still worth noting: this call's verdict "
-            "rests on state/event/node matching alone."
+            "filter is DISABLED for this call. If the baseline came from "
+            "get_isis_mla_status_timestamp, \"\" means no row for the algo "
+            "or a NONE row (which publishes no spf-start-timestamp), so "
+            "there is no stale row to be fooled by: that getter reads with "
+            "strict=True and RAISES rather than returning \"\" on a failed "
+            "read. A \"\" from any OTHER source carries no such guarantee — "
+            "a stale row from a prior trigger can satisfy this call. Either "
+            "way, this call's verdict rests on state/event/node matching "
+            "alone."
         )
         since_timestamp = None
 
@@ -1024,14 +1026,23 @@ def verify_isis_mla_fired(
 
     while timeout.iterate():
         try:
+            # strict=True so a failed READ reaches the handler below. Without
+            # it the getter returns {} on every transport error and this
+            # branch is dead, which made a read failure report as "the status
+            # table was EMPTY" -- sending triage at the MLA config instead of
+            # the device. An empty parse is still {}, not a raise.
             mla = get_isis_micro_loop_avoidance(
                 device,
                 network_instance=network_instance,
                 protocol_instance=protocol_instance,
+                strict=True,
             )
             read_failed = False
-        except Exception as exc:  # pragma: no cover - defensive
-            log.error("get_isis_micro_loop_avoidance failed: %s", exc)
+        except Exception as exc:
+            log.error(
+                "verify_isis_mla_fired: MLA status read FAILED, will retry "
+                "until the timeout: %s", exc,
+            )
             mla = {}
             read_failed = True
 

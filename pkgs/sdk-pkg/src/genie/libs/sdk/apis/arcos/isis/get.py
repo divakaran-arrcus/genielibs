@@ -1242,6 +1242,7 @@ def get_isis_micro_loop_avoidance(
     device,
     network_instance: str = "default",
     protocol_instance: str = "default",
+    strict: bool = False,
 ) -> Dict[str, Any]:
     """Get ISIS global micro-loop-avoidance operational state.
 
@@ -1263,6 +1264,18 @@ def get_isis_micro_loop_avoidance(
     the pre-convergence path equals the new primary installs no FR route).
 
     Returns ``{}`` if MLA is not present/configured or on any parse error.
+
+    Args:
+        strict: When True, a failed READ re-raises instead of returning
+            ``{}``. An empty parse still returns ``{}`` -- the device
+            answered and the table is empty (MLA disabled, or no rows yet),
+            which is data, not a failure. Callers that cannot tell those
+            apart downstream -- ``get_isis_mla_status_timestamp`` is the
+            one that matters, because a falsy baseline disables
+            ``verify_isis_mla_fired``'s freshness filter -- must pass True.
+
+    Raises:
+        Exception: only when ``strict`` is True and the status read failed.
     """
     try:
         from genie.libs.parser.arcos.show_isis import ShowIsisMicroLoopAvoidance
@@ -1276,9 +1289,13 @@ def get_isis_micro_loop_avoidance(
         return {}
     except SubCommandFailure as exc:
         log.error("get_isis_micro_loop_avoidance failed: %s", exc)
+        if strict:
+            raise
         return {}
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc:
         log.warning("get_isis_micro_loop_avoidance: unexpected error — %s", exc)
+        if strict:
+            raise
         return {}
 
     # Parser nests under the (hardcoded) default NI/instance; navigate
@@ -1327,6 +1344,7 @@ def get_isis_mla_status_timestamp(
         device,
         network_instance=network_instance,
         protocol_instance=protocol_instance,
+        strict=True,
     )
     for row in (mla.get("status") or {}).values():
         if row.get("algo") == algo:
