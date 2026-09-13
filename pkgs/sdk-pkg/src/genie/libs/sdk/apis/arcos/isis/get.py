@@ -1302,19 +1302,45 @@ def get_isis_mla_status_timestamp(
     Baseline helper for fresh-fire detection: capture this BEFORE a trigger,
     then pass it to ``verify_isis_mla_fired(since_timestamp=...)`` so a stale
     row from a prior event (the status table is a single row per algo/topology
-    overwritten in place) is not mistaken for a fresh fire. Returns ``""`` if
-    no status row exists yet.
+    overwritten in place) is not mistaken for a fresh fire.
+
+    Returns ``""`` ONLY when there is genuinely nothing to baseline against:
+    no row for ``algo`` yet, or a row that publishes no timestamp. The latter
+    is the common case rather than an edge one -- a ``NONE`` row carries only
+    ``mla-state``, because arcOS gates last-event/near-node/far-node/
+    spf-start-timestamp on ``state != NONE``. So a suite whose earlier,
+    intermittent trigger did not fire will legitimately baseline against "".
+    That is safe: with no prior row there is no stale row to be fooled by.
+
+    A failed READ is a different thing entirely and now RAISES rather than
+    returning ``""``. Previously both collapsed to the same empty string, and
+    ``verify_isis_mla_fired`` disables its freshness filter on a falsy
+    baseline -- so an unreadable device silently turned a hard MLA assertion
+    into an unprotected one, where a stale row COULD satisfy it. Measured:
+    7 of 8 MLA suites hit the empty-baseline path.
+
+    Raises:
+        Exception: propagated from the status read, so the caller fails
+            rather than proceeding with a filter it does not know is off.
     """
-    try:
-        mla = get_isis_micro_loop_avoidance(
-            device,
-            network_instance=network_instance,
-            protocol_instance=protocol_instance,
-        )
-    except Exception as exc:  # pragma: no cover - defensive
-        log.warning("get_isis_mla_status_timestamp: %s", exc)
-        return ""
+    mla = get_isis_micro_loop_avoidance(
+        device,
+        network_instance=network_instance,
+        protocol_instance=protocol_instance,
+    )
     for row in (mla.get("status") or {}).values():
         if row.get("algo") == algo:
-            return str(row.get("spf-start-timestamp") or "")
+            ts = str(row.get("spf-start-timestamp") or "")
+            if not ts:
+                log.info(
+                    "get_isis_mla_status_timestamp: algo=%s row exists with "
+                    "mla-state=%s but publishes no spf-start-timestamp -- no "
+                    "baseline to take (expected for a NONE row)",
+                    algo, row.get("mla-state"),
+                )
+            return ts
+    log.info(
+        "get_isis_mla_status_timestamp: no status row for algo=%s yet -- no "
+        "baseline to take", algo,
+    )
     return ""
