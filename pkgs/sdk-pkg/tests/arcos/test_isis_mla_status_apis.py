@@ -671,5 +671,81 @@ class TestMlaEmptyIsAFire(unittest.TestCase):
                 self.device, algo=0, expected_states="EMPT", **FAST_MLA))
 
 
+
+# ---------------------------------------------------------------------------
+# Baseline capture: a FAILED READ must not look like NO BASELINE.
+#
+# get_isis_mla_status_timestamp used to return "" for four different things:
+# the read raised, no row existed, the row had no spf-start-timestamp, or the
+# timestamp was empty. verify_isis_mla_fired disables its freshness filter on
+# a falsy baseline, so an unreadable device silently downgraded a HARD MLA
+# assertion to an unprotected one -- where a genuinely stale row from a prior
+# trigger could satisfy it.
+#
+# Measured on the docker lab: 7 of the 8 MLA suites hit the empty-baseline
+# path, 13 times, including on TC 120.0 (the hard link-down assertion). The
+# mechanism is benign in itself -- the preceding metric trigger is documented
+# as intermittent on VIR, so algo-0's row stays NONE, and a NONE row
+# publishes no spf-start-timestamp because arcOS gates that leaf on
+# state != NONE. With no prior row there is no stale row to be fooled by.
+#
+# The danger was never that case; it was that a read failure was
+# indistinguishable from it. So "" now means only "nothing to baseline
+# against", and a failed read raises.
+# ---------------------------------------------------------------------------
+
+_TS_GET = ("genie.libs.sdk.apis.arcos.isis.get."
+           "get_isis_micro_loop_avoidance")
+
+
+class TestBaselineDistinguishesFailureFromAbsence(unittest.TestCase):
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = "rtr1"
+
+    def test_read_failure_raises_rather_than_returning_empty(self):
+        """The whole point: an unreadable device must not look like 'no
+        baseline', because that silently disables the freshness filter."""
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        with patch(_TS_GET, side_effect=OSError("transport gone")):
+            with self.assertRaises(OSError):
+                get_isis_mla_status_timestamp(self.device, algo=0)
+
+    def test_none_row_with_no_timestamp_returns_empty(self):
+        """The legitimate case -- a NONE row publishes only mla-state."""
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        rows = {"status": {"0-2-X": {"algo": 0, "mla-state": "NONE"}}}
+        with patch(_TS_GET, return_value=rows):
+            self.assertEqual(
+                get_isis_mla_status_timestamp(self.device, algo=0), "")
+
+    def test_absent_row_returns_empty(self):
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        rows = {"status": {"9-2-X": {"algo": 9, "mla-state": "ACTIVE"}}}
+        with patch(_TS_GET, return_value=rows):
+            self.assertEqual(
+                get_isis_mla_status_timestamp(self.device, algo=0), "")
+
+    def test_real_timestamp_is_returned(self):
+        """Positive control -- the empty cases above must not be vacuous."""
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        rows = {"status": {"0-2-X": {
+            "algo": 0, "mla-state": "EXPIRED",
+            "spf-start-timestamp": "2026-09-13T10:00:00+00:00"}}}
+        with patch(_TS_GET, return_value=rows):
+            self.assertEqual(
+                get_isis_mla_status_timestamp(self.device, algo=0),
+                "2026-09-13T10:00:00+00:00")
+
+
 if __name__ == "__main__":
     unittest.main()
