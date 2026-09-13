@@ -1000,16 +1000,25 @@ def verify_isis_mla_fired(
     if expected_states is not None:
         expected_states = tuple(expected_states)
 
-    # get_isis_mla_status_timestamp returns "" (not None) when it cannot read a
-    # baseline. Left alone, "" arms the freshness filter and then compares
-    # every row as newer than "" — an armed filter that rejects nothing. Treat
-    # any falsy baseline as "no baseline", and say so, since the caller asked
-    # for freshness checking and is not getting it.
+    # get_isis_mla_status_timestamp returns "" (not None) when there is no
+    # row to baseline against. Left alone, "" arms the freshness filter and
+    # then compares every row as newer than "" — an armed filter that rejects
+    # nothing. Treat any falsy baseline as "no baseline", and say so, since
+    # the caller asked for freshness checking and is not getting it.
     if since_timestamp is not None and not str(since_timestamp).strip():
         log.warning(
-            "verify_isis_mla_fired: since_timestamp is empty — no baseline was "
-            "captured, so the freshness filter is DISABLED for this call. A "
-            "stale row from a prior trigger can satisfy it."
+            "verify_isis_mla_fired: since_timestamp is empty — the freshness "
+            "filter is DISABLED for this call. If the baseline came from "
+            "get_isis_mla_status_timestamp, \"\" usually means no row for "
+            "the algo or a NONE row (which publishes no spf-start-timestamp) "
+            "— no stale row to be fooled by, because that getter reads with "
+            "strict=True and propagates a read that RAISES. It does NOT "
+            "cover a device that answers with non-JSON: the parser absorbs "
+            "that and returns \"\" too, so check the log above for "
+            "\"Failed to parse JSON output\" before trusting this as a "
+            "benign empty. A \"\" from any other source carries no "
+            "guarantee at all. Either way, this call's verdict rests on "
+            "state/event/node matching alone."
         )
         since_timestamp = None
 
@@ -1019,14 +1028,23 @@ def verify_isis_mla_fired(
 
     while timeout.iterate():
         try:
+            # strict=True so a failed READ reaches the handler below. Without
+            # it the getter returns {} on every transport error and this
+            # branch is dead, which made a read failure report as "the status
+            # table was EMPTY" -- sending triage at the MLA config instead of
+            # the device. An empty parse is still {}, not a raise.
             mla = get_isis_micro_loop_avoidance(
                 device,
                 network_instance=network_instance,
                 protocol_instance=protocol_instance,
+                strict=True,
             )
             read_failed = False
-        except Exception as exc:  # pragma: no cover - defensive
-            log.error("get_isis_micro_loop_avoidance failed: %s", exc)
+        except Exception as exc:
+            log.error(
+                "verify_isis_mla_fired: MLA status read FAILED, will retry "
+                "until the timeout: %s", exc,
+            )
             mla = {}
             read_failed = True
 

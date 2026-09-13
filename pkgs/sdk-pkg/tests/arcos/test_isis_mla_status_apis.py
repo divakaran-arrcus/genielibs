@@ -19,6 +19,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from genie.metaparser.util.exceptions import SchemaEmptyParserError
+from unicon.core.errors import SubCommandFailure
 
 from genie.libs.sdk.apis.arcos.isis.get import (
     get_isis_micro_loop_avoidance,
@@ -669,6 +670,178 @@ class TestMlaEmptyIsAFire(unittest.TestCase):
             # "EMPT" would match as a substring if normalisation were missing
             self.assertFalse(verify_isis_mla_fired(
                 self.device, algo=0, expected_states="EMPT", **FAST_MLA))
+
+
+
+# ---------------------------------------------------------------------------
+# Baseline capture: a FAILED READ must not look like NO BASELINE.
+#
+# get_isis_mla_status_timestamp used to return "" for four different things:
+# the read raised, no row existed, the row had no spf-start-timestamp, or the
+# timestamp was empty. verify_isis_mla_fired disables its freshness filter on
+# a falsy baseline, so an unreadable device silently downgraded a HARD MLA
+# assertion to an unprotected one -- where a genuinely stale row from a prior
+# trigger could satisfy it.
+#
+# Measured on the docker lab: 7 of the 8 MLA suites hit the empty-baseline
+# path, 13 times, including on TC 120.0 (the hard link-down assertion). The
+# mechanism is benign in itself -- the preceding metric trigger is documented
+# as intermittent on VIR, so algo-0's row stays NONE, and a NONE row
+# publishes no spf-start-timestamp because arcOS gates that leaf on
+# state != NONE. With no prior row there is no stale row to be fooled by.
+#
+# The danger was never that case; it was that a read failure was
+# indistinguishable from it. So "" now means only "nothing to baseline
+# against", and a failed read raises.
+# ---------------------------------------------------------------------------
+
+_TS_GET = ("genie.libs.sdk.apis.arcos.isis.get."
+           "get_isis_micro_loop_avoidance")
+
+# Patch the PARSER, not get_isis_micro_loop_avoidance. That getter is the
+# thing that swallows read failures, so a test that patches it away proves
+# only that the mock raised -- it cannot see whether a real transport error
+# ever reaches the caller. These cases enter through the same boundary a
+# device does.
+_PARSE = ("genie.libs.parser.arcos.show_isis."
+          "ShowIsisMicroLoopAvoidance.parse")
+
+
+class TestBaselineDistinguishesFailureFromAbsence(unittest.TestCase):
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = "rtr1"
+
+    def test_cli_failure_raises_at_the_real_parser_boundary(self):
+        """The whole point: an unreadable device must not look like 'no
+        baseline', because that silently disables the freshness filter."""
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        with patch(_PARSE, side_effect=SubCommandFailure("cli died")):
+            with self.assertRaises(SubCommandFailure):
+                get_isis_mla_status_timestamp(self.device, algo=0)
+
+    def test_transport_error_raises_at_the_real_parser_boundary(self):
+        """The generic handler, not just the SubCommandFailure one -- a
+        dropped session surfaces as OSError/ConnectionError, and that used
+        to be swallowed by the bare `except Exception`."""
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        with patch(_PARSE, side_effect=OSError("transport gone")):
+            with self.assertRaises(OSError):
+                get_isis_mla_status_timestamp(self.device, algo=0)
+
+    def test_device_answers_with_no_mla_data_returns_empty(self):
+        """The device ANSWERED and the table is empty (MLA disabled, or no
+        rows yet). That is data, not a failure -- it must stay a "" so the
+        benign no-baseline path keeps working. Driven through device.execute
+        because the parser returns an empty scaffold here; it does not raise
+        SchemaEmptyParserError, so simulating one would pin a branch no
+        arcOS read reaches."""
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        self.device.execute = Mock(return_value="{}")
+        self.assertEqual(
+            get_isis_mla_status_timestamp(self.device, algo=0), "")
+
+    def test_non_json_answer_still_returns_empty_known_gap(self):
+        """KNOWN GAP, pinned so it cannot change silently. strict=True only
+        covers a read that RAISES. A device that answers with something
+        unparseable is absorbed by the parser (JSONDecodeError -> warning ->
+        empty scaffold), so "" comes back and the freshness filter is
+        disabled without an exception. Closing this means making
+        ShowIsisMicroLoopAvoidance raise -- a genieparser change."""
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        for answer in ("Error: unknown element 'micro-loop-avoidance'",
+                       "Failed to connect to server",
+                       '{"network-instance": [{"name": "default", "isis"',
+                       ""):
+            with self.subTest(answer=answer[:24]):
+                self.device.execute = Mock(return_value=answer)
+                self.assertEqual(
+                    get_isis_mla_status_timestamp(self.device, algo=0), "")
+
+    def test_default_read_stays_soft_for_every_other_caller(self):
+        """Non-regression control for the other ~57 call sites: only the
+        baseline getter opts into strict, so a plain read still returns {}
+        on a CLI failure rather than raising in someone else's face."""
+        with patch(_PARSE, side_effect=SubCommandFailure("cli died")):
+            self.assertEqual(
+                get_isis_micro_loop_avoidance(self.device), {})
+
+    def test_none_row_with_no_timestamp_returns_empty(self):
+        """The legitimate case -- a NONE row publishes only mla-state."""
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        rows = {"status": {"0-2-X": {"algo": 0, "mla-state": "NONE"}}}
+        with patch(_TS_GET, return_value=rows):
+            self.assertEqual(
+                get_isis_mla_status_timestamp(self.device, algo=0), "")
+
+    def test_absent_row_returns_empty(self):
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        rows = {"status": {"9-2-X": {"algo": 9, "mla-state": "ACTIVE"}}}
+        with patch(_TS_GET, return_value=rows):
+            self.assertEqual(
+                get_isis_mla_status_timestamp(self.device, algo=0), "")
+
+    def test_real_timestamp_is_returned(self):
+        """Positive control -- the empty cases above must not be vacuous."""
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        rows = {"status": {"0-2-X": {
+            "algo": 0, "mla-state": "EXPIRED",
+            "spf-start-timestamp": "2026-09-13T10:00:00+00:00"}}}
+        with patch(_TS_GET, return_value=rows):
+            self.assertEqual(
+                get_isis_mla_status_timestamp(self.device, algo=0),
+                "2026-09-13T10:00:00+00:00")
+
+
+class TestMlaFiredReportsAReadFailureAsSuch(unittest.TestCase):
+    """verify_isis_mla_fired polls with strict=True, so its read-failure
+    branch is reachable. It used to be dead -- every transport error came
+    back as {} and the timeout reported "the status table was EMPTY", which
+    sends triage at the MLA config rather than at the device."""
+
+    def setUp(self):
+        self.device = Mock()
+        self.device.name = "rtr1"
+
+    def test_transport_failure_is_reported_as_a_read_failure(self):
+        with patch(_PARSE, side_effect=SubCommandFailure("cli died")):
+            with self.assertLogs(
+                    "genie.libs.sdk.apis.arcos.isis.verify",
+                    level="ERROR") as logged:
+                self.assertFalse(
+                    verify_isis_mla_fired(self.device, algo=0, **FAST_MLA))
+        blob = "\n".join(logged.output)
+        self.assertIn("read FAILED", blob)
+        self.assertNotIn("status table was EMPTY", blob)
+
+    def test_a_genuinely_empty_table_is_still_reported_as_empty(self):
+        """Positive control -- the assertion above must not pass just
+        because the EMPTY message stopped being emitted at all. Driven
+        through device.execute for the same reason as the getter cases."""
+        self.device.execute = Mock(return_value="{}")
+        with self.assertLogs(
+                "genie.libs.sdk.apis.arcos.isis.verify",
+                level="ERROR") as logged:
+            self.assertFalse(
+                verify_isis_mla_fired(self.device, algo=0, **FAST_MLA))
+        blob = "\n".join(logged.output)
+        self.assertIn("status table was EMPTY", blob)
+        self.assertNotIn("read FAILED", blob)
 
 
 if __name__ == "__main__":
