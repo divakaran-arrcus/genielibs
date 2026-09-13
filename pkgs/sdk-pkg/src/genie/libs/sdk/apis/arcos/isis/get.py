@@ -1263,19 +1263,31 @@ def get_isis_micro_loop_avoidance(
     fast-reroute table does NOT surface MLA on VIR, and a 0-segment MLA where
     the pre-convergence path equals the new primary installs no FR route).
 
-    Returns ``{}`` if MLA is not present/configured or on any parse error.
+    Returns ``{}`` if MLA is not present/configured, or on any parse error
+    that does not reach ``strict`` (see below).
 
     Args:
-        strict: When True, a failed READ re-raises instead of returning
-            ``{}``. An empty parse still returns ``{}`` -- the device
-            answered and the table is empty (MLA disabled, or no rows yet),
-            which is data, not a failure. Callers that cannot tell those
-            apart downstream -- ``get_isis_mla_status_timestamp`` is the
-            one that matters, because a falsy baseline disables
-            ``verify_isis_mla_fired``'s freshness filter -- must pass True.
+        strict: When True, a read that fails **with an exception** re-raises
+            instead of returning ``{}``. Two things still return ``{}``
+            under ``strict``:
+
+            * an empty parse -- the device answered and the table is empty
+              (MLA disabled, or no rows yet), which is data, not a failure;
+            * a device that answers with something that is not JSON.
+              ``ShowIsisMicroLoopAvoidance`` catches ``JSONDecodeError``,
+              logs a warning and returns an empty scaffold, so no exception
+              ever reaches here. An unknown element, a dropped confd
+              session and pagination junk all land in this case. Closing it
+              means making the parser raise, which is a genieparser change.
+
+            Callers that cannot tell a failure from an absence downstream --
+            ``get_isis_mla_status_timestamp`` is the one that matters,
+            because a falsy baseline disables ``verify_isis_mla_fired``'s
+            freshness filter -- must pass True, and must still treat ``""``
+            as "possibly unread" for the second case above.
 
     Raises:
-        Exception: only when ``strict`` is True and the status read failed.
+        Exception: only when ``strict`` is True and the read raised.
     """
     try:
         from genie.libs.parser.arcos.show_isis import ShowIsisMicroLoopAvoidance
@@ -1321,7 +1333,7 @@ def get_isis_mla_status_timestamp(
     row from a prior event (the status table is a single row per algo/topology
     overwritten in place) is not mistaken for a fresh fire.
 
-    Returns ``""`` ONLY when there is genuinely nothing to baseline against:
+    Returns ``""`` when there is nothing to baseline against:
     no row for ``algo`` yet, or a row that publishes no timestamp. The latter
     is the common case rather than an edge one -- a ``NONE`` row carries only
     ``mla-state``, because arcOS gates last-event/near-node/far-node/
@@ -1329,16 +1341,22 @@ def get_isis_mla_status_timestamp(
     intermittent trigger did not fire will legitimately baseline against "".
     That is safe: with no prior row there is no stale row to be fooled by.
 
-    A failed READ is a different thing entirely and now RAISES rather than
-    returning ``""``. Previously both collapsed to the same empty string, and
-    ``verify_isis_mla_fired`` disables its freshness filter on a falsy
-    baseline -- so an unreadable device silently turned a hard MLA assertion
-    into an unprotected one, where a stale row COULD satisfy it. Measured:
-    7 of 8 MLA suites hit the empty-baseline path.
+    A READ THAT RAISES is a different thing entirely and propagates rather
+    than returning ``""``. Previously both collapsed to the same empty
+    string, and ``verify_isis_mla_fired`` disables its freshness filter on a
+    falsy baseline -- so an unreadable device silently turned a hard MLA
+    assertion into an unprotected one, where a stale row COULD satisfy it.
+
+    KNOWN GAP: this covers only failures shaped as exceptions. A device that
+    ANSWERS with something that is not JSON is absorbed by the parser and
+    still returns ``""`` here -- see ``get_isis_micro_loop_avoidance``'s
+    ``strict`` note. So ``""`` means "no baseline", not "the device is
+    certainly healthy".
 
     Raises:
-        Exception: propagated from the status read, so the caller fails
-            rather than proceeding with a filter it does not know is off.
+        Exception: propagated from the status read when it raises, so the
+            caller fails rather than proceeding with a filter it does not
+            know is off.
     """
     mla = get_isis_micro_loop_avoidance(
         device,

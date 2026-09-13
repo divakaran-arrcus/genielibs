@@ -1009,14 +1009,16 @@ def verify_isis_mla_fired(
         log.warning(
             "verify_isis_mla_fired: since_timestamp is empty — the freshness "
             "filter is DISABLED for this call. If the baseline came from "
-            "get_isis_mla_status_timestamp, \"\" means no row for the algo "
-            "or a NONE row (which publishes no spf-start-timestamp), so "
-            "there is no stale row to be fooled by: that getter reads with "
-            "strict=True and RAISES rather than returning \"\" on a failed "
-            "read. A \"\" from any OTHER source carries no such guarantee — "
-            "a stale row from a prior trigger can satisfy this call. Either "
-            "way, this call's verdict rests on state/event/node matching "
-            "alone."
+            "get_isis_mla_status_timestamp, \"\" usually means no row for "
+            "the algo or a NONE row (which publishes no spf-start-timestamp) "
+            "— no stale row to be fooled by, because that getter reads with "
+            "strict=True and propagates a read that RAISES. It does NOT "
+            "cover a device that answers with non-JSON: the parser absorbs "
+            "that and returns \"\" too, so check the log above for "
+            "\"Failed to parse JSON output\" before trusting this as a "
+            "benign empty. A \"\" from any other source carries no "
+            "guarantee at all. Either way, this call's verdict rests on "
+            "state/event/node matching alone."
         )
         since_timestamp = None
 

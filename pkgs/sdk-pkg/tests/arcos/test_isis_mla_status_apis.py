@@ -734,16 +734,38 @@ class TestBaselineDistinguishesFailureFromAbsence(unittest.TestCase):
             with self.assertRaises(OSError):
                 get_isis_mla_status_timestamp(self.device, algo=0)
 
-    def test_empty_parse_returns_empty_rather_than_raising(self):
+    def test_device_answers_with_no_mla_data_returns_empty(self):
         """The device ANSWERED and the table is empty (MLA disabled, or no
         rows yet). That is data, not a failure -- it must stay a "" so the
-        benign no-baseline path keeps working."""
+        benign no-baseline path keeps working. Driven through device.execute
+        because the parser returns an empty scaffold here; it does not raise
+        SchemaEmptyParserError, so simulating one would pin a branch no
+        arcOS read reaches."""
         from genie.libs.sdk.apis.arcos.isis.get import (
             get_isis_mla_status_timestamp,
         )
-        with patch(_PARSE, side_effect=SchemaEmptyParserError("empty")):
-            self.assertEqual(
-                get_isis_mla_status_timestamp(self.device, algo=0), "")
+        self.device.execute = Mock(return_value="{}")
+        self.assertEqual(
+            get_isis_mla_status_timestamp(self.device, algo=0), "")
+
+    def test_non_json_answer_still_returns_empty_known_gap(self):
+        """KNOWN GAP, pinned so it cannot change silently. strict=True only
+        covers a read that RAISES. A device that answers with something
+        unparseable is absorbed by the parser (JSONDecodeError -> warning ->
+        empty scaffold), so "" comes back and the freshness filter is
+        disabled without an exception. Closing this means making
+        ShowIsisMicroLoopAvoidance raise -- a genieparser change."""
+        from genie.libs.sdk.apis.arcos.isis.get import (
+            get_isis_mla_status_timestamp,
+        )
+        for answer in ("Error: unknown element 'micro-loop-avoidance'",
+                       "Failed to connect to server",
+                       '{"network-instance": [{"name": "default", "isis"',
+                       ""):
+            with self.subTest(answer=answer[:24]):
+                self.device.execute = Mock(return_value=answer)
+                self.assertEqual(
+                    get_isis_mla_status_timestamp(self.device, algo=0), "")
 
     def test_default_read_stays_soft_for_every_other_caller(self):
         """Non-regression control for the other ~57 call sites: only the
@@ -809,13 +831,14 @@ class TestMlaFiredReportsAReadFailureAsSuch(unittest.TestCase):
 
     def test_a_genuinely_empty_table_is_still_reported_as_empty(self):
         """Positive control -- the assertion above must not pass just
-        because the EMPTY message stopped being emitted at all."""
-        with patch(_PARSE, side_effect=SchemaEmptyParserError("empty")):
-            with self.assertLogs(
-                    "genie.libs.sdk.apis.arcos.isis.verify",
-                    level="ERROR") as logged:
-                self.assertFalse(
-                    verify_isis_mla_fired(self.device, algo=0, **FAST_MLA))
+        because the EMPTY message stopped being emitted at all. Driven
+        through device.execute for the same reason as the getter cases."""
+        self.device.execute = Mock(return_value="{}")
+        with self.assertLogs(
+                "genie.libs.sdk.apis.arcos.isis.verify",
+                level="ERROR") as logged:
+            self.assertFalse(
+                verify_isis_mla_fired(self.device, algo=0, **FAST_MLA))
         blob = "\n".join(logged.output)
         self.assertIn("status table was EMPTY", blob)
         self.assertNotIn("read FAILED", blob)
