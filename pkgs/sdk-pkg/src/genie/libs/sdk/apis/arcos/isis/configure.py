@@ -8469,12 +8469,12 @@ def unconfigure_isis_srv6_locator(device, locator, network_instance='default',
 
 # ---------------------------------------------------------------------------
 # Missing-API backlog batch T1-04 — config-coverage audit
-# (arcos_pyats_sanity/docs/config-coverage/01-isis-sr-srv6.md)
+# (IS-IS / SR / SRv6 configuration surface)
 #
 # Every CLI line below traces to Command_Line_Interface/IS-IS.adoc; the cited
 # line number is in each function's docstring.
 #
-# Lab-verified 2026-08-17 on rtr1 (arcOS docker, 10.27.168.246:10001): every
+# Lab-verified 2026-08-17 on an arcOS docker router: every
 # configure AND unconfigure path below was applied, committed, and confirmed by
 # running-config read-back in both directions.
 #

@@ -3962,7 +3962,7 @@ def configure_bgp_neighbor_auth_password(device, neighbor, password,
 
     Example:
         >>> configure_bgp_neighbor_auth_password(
-        ...     device, neighbor='220.1.11.1', password='arrcus')
+        ...     device, neighbor='220.1.11.1', password='MyBgpPassw0rd')
     """
     log.info(
         f"Configuring BGP neighbor {neighbor} auth-password on {device.name} "
