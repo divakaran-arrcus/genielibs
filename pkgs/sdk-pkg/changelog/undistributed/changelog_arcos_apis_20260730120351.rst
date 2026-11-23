@@ -93,7 +93,7 @@
     * Added Storm Control APIs:
         * configure/unconfigure
     * Added STP APIs:
-        * configure/unconfigure, get
+        * configure/unconfigure, get, verify
     * Added SyncE APIs:
         * configure/unconfigure
     * Added System APIs:
